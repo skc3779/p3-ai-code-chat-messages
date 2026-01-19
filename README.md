@@ -20,7 +20,12 @@
   - **안전 모드 (`/shell`)**: 검증된 명령어(ls, pip, git 등)만 실행하여 실수 방지
   - **관리자 모드 (`/shell!`)**: 모든 시스템 명령어 실행 가능 (사용자 확인 절차 포함)
 
-- **📂 스마트 파일 관리**:
+- **� AI 자동 도구 (Auto Tool Use) (NEW)**:
+  - **파일 시스템 도구**: AI가 직접 파일을 읽고, 쓰고, 생성 (`read/write/list_file`)
+  - **Git 버전 관리**: 변경 사항 확인(`status`, `diff`) 및 커밋(`commit`)을 AI가 수행
+  - **패키지 분석**: 설치된 환경(`pip`, `npm`)을 분석하여 의존성 문제 해결
+
+- **�📂 스마트 파일 관리**:
   - 프로젝트 구조 트리 보기 (`/tree`)
   - `.gitignore` 패턴 자동 인식 및 파일 필터링
   - AI 응답에서 코드 블록을 감지하여 자동 파일 저장 (`/save`)
@@ -104,24 +109,32 @@ python gen-ai-chat-code01.py
 ├── gen-ai-chat-code01.py     # GenAI 어시스턴트 실행 스크립트
 ├── src/
 │   ├── __init__.py           # 패키지 노출
-│   ├── claude_assistant.py   # Claude API 처리 로직
-│   ├── genai_assistant.py    # GenAI API 처리 로직
+│   ├── claude_assistant.py   # Claude API 처리 로직 (Tool Use 포함)
+│   ├── genai_assistant.py    # GenAI API 처리 로직 (Tool Use 포함)
 │   ├── code_executor.py      # 코드 실행 샌드박스
 │   ├── terminal_executor.py  # 터미널 명령어 처리기
+│   ├── git_manager.py        # Git 명령 통합 관리
+│   ├── package_manager.py    # 패키지 의존성 분석
 │   ├── file_manager.py       # 파일 시스템 관리
 │   ├── context_builder.py    # 프롬프트 컨텍스트 구성
+│   ├── tool_definitions.py   # AI 도구(Tool) 스키마 정의
 │   └── tree_builder.py       # 디렉토리 트리 시각화
 └── tests/
-    └── test_commands.py      # 단위 테스트
+    ├── test_commands.py      # 명령어/실행기 단위 테스트
+    └── test_tool_use.py      # Tool Use 기능 단위 테스트
 ```
 
 ### 단위 테스트 실행
 작성된 기능들의 정상 동작을 검증하려면 단위 테스트를 실행하세요.
 
 ```bash
+# 기본 명령어 및 실행기 테스트
 python tests/test_commands.py
+
+# Tool Use (파일/Git/패키지) 기능 테스트
+python tests/test_tool_use.py
 ```
-> **참고**: `tests/test_commands.py`는 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다.
+> **참고**: `tests/` 폴더 내의 테스트 파일들은 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다.
 
 ---
 
