@@ -1,0 +1,19 @@
+# Claude AI Code Assistant - Modular Package
+
+from src.file_manager import FileManager
+from src.code_executor import CodeExecutor
+from src.terminal_executor import TerminalExecutor
+from src.tree_builder import TreeBuilder
+from src.context_builder import ContextBuilder
+from src.claude_assistant import ClaudeCodeAssistant
+from src.genai_assistant import GenAICodeAssistant
+
+__all__ = [
+    'FileManager',
+    'CodeExecutor',
+    'TerminalExecutor',
+    'TreeBuilder',
+    'ContextBuilder',
+    'ClaudeCodeAssistant',
+    'GenAICodeAssistant',
+]
