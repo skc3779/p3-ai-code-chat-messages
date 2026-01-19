@@ -106,6 +106,254 @@ class FileManager:
         except Exception:
             return {}
 
+
+class CodeExecutor:
+    """코드 실행 환경 - 다양한 언어의 코드를 실행하고 결과를 반환"""
+    
+    SUPPORTED_LANGUAGES = {
+        'python': {'cmd': 'python', 'ext': '.py', 'icon': '🐍'},
+        'py': {'cmd': 'python', 'ext': '.py', 'icon': '🐍'},
+        'javascript': {'cmd': 'node', 'ext': '.js', 'icon': '📜'},
+        'js': {'cmd': 'node', 'ext': '.js', 'icon': '📜'},
+        'bash': {'cmd': 'bash', 'ext': '.sh', 'icon': '🖥️'},
+        'sh': {'cmd': 'bash', 'ext': '.sh', 'icon': '🖥️'},
+    }
+    
+    def __init__(self, workspace_dir: Path, timeout: int = 30):
+        self.workspace_dir = workspace_dir
+        self.timeout = timeout
+    
+    def execute(self, code: str, language: str = 'python') -> Dict:
+        """코드 실행 및 결과 반환"""
+        import subprocess
+        import tempfile
+        
+        language = language.lower()
+        
+        if language not in self.SUPPORTED_LANGUAGES:
+            return {
+                'success': False, 
+                'error': f'지원하지 않는 언어: {language}',
+                'hint': f'지원 언어: {", ".join(set(v["cmd"] for v in self.SUPPORTED_LANGUAGES.values()))}'
+            }
+        
+        lang_config = self.SUPPORTED_LANGUAGES[language]
+        
+        # 임시 파일에 코드 작성
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode='w', 
+                suffix=lang_config['ext'], 
+                delete=False,
+                encoding='utf-8'
+            ) as f:
+                f.write(code)
+                temp_file = f.name
+        except Exception as e:
+            return {'success': False, 'error': f'임시 파일 생성 실패: {e}'}
+        
+        try:
+            result = subprocess.run(
+                [lang_config['cmd'], temp_file],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=str(self.workspace_dir)
+            )
+            return {
+                'success': result.returncode == 0,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'returncode': result.returncode,
+                'language': lang_config['cmd'],
+                'icon': lang_config['icon']
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False, 
+                'error': f'⏱️ 타임아웃: {self.timeout}초 초과',
+                'icon': lang_config['icon']
+            }
+        except FileNotFoundError:
+            return {
+                'success': False,
+                'error': f'❌ 실행 환경 없음: {lang_config["cmd"]}가 설치되어 있지 않습니다.',
+                'icon': lang_config['icon']
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'실행 오류: {e}',
+                'icon': lang_config['icon']
+            }
+        finally:
+            try:
+                os.unlink(temp_file)
+            except:
+                pass
+    
+    def extract_code_from_response(self, response: str) -> List[Dict]:
+        """AI 응답에서 코드 블록 추출"""
+        import re
+        
+        code_blocks = []
+        
+        # ```filename:path 형식
+        pattern1 = r'```filename:(.+?)\n(.*?)```'
+        matches1 = re.findall(pattern1, response, re.DOTALL)
+        for filepath, content in matches1:
+            ext = Path(filepath.strip()).suffix.lower()
+            lang = self._ext_to_language(ext)
+            code_blocks.append({
+                'filepath': filepath.strip(),
+                'code': content.strip(),
+                'language': lang
+            })
+        
+        # ```language 형식 (언어 식별자)
+        pattern2 = r'```(\w+)\n(.*?)```'
+        matches2 = re.findall(pattern2, response, re.DOTALL)
+        for lang, content in matches2:
+            if lang.lower() not in ['filename', 'text', 'markdown', 'md', 'json', 'xml', 'html', 'css']:
+                if lang.lower() in self.SUPPORTED_LANGUAGES or lang.lower() in ['python', 'javascript', 'bash']:
+                    code_blocks.append({
+                        'filepath': None,
+                        'code': content.strip(),
+                        'language': lang.lower()
+                    })
+        
+        return code_blocks
+    
+    def _ext_to_language(self, ext: str) -> str:
+        """파일 확장자를 언어로 변환"""
+        ext_map = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.sh': 'bash',
+        }
+        return ext_map.get(ext.lower(), 'python')
+
+
+class TerminalExecutor:
+    """터미널 명령어 실행 - 안전한 쉘 명령 실행 환경"""
+    
+    # 허용된 기본 명령어 (안전 모드)
+    ALLOWED_COMMANDS = [
+        # Python 관련
+        'python', 'python3', 'pip', 'pip3', 'pipenv', 'poetry',
+        # Node.js 관련
+        'node', 'npm', 'npx', 'yarn',
+        # 파일 시스템 (읽기)
+        'ls', 'dir', 'cat', 'type', 'head', 'tail', 'find', 'grep',
+        # 파일 시스템 (쓰기)
+        'mkdir', 'touch', 'echo',
+        # 기타 유틸리티
+        'pwd', 'which', 'where', 'env', 'set',
+        # Git
+        'git',
+        # 빌드 도구
+        'make', 'cmake', 'gradle', 'mvn',
+    ]
+    
+    # 위험 명령어 (shell! 에서만 허용)
+    DANGEROUS_COMMANDS = [
+        'rm', 'del', 'rmdir', 'rd',
+        'mv', 'move', 'cp', 'copy', 'xcopy',
+        'chmod', 'chown',
+        'kill', 'taskkill',
+        'shutdown', 'reboot',
+        'format', 'fdisk',
+        'curl', 'wget',  # 네트워크 요청
+        'ssh', 'scp',
+    ]
+    
+    def __init__(self, workspace_dir: Path, timeout: int = 60):
+        self.workspace_dir = workspace_dir
+        self.timeout = timeout
+    
+    def execute(self, command: str, allow_unsafe: bool = False) -> Dict:
+        """명령어 실행"""
+        import subprocess
+        import shlex
+        import platform
+        
+        if not command.strip():
+            return {'success': False, 'error': '명령어가 비어있습니다.'}
+        
+        # 명령어 파싱
+        try:
+            if platform.system() == 'Windows':
+                # Windows에서는 shlex.split이 다르게 동작
+                parts = command.split()
+            else:
+                parts = shlex.split(command)
+        except ValueError as e:
+            return {'success': False, 'error': f'명령어 파싱 오류: {e}'}
+        
+        base_cmd = parts[0].lower() if parts else ''
+        
+        # 명령어 검증
+        if not allow_unsafe:
+            # 위험 명령어 차단
+            if base_cmd in self.DANGEROUS_COMMANDS:
+                return {
+                    'success': False,
+                    'error': f'⚠️ 위험 명령어: {base_cmd}',
+                    'hint': '위험 명령을 실행하려면 /shell! 을 사용하세요.'
+                }
+            
+            # 허용 목록에 없는 명령어 차단
+            if base_cmd not in self.ALLOWED_COMMANDS:
+                return {
+                    'success': False,
+                    'error': f'허용되지 않은 명령어: {base_cmd}',
+                    'hint': f'허용 명령어: {", ".join(sorted(set(self.ALLOWED_COMMANDS[:10])))}...',
+                    'use_unsafe': '모든 명령 허용: /shell!'
+                }
+        
+        try:
+            # 명령어 실행
+            result = subprocess.run(
+                command,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=str(self.workspace_dir),
+                env=os.environ.copy()
+            )
+            
+            return {
+                'success': result.returncode == 0,
+                'stdout': result.stdout,
+                'stderr': result.stderr,
+                'returncode': result.returncode,
+                'command': command
+            }
+        except subprocess.TimeoutExpired:
+            return {
+                'success': False,
+                'error': f'⏱️ 타임아웃: {self.timeout}초 초과',
+                'command': command
+            }
+        except FileNotFoundError:
+            return {
+                'success': False,
+                'error': f'❌ 명령어를 찾을 수 없음: {base_cmd}',
+                'command': command
+            }
+        except Exception as e:
+            return {
+                'success': False,
+                'error': f'실행 오류: {e}',
+                'command': command
+            }
+    
+    def get_allowed_commands(self) -> str:
+        """허용된 명령어 목록 반환"""
+        return ", ".join(sorted(set(self.ALLOWED_COMMANDS)))
+
+
 class TreeBuilder:
     """
     파일·디렉터리 트리를 문자열 형태로 만들어 반환합니다.
@@ -307,6 +555,8 @@ class ClaudeCodeAssistant:
 
         self.file_manager = FileManager(workspace_dir)
         self.context_builder = ContextBuilder(self.file_manager)
+        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
+        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
 
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
@@ -489,6 +739,9 @@ def print_menu():
     print("  /nostream           - 논스트리밍 모드 활성화")
     print("  /history            - 대화 히스토리 보기")
     print("  /clear              - 대화 히스토리 초기화")
+    print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
+    print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
+    print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
     print("  /help               - 도움말 보기")
     print("  /quit               - 종료")
     print("=" * 80)
@@ -657,6 +910,99 @@ def main():
                     else:
                         print("\n⚠️  저장된 파일이 없습니다.")
                         print("💡 파일 형식: ```filename:path/to/file.ext")
+
+                elif command == '/run':
+                    if not last_response:
+                        print("❌ 실행할 코드가 없습니다. 먼저 AI에게 코드 생성을 요청하세요.")
+                        continue
+                    
+                    # 언어 지정 (기본: python)
+                    language = args.strip() if args else 'python'
+                    
+                    # 응답에서 코드 블록 추출
+                    code_blocks = assistant.code_executor.extract_code_from_response(last_response)
+                    
+                    if not code_blocks:
+                        print("❌ 실행 가능한 코드 블록을 찾을 수 없습니다.")
+                        continue
+                    
+                    print(f"\n🔍 {len(code_blocks)}개의 코드 블록을 발견했습니다.")
+                    
+                    for i, block in enumerate(code_blocks, 1):
+                        block_lang = block.get('language', language)
+                        filepath = block.get('filepath', '(인라인 코드)')
+                        code = block.get('code', '')
+                        
+                        print(f"\n{'='*60}")
+                        print(f"📌 [{i}] {filepath} ({block_lang})")
+                        print(f"{'='*60}")
+                        
+                        # 코드 미리보기 (처음 3줄)
+                        preview_lines = code.split('\n')[:3]
+                        for line in preview_lines:
+                            print(f"   {line}")
+                        if len(code.split('\n')) > 3:
+                            print(f"   ... ({len(code.split(chr(10)))}줄)")
+                        
+                        # 실행 확인
+                        confirm = input(f"\n▶️  이 코드를 실행하시겠습니까? (y/N): ").strip().lower()
+                        if confirm != 'y':
+                            print("⏭️  건너뛰기")
+                            continue
+                        
+                        print(f"\n🚀 {block_lang} 코드 실행 중...")
+                        result = assistant.code_executor.execute(code, block_lang)
+                        
+                        icon = result.get('icon', '📋')
+                        
+                        if result.get('success'):
+                            print(f"\n{icon} ✅ 실행 성공!")
+                            if result.get('stdout'):
+                                print(f"\n📤 출력:")
+                                print(result['stdout'])
+                        else:
+                            print(f"\n{icon} ❌ 실행 실패")
+                            if result.get('stderr'):
+                                print(f"\n🔴 오류:")
+                                print(result['stderr'])
+                            if result.get('error'):
+                                print(f"\n⚠️  {result['error']}")
+
+                elif command == '/shell' or command == '/shell!':
+                    if not args:
+                        print("❌ 실행할 명령어를 입력하세요.")
+                        print("💡 예시: /shell pip list")
+                        print(f"📝 허용 명령어: {assistant.terminal_executor.get_allowed_commands()}")
+                        continue
+                    
+                    allow_unsafe = command == '/shell!'
+                    
+                    if allow_unsafe:
+                        print("⚠️  위험 모드: 모든 명령어가 허용됩니다.")
+                        confirm = input("▶️  정말 실행하시겠습니까? (y/N): ").strip().lower()
+                        if confirm != 'y':
+                            print("⏭️  취소됨")
+                            continue
+                    
+                    print(f"\n💻 명령어 실행: {args}")
+                    result = assistant.terminal_executor.execute(args, allow_unsafe=allow_unsafe)
+                    
+                    if result.get('success'):
+                        print(f"\n✅ 실행 성공 (return code: {result.get('returncode', 0)})")
+                        if result.get('stdout'):
+                            print(f"\n📤 출력:")
+                            print(result['stdout'])
+                    else:
+                        print(f"\n❌ 실행 실패")
+                        if result.get('error'):
+                            print(f"   {result['error']}")
+                        if result.get('hint'):
+                            print(f"💡 {result['hint']}")
+                        if result.get('use_unsafe'):
+                            print(f"🔓 {result['use_unsafe']}")
+                        if result.get('stderr'):
+                            print(f"\n🔴 오류 출력:")
+                            print(result['stderr'])
 
                 else:
                     print(f"❌ 알 수 없는 명령어: {command}")
