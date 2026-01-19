@@ -4,7 +4,8 @@ ClaudeCodeAssistant - Claude AI 코딩 어시스턴트 모듈
 
 import json
 import re
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
+from pathlib import Path
 
 import requests
 import sseclient
@@ -13,6 +14,9 @@ from .file_manager import FileManager
 from .context_builder import ContextBuilder
 from .code_executor import CodeExecutor
 from .terminal_executor import TerminalExecutor
+from .git_manager import GitManager
+from .package_manager import PackageManager
+from .tool_definitions import FILESYSTEM_TOOLS
 
 
 class ClaudeCodeAssistant:
@@ -33,6 +37,8 @@ class ClaudeCodeAssistant:
         self.context_builder = ContextBuilder(self.file_manager)
         self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
+        self.git_manager = GitManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
 
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
@@ -43,14 +49,23 @@ class ClaudeCodeAssistant:
 코드 내용
 ```
 
-예시:
-```filename:src/main.py
-print("Hello, World!")
-```
+[필수] 파일 시스템 조작, Git 작업, 패키지 확인이 필요한 경우 제공된 도구(Tools)를 사용하세요.
 
-```filename:README.md
-# 프로젝트 제목
-```
+1. 파일 시스템:
+- 파일 읽기: read_file
+- 파일 쓰기: write_file
+- 파일 목록: list_files
+- 디렉토리 구조: list_directory_tree
+
+2. Git 버전 관리:
+- 상태 확인: git_status
+- 변경 사항 확인: git_diff
+- 커밋 로그: git_log
+- 파일 추가: git_add
+- 커밋: git_commit
+
+3. 환경 분석:
+- 패키지 목록: list_packages(language="python"|"node")
 
 주의사항:
 - 반드시 ```filename: 형식을 사용하세요 (```python, ```javascript 등 언어 식별자 사용 금지)
@@ -84,6 +99,7 @@ print("Hello, World!")
             "messages": messages,
             "max_tokens": 8192,
             "system": self.system_prompt,
+            "tools": FILESYSTEM_TOOLS,  # 도구 정의 추가
             "stream": streaming
         }
 
@@ -91,16 +107,58 @@ print("Hello, World!")
 
         try:
             if streaming:
-                return self._chat_streaming(api_url, body, user_message, full_message)
+                return self._chat_streaming(api_url, body, user_message)
             else:
-                return self._chat_non_streaming(api_url, body, user_message, full_message)
+                return self._chat_non_streaming(api_url, body, user_message)
         except Exception as e:
             print(f"\n❌ API 호출 오류: {str(e)}")
             return ""
 
-    def _chat_streaming(self, api_url: str, body: Dict,
-                        original_message: str, full_message: str) -> str:
-        """스트리밍 모드 채팅"""
+    def _execute_tool(self, tool_name: str, tool_input: Dict) -> Any:
+        """도구 실행"""
+        try:
+            if tool_name == "read_file":
+                path = Path(tool_input.get("path"))
+                content = self.file_manager.read_file(self.file_manager.workspace_dir / path)
+                if content is None:
+                    return "파일을 찾을 수 없거나 읽을 수 없습니다."
+                return content
+            elif tool_name == "write_file":
+                path = Path(tool_input.get("path"))
+                content = tool_input.get("content")
+                success = self.file_manager.write_file(self.file_manager.workspace_dir / path, content)
+                return "파일 저장 성공" if success else "파일 저장 실패"
+            elif tool_name == "list_files":
+                # 단순화된 구현: 현재는 전체 목록 반환
+                files = self.file_manager.list_files()
+                return "\n".join([str(f.relative_to(self.file_manager.workspace_dir)) for f in files])
+            elif tool_name == "list_directory_tree":
+                max_depth = tool_input.get("depth", 3)
+                return self.context_builder.build_file_tree(max_depth=max_depth)
+            
+            # Git Tools
+            elif tool_name == "git_status":
+                return self.git_manager.status()
+            elif tool_name == "git_diff":
+                return self.git_manager.diff(cached=tool_input.get("cached", False))
+            elif tool_name == "git_log":
+                return self.git_manager.log(max_count=tool_input.get("max_count", 5))
+            elif tool_name == "git_add":
+                return self.git_manager.add(files=tool_input.get("files", []))
+            elif tool_name == "git_commit":
+                return self.git_manager.commit(message=tool_input.get("message"))
+            
+            # Package Tools
+            elif tool_name == "list_packages":
+                return self.package_manager.list_packages(language=tool_input.get("language", "python"))
+                
+            else:
+                return f"알 수 없는 도구: {tool_name}"
+        except Exception as e:
+            return f"도구 실행 오류: {str(e)}"
+
+    def _chat_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
+        """스트리밍 모드 채팅 (Tool Use 지원)"""
         response = requests.post(api_url, headers=self.headers, json=body, stream=True)
 
         if response.status_code != 200:
@@ -108,8 +166,12 @@ print("Hello, World!")
             return ""
 
         client = sseclient.SSEClient(response)
-        result_message = ""
-
+        
+        # 스트리밍 상태 관리
+        current_message_content = []
+        tool_use_block = None
+        tool_json_accumulated = ""
+        
         print("\n🤖 AI: ", end="", flush=True)
 
         for event in client.events():
@@ -118,28 +180,114 @@ print("Hello, World!")
                     data = json.loads(event.data)
                     event_type = data.get('type')
 
+                    # 텍스트 컨텐츠
                     if event_type == 'content_block_delta':
-                        content = data.get('delta', {}).get('text', '')
-                        if content:
-                            print(content, end="", flush=True)
-                            result_message += content
+                        delta = data.get('delta', {})
+                        if delta.get('type') == 'text_delta':
+                            text = delta.get('text', '')
+                            print(text, end="", flush=True)
+                            current_message_content.append({"type": "text", "text": text})
+                        elif delta.get('type') == 'input_json_delta':
+                            # Tool Use JSON 조각 수신
+                            tool_json_accumulated += delta.get('partial_json', '')
+
+                    # Tool Use 시작
+                    elif event_type == 'content_block_start':
+                        content_block = data.get('content_block', {})
+                        if content_block.get('type') == 'tool_use':
+                            tool_use_block = content_block
+                            tool_json_accumulated = ""
+                            print(f"\n🔨 도구 호출: {tool_use_block.get('name')}...", end="", flush=True)
+
+                    # Tool Use 종료 (여기서는 JSON 완성만 확인 가능, 실제 실행은 메시지 종료 후 또는 stop_reason에서 처리)
+                    elif event_type == 'content_block_stop':
+                        if tool_use_block:
+                            # JSON 파싱 시도
+                            try:
+                                tool_input = json.loads(tool_json_accumulated)
+                                tool_use_block['input'] = tool_input
+                                current_message_content.append(tool_use_block)
+                                tool_use_block = None # 리셋
+                            except json.JSONDecodeError:
+                                print("\n⚠️ 도구 입력 파싱 실패")
+
+                    elif event_type == 'message_delta':
+                        # stop_reason 확인 가능
+                        delta = data.get('delta', {})
+                        if delta.get('stop_reason') == 'tool_use':
+                            pass # 스트림 종료 후 처리
+
                     elif event_type == 'message_stop':
                         break
+                        
                 except json.JSONDecodeError:
                     continue
 
         print("\n")
 
-        # 히스토리에 추가
+        # 텍스트 합치기 (단순 문자열 반환용)
+        full_text = "".join([c['text'] for c in current_message_content if c['type'] == 'text'])
+        
+        # 히스토리 업데이트 (User)
         self.conversation_history.append({"role": "user", "content": original_message})
-        if result_message:
-            self.conversation_history.append({"role": "assistant", "content": result_message})
+        
+        # AI 응답 (Assistant) - 텍스트 + Tool Use 블록 포함
+        # 주의: Claude API는 content가 리스트일 수 있음
+        assistant_content = []
+        text_accumulator = ""
+        
+        for item in current_message_content:
+            if item.get('type') == 'text':
+                text_accumulator += item['text']
+            elif item.get('type') == 'tool_use':
+                if text_accumulator:
+                    assistant_content.append({"type": "text", "text": text_accumulator})
+                    text_accumulator = ""
+                assistant_content.append(item)
+        
+        if text_accumulator:
+             assistant_content.append({"type": "text", "text": text_accumulator})
 
-        return result_message
+        self.conversation_history.append({"role": "assistant", "content": assistant_content})
 
-    def _chat_non_streaming(self, api_url: str, body: Dict,
-                            original_message: str, full_message: str) -> str:
-        """논스트리밍 모드 채팅"""
+        # 도구 실행 및 결과 전송 (재귀 호출)
+        tool_results = []
+        for content_block in assistant_content:
+            if content_block.get('type') == 'tool_use':
+                tool_name = content_block.get('name')
+                tool_id = content_block.get('id')
+                tool_input = content_block.get('input')
+                
+                print(f"⚙️  도구 실행 중: {tool_name} {tool_input}")
+                result = self._execute_tool(tool_name, tool_input)
+                
+                tool_results.append({
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": str(result)
+                })
+        
+        if tool_results:
+            # 도구 결과를 User 메시지로 보냄 (role: user)
+            self.conversation_history.append({"role": "user", "content": tool_results})
+            print("📤 도구 결과 전송 중...")
+            
+            # 재귀 호출로 후속 응답 받기
+            # 도구 결과 전송 시에는 user_message가 아닌 tool_results가 마지막 메시지이므로
+            # API 호출만 다시 수행 (chat 메서드 재귀 호출 대신 _chat_streaming 내부 로직 재사용 필요하나,
+            # 구조상 chat을 다시 부르되 user_message 없이 history만 사용하는 방식이 적절)
+            
+            # 여기서 chat 메서드를 다시 호출하고 싶지만, chat 메서드는 user_message를 히스토리에 추가해버림.
+            # 해결책: _follow_up_chat 메서드 신설 또는 _chat_streaming 재귀 (api_url 등 인자 필요)
+            
+            next_body = body.copy()
+            next_body['messages'] = list(self.conversation_history)
+            return self._chat_streaming(api_url, next_body, "") # original_message는 이미 추가됨
+
+        return full_text
+
+    def _chat_non_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
+        """논스트리밍 모드 채팅 (Tool Use 지원)"""
         response = requests.post(api_url, headers=self.headers, json=body)
 
         if response.status_code != 200:
@@ -148,17 +296,54 @@ print("Hello, World!")
 
         result = response.json()
         content_blocks = result.get('content', [])
-        content = content_blocks[0].get('text', '') if content_blocks else ''
+        
+        # 화면 출력 및 텍스트 추출
+        full_text = ""
+        for block in content_blocks:
+            if block.get('type') == 'text':
+                text = block.get('text', '')
+                print(f"\n🤖 AI: {text}\n")
+                full_text += text
+            elif block.get('type') == 'tool_use':
+                print(f"\n🔨 도구 호출: {block.get('name')}")
+        
+        # 히스토리 추가
+        if original_message: # 후속 호출 시에는 비어있을 수 있음
+            self.conversation_history.append({"role": "user", "content": original_message})
+            
+        self.conversation_history.append({"role": "assistant", "content": content_blocks})
 
-        print(f"\n🤖 AI: {content}\n")
+        # 도구 실행 확인
+        if result.get('stop_reason') == 'tool_use':
+            tool_results = []
+            for block in content_blocks:
+                if block.get('type') == 'tool_use':
+                    tool_name = block.get('name')
+                    tool_id = block.get('id')
+                    tool_input = block.get('input')
+                    
+                    print(f"⚙️  도구 실행: {tool_name}")
+                    exec_result = self._execute_tool(tool_name, tool_input)
+                    
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_id,
+                        "content": str(exec_result)
+                    })
+            
+            if tool_results:
+                self.conversation_history.append({"role": "user", "content": tool_results})
+                print("📤 도구 결과 전송 및 후속 응답 대기...")
+                
+                next_body = body.copy()
+                next_body['messages'] = list(self.conversation_history)
+                # 재귀 호출 (original_message는 빈 문자열)
+                return self._chat_non_streaming(api_url, next_body, "")
 
-        # 히스토리에 추가
-        self.conversation_history.append({"role": "user", "content": original_message})
-        if content:
-            self.conversation_history.append({"role": "assistant", "content": content})
+        return full_text
 
-        return content
-
+    # 기존 메서드 호환성 유지 (chat 메서드 내에서 호출됨)
+    # extract_and_save_files는 이전과 동일하게 유지
     def extract_and_save_files(self, response: str) -> List[str]:
         """AI 응답에서 파일을 추출하여 저장"""
         pattern = r'```filename:(.+?)\n(.*?)```'

@@ -14,6 +14,8 @@ from .file_manager import FileManager
 from .context_builder import ContextBuilder
 from .code_executor import CodeExecutor
 from .terminal_executor import TerminalExecutor
+from .git_manager import GitManager
+from .package_manager import PackageManager
 
 
 class GenAICodeAssistant:
@@ -34,6 +36,8 @@ class GenAICodeAssistant:
         self.context_builder = ContextBuilder(self.file_manager)
         self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
+        self.git_manager = GitManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
 
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
@@ -44,13 +48,32 @@ class GenAICodeAssistant:
 코드 내용
 ```
 
-예시:
-```filename:src/main.py
-print("Hello, World!")
+[필수] 파일 시스템, Git, 패키지 작업이 필요한 경우 아래 형식을 사용하여 도구를 호출하세요:
+
+```tool_code
+{"name": "도구이름", "input": {"키": "값"}}
 ```
 
-```filename:README.md
-# 프로젝트 제목
+사용 가능한 도구:
+1. 파일 시스템:
+- read_file(path)
+- write_file(path, content)
+- list_files()
+- list_directory_tree(depth)
+
+2. Git:
+- git_status()
+- git_diff(cached=True/False)
+- git_log(max_count)
+- git_add(files=[])
+- git_commit(message)
+
+3. 패키지:
+- list_packages(language="python"|"node")
+
+예시:
+```tool_code
+{"name": "read_file", "input": {"path": "src/main.py"}}
 ```
 
 주의사항:
@@ -69,6 +92,78 @@ print("Hello, World!")
             "repetition_penalty": 1.04
         }
 
+    def get_llm_config(self) -> Dict:
+        """LLM 설정 반환"""
+        return {
+            "max_new_tokens": 8192,
+            "seed": None,
+            "top_k": 14,
+            "top_p": 0.94,
+            "temperature": 0.4,
+            "repetition_penalty": 1.04
+        }
+
+    def _execute_tool(self, tool_name: str, tool_input: Dict) -> str:
+        """도구 실행"""
+        try:
+            if tool_name == "read_file":
+                path = self.file_manager.workspace_dir / tool_input.get("path")
+                content = self.file_manager.read_file(path)
+                return content if content is not None else "파일을 찾을 수 없습니다."
+            elif tool_name == "write_file":
+                path = self.file_manager.workspace_dir / tool_input.get("path")
+                success = self.file_manager.write_file(path, tool_input.get("content"))
+                return "파일 저장 성공" if success else "파일 저장 실패"
+            elif tool_name == "list_files":
+                files = self.file_manager.list_files()
+                return "\n".join([str(f.relative_to(self.file_manager.workspace_dir)) for f in files])
+            elif tool_name == "list_directory_tree":
+                return self.context_builder.build_file_tree(max_depth=tool_input.get("depth", 3))
+            
+            # Git Tools
+            elif tool_name == "git_status":
+                return self.git_manager.status()
+            elif tool_name == "git_diff":
+                return self.git_manager.diff(cached=tool_input.get("cached", False))
+            elif tool_name == "git_log":
+                return self.git_manager.log(max_count=tool_input.get("max_count", 5))
+            elif tool_name == "git_add":
+                return self.git_manager.add(files=tool_input.get("files", []))
+            elif tool_name == "git_commit":
+                return self.git_manager.commit(message=tool_input.get("message"))
+            
+            # Package Tools
+            elif tool_name == "list_packages":
+                return self.package_manager.list_packages(language=tool_input.get("language", "python"))
+                
+            else:
+                return f"알 수 없는 도구: {tool_name}"
+        except Exception as e:
+            return f"도구 실행 오류: {str(e)}"
+
+    def process_tool_calls(self, response: str) -> str:
+        """응답 내의 도구 호출을 파싱하고 실행"""
+        # ```tool_code ... ``` 패턴 찾기
+        pattern = r'```tool_code\s*({.*?})\s*```'
+        matches = re.findall(pattern, response, re.DOTALL)
+        
+        results = []
+        for match in matches:
+            try:
+                tool_call = json.loads(match)
+                name = tool_call.get("name")
+                input_data = tool_call.get("input", {})
+                
+                print(f"\n⚙️  도구 실행: {name} {input_data}")
+                result = self._execute_tool(name, input_data)
+                
+                result_str = f"Tool '{name}' Result:\n{result}"
+                results.append(result_str)
+            except json.JSONDecodeError:
+                print(f"\n⚠️ 도구 JSON 파싱 실패: {match}")
+                
+        return "\n\n".join(results)
+
     def chat(self, user_message: str, streaming: bool = True,
              include_context: bool = False, file_patterns: Optional[List[str]] = None) -> str:
         """AI와 채팅"""
@@ -79,11 +174,7 @@ print("Hello, World!")
                 include_tree=True,
                 file_patterns=file_patterns
             )
-
-            if context:
-                full_message = f"{context}\n\n{'=' * 80}\n\n{user_message}"
-            else:
-                full_message = user_message
+            full_message = f"{context}\n\n{'=' * 80}\n\n{user_message}" if context else user_message
         else:
             full_message = user_message
 
@@ -102,10 +193,23 @@ print("Hello, World!")
         api_url = f"{self.endpoint_url}/openapi/chat/v1/messages"
 
         try:
+            response_text = ""
             if streaming:
-                return self._chat_streaming(api_url, body, user_message, full_message)
+                response_text = self._chat_streaming(api_url, body, user_message, full_message)
             else:
-                return self._chat_non_streaming(api_url, body, user_message, full_message)
+                response_text = self._chat_non_streaming(api_url, body, user_message, full_message)
+            
+            # 도구 호출 처리
+            tool_results = self.process_tool_calls(response_text)
+            if tool_results:
+                print("\n📤 도구 실행 결과가 생성되었습니다.")
+                self.conversation_history.append(f"[System Tool Results]\n{tool_results}")
+                # GenAI는 자동 재귀 호출 시 무한루프 위험이 있으므로 결과만 저장하고 사용자에게 알림
+                # 필요시 사용자 요청에 따라 다시 진행하기 위해 여기서는 return response_text (결과 포함 안 함)
+                # 단, history에는 포함되었으므로 다음 턴에서 반영됨.
+            
+            return response_text
+
         except Exception as e:
             print(f"\n❌ API 호출 오류: {str(e)}")
             return ""

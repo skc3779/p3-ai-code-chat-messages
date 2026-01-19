@@ -48,10 +48,15 @@ def print_menu():
     print("  /help               - 도움말 보기")
     print("  /quit               - 종료")
     print("=" * 80)
+    print("=" * 80)
     print("\n💡 사용 예시:")
     print("  - '/context *.py 이 프로젝트에 README.md를 작성해줘'")
     print("  - '/context src/ 테스트 코드를 작성해줘'")
     print("  - '새로운 API 엔드포인트 /users를 추가해줘'")
+    print("\n✨ AI 자동 기능:")
+    print("  - 파일 시스템 조작 (읽기/쓰기/목록)")
+    print("  - Git 버전 관리 (상태/diff/커밋)")
+    print("  - 패키지 의존성 분석 (pip/npm)")
     print("=" * 80)
 
 
