@@ -17,6 +17,7 @@ from src import (
     FileManager,
     ContextBuilder,
     GenAICodeAssistant,
+    TokenManager,
 )
 
 
@@ -44,6 +45,7 @@ def print_menu():
     print("  /clear              - 대화 히스토리 초기화")
     print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
     print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
+    print("  /tokens             - 토큰 사용량 확인")
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
     print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
     print("  /llm_config <lang>  - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
@@ -142,6 +144,19 @@ def main():
                     assistant.conversation_history.clear()
                     print("✅ 대화 히스토리가 초기화되었습니다.")
 
+                elif command == '/tokens':
+                    # GenAI는 List[str] 형식이므로 변환
+                    history_dicts = [{"role": "user", "content": c} for c in assistant.conversation_history]
+                    stats = TokenManager.get_token_stats(
+                        history_dicts,
+                        max_tokens=TokenManager.MAX_TOKENS_GENAI
+                    )
+                    print(f"\n📊 토큰 사용량:")
+                    print(f"   현재:    {stats['current']:,} 토큰")
+                    print(f"   한도:    {stats['max']:,} 토큰 (GenAI)")
+                    print(f"   사용률:  {stats['usage_percent']}%")
+                    print(f"   메시지: {stats['message_count']}개")
+
                 elif command == '/workspace':
                     if args:
                         new_workspace = Path(args).resolve()
@@ -187,7 +202,7 @@ def main():
 
                     if matched_files:
                         context = assistant.context_builder.build_files_context(matched_files)
-                        history_entry = {"role": "system", "content": context }
+                        history_entry = {"role": "user", "content": f"[파일 컨텍스트]\n{context}"}
                         assistant.conversation_history.append(f"{history_entry}")
                         print(context)
                     else:

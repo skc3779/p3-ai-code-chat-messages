@@ -37,3 +37,55 @@ CALUDE를 이용한 리뷰 자동화 시스템 구축을 하려고 합니다.
 - FSD 문서의 내용이 너무 길지 않게 작성해줘  
 
 
+----
+
+현재의 소스코드를 분석해서 개선사항을 아래 README 파일에 업데이트 해줘.
+@README-claude-ai-chat-code01.md와 @README-gen-ai-chat-code01.md 
+
+---
+claude-ai-chat-code01.py 로 시작하는   
+Claude Code Assistant는 터미널에서 Anthropic Claude API를 활용하여 코드 작성, 리팩토링, 문서화 등을 지원하는 AI 코딩 어시스턴트이며, 프로젝트 파일 컨텍스트를 자동으로 분석하여 더 정확한 코드 생성을 지원하고 있어 본 소스코드를 분석해서 
+추가적으로 기능 개선이 필요한 사항을 우선 순위별로 나열해줘
+- 문서는 docs/specs/requirements 폴더에 SRS로 시작하는 v1.0.016 버전의 문서에 저장한다  
+
+-- 
+
+@SRS_Claude_Code_Assistant_Improvements_v1.0.016.md 에서 `토큰 수 계산 및 자동 트리밍 기능 추가` 중 자동 트리밍 기능 이 이해가 되지 않는다 무슨의미인지 자세히 보조문서를 만들어 설명해줘
+-- 문서는 docs/specs/requirements 폴더에 REF로 시작하는 v1.0.016 버전의 문서에 저장한다  
+
+
+---
+
+@SRS_Claude_Code_Assistant_Improvements_v1.0.016.md 문서에서 P1-02, P1-03에 대한 개선사항을 구현해줘
+
+### 2.1 P1 - Critical (즉시 수정 필요)
+
+| ID | 개선 사항 | 현재 문제 | 개선 방안 | 처리 |
+|----|-----------|----------|----------|---|
+| P1-01 | `/read` 명령어 System Role 수정 | `role: "system"` 사용으로 API 오류 발생 | `role: "user"` 또는 세션 컨텍스트 방식으로 변경 | 구현완료 |
+| P1-02 | 대화 히스토리 토큰 관리 | 히스토리 무제한 누적으로 토큰 초과 가능 | 토큰 수 계산 및 자동 트리밍 기능 추가 | 미구현 |
+| P1-03 | API 오류 재시도 로직 | 네트워크 오류 시 즉시 실패 | 지수 백오프 재시도 로직 구현 | 미구현 |
+
+---
+
+구현 내용을 릴리즈 노트로 정리해줘
+- 문서는 docs/releases 폴더에 RELEASE로 시작하는 v1.0.016 버전의 문서에 저장한다  
+- RELEASE 문서의 내용이 너무 길지 않게 작성해줘  
+
+---
+
+`src/api_retry.py` 지수 백오프 재시도 로직이 어떻게 동작하는지 보조문서를 만들어 설명해줘
+- 문서는 docs/specs/requirements 폴더에 REF로 시작하는 v1.0.016 버전의 문서에 저장한다  
+
+---
+
+`src/token_manager.py`  토큰 계산 및 자동 트리밍 중 claude-ai-chat-code01.py 와 gen-ai-chat-code01.py 의 최대 토큰의 크기가 다릅니다.
+이에 claude-ai-chat-code01.py 와 gen-ai-chat-code01.py 실행 모드에 따라 DEFAULT_MAX_TOKENS값이 다르게 설정되도록 합니다.  
+- Claude 컨텍스트 윈도우의 75%를 안전 한도로 설정  
+    - DEFAULT_MAX_TOKENS = 150000  
+- gen-ai 컨텍스트 윈도우의 75%를 안전 한도로 설정 
+    - DEFAULT_MAX_TOKENS = 96000  
+
+---
+
+

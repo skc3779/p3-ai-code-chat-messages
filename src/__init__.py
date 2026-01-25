@@ -7,6 +7,8 @@ from src.tree_builder import TreeBuilder
 from src.context_builder import ContextBuilder
 from src.claude_assistant import ClaudeCodeAssistant
 from src.genai_assistant import GenAICodeAssistant
+from src.token_manager import TokenManager
+from src.api_retry import APIRetry
 
 __all__ = [
     'FileManager',
@@ -16,4 +18,7 @@ __all__ = [
     'ContextBuilder',
     'ClaudeCodeAssistant',
     'GenAICodeAssistant',
+    'TokenManager',
+    'APIRetry',
 ]
+

@@ -17,6 +17,8 @@ from .terminal_executor import TerminalExecutor
 from .git_manager import GitManager
 from .package_manager import PackageManager
 from .tool_definitions import FILESYSTEM_TOOLS
+from .token_manager import TokenManager
+from .api_retry import APIRetry
 
 
 class ClaudeCodeAssistant:
@@ -100,6 +102,12 @@ class ClaudeCodeAssistant:
         else:
             full_message = user_message
 
+        # 히스토리 자동 트리밍 (Claude 토큰 한도 적용)
+        self.conversation_history = TokenManager.auto_trim_history(
+            self.conversation_history,
+            max_tokens=TokenManager.MAX_TOKENS_CLAUDE
+        )
+
         # API 호출 - Claude API 형식으로 메시지 구성
         messages = self.conversation_history.copy()
         messages.append({"role": "user", "content": full_message})
@@ -169,7 +177,10 @@ class ClaudeCodeAssistant:
 
     def _chat_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
         """스트리밍 모드 채팅 (Tool Use 지원)"""
-        response = requests.post(api_url, headers=self.headers, json=body, stream=True)
+        # 재시도 로직 적용
+        response = APIRetry.retry_request(
+            requests.post, api_url, headers=self.headers, json=body, stream=True
+        )
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
@@ -298,7 +309,10 @@ class ClaudeCodeAssistant:
 
     def _chat_non_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
         """논스트리밍 모드 채팅 (Tool Use 지원)"""
-        response = requests.post(api_url, headers=self.headers, json=body)
+        # 재시도 로직 적용
+        response = APIRetry.retry_request(
+            requests.post, api_url, headers=self.headers, json=body
+        )
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")

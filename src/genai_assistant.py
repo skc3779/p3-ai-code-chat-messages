@@ -17,6 +17,8 @@ from .terminal_executor import TerminalExecutor
 from .git_manager import GitManager
 from .package_manager import PackageManager
 from .llm_config import LLMConfigProvider
+from .token_manager import TokenManager
+from .api_retry import APIRetry
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -31,6 +33,7 @@ class GenAICodeAssistant:
         }
         self.model_id = model_id
         self.conversation_history: List[str] = []
+        self.conversation_history_dicts: List[Dict] = []  # 토큰 계산용
 
         self.file_manager = FileManager(workspace_dir)
         self.context_builder = ContextBuilder(self.file_manager)
@@ -180,6 +183,16 @@ class GenAICodeAssistant:
         else:
             full_message = user_message
 
+        # 토큰 관리를 위한 히스토리 자동 트리밍 (GenAI 한도 적용)
+        self.conversation_history_dicts = TokenManager.auto_trim_history(
+            [{\"role\": \"user\", \"content\": c} for c in self.conversation_history],
+            max_tokens=TokenManager.MAX_TOKENS_GENAI
+        )
+        # 트리밍 후 실제 히스토리에 반영
+        if len(self.conversation_history_dicts) < len(self.conversation_history):
+            trimmed_count = len(self.conversation_history) - len(self.conversation_history_dicts)
+            self.conversation_history = self.conversation_history[trimmed_count:]
+
         # API 호출 - GenAI API 형식
         contents = self.conversation_history.copy()
         contents.append(full_message)
@@ -219,7 +232,10 @@ class GenAICodeAssistant:
     def _chat_streaming(self, api_url: str, body: Dict,
                         original_message: str, full_message: str) -> str:
         """스트리밍 모드 채팅"""
-        response = requests.post(api_url, headers=self.headers, json=body, stream=True)
+        # 재시도 로직 적용
+        response = APIRetry.retry_request(
+            requests.post, api_url, headers=self.headers, json=body, stream=True
+        )
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
@@ -257,7 +273,10 @@ class GenAICodeAssistant:
     def _chat_non_streaming(self, api_url: str, body: Dict,
                             original_message: str, full_message: str) -> str:
         """논스트리밍 모드 채팅"""
-        response = requests.post(api_url, headers=self.headers, json=body)
+        # 재시도 로직 적용
+        response = APIRetry.retry_request(
+            requests.post, api_url, headers=self.headers, json=body
+        )
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
