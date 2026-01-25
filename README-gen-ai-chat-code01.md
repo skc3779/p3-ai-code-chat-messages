@@ -16,6 +16,9 @@ GenAI Code Assistant는 터미널에서 커스텀 GenAI API (Lego Platform)를 �
 | 💾 **파일 저장** | AI가 생성한 코드를 자동 추출 및 저장 |
 | 📜 **대화 히스토리** | 이전 대화 내용 유지 및 관리 |
 | ⚙️ **LLM 설정** | temperature, top_k, top_p 등 파라미터 커스터마이징 |
+| 🚀 **코드 실행** | AI가 생성한 코드를 직접 실행 (Python/JS/Bash) |
+| 💻 **쉘 명령어** | 터미널 명령어 직접 실행 |
+| 📝 **멀티라인 입력** | 여러 줄의 프롬프트 입력 지원 |
 
 ## 설치
 
@@ -66,6 +69,11 @@ python gen-ai-chat-code01.py
 | `/nostream` | 논스트리밍 모드 활성화 | `/nostream` |
 | `/history` | 대화 히스토리 보기 | `/history` |
 | `/clear` | 대화 히스토리 초기화 | `/clear` |
+| `/run [lang]` | 마지막 응답의 코드 실행 | `/run python` |
+| `/multiline` | 멀티라인 입력 모드 (종료: /end) | `/multiline` |
+| `/shell <cmd>` | 쉘 명령어 실행 (안전 모드) | `/shell pip list` |
+| `/shell! <cmd>` | 쉘 명령어 실행 (위험 명령 허용) | `/shell! rm -rf temp/` |
+| `/llm_config <lang>` | 언어별 LLM 파라미터 설정 | `/llm_config Python` |
 | `/help` | 도움말 보기 | `/help` |
 | `/quit` | 종료 | `/quit` |
 
@@ -83,6 +91,21 @@ python gen-ai-chat-code01.py
 
 # 생성된 파일 저장
 👤 You: /save
+
+# 멀티라인 입력
+👤 You: /multiline
+📝 멀티라인 모드 (종료: /end)
+... 다음 코드를 분석해줘:
+... def calculate(x, y):
+...     return x + y
+... /end
+
+# LLM 설정 변경
+👤 You: /llm_config Python
+✅ LLM 설정이 'python' 로 적용되었습니다.
+
+# 코드 실행
+👤 You: /run python
 ```
 
 ## 아키텍처

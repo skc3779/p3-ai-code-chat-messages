@@ -15,6 +15,10 @@ Claude Code Assistant는 터미널에서 Anthropic Claude API를 활용하여 �
 | 🌳 **프로젝트 트리** | 디렉토리 구조 시각화 |
 | 💾 **파일 저장** | AI가 생성한 코드를 자동 추출 및 저장 |
 | 📜 **대화 히스토리** | 이전 대화 내용 유지 및 관리 |
+| 🔨 **Tool Use** | 파일 시스템, Git, 패키지 관리 도구 자동 호출 |
+| 🚀 **코드 실행** | AI가 생성한 코드를 직접 실행 (Python/JS/Bash) |
+| 💻 **쉘 명령어** | 터미널 명령어 직접 실행 |
+| 📝 **멀티라인 입력** | 여러 줄의 프롬프트 입력 지원 |
 
 ## 설치
 
@@ -63,6 +67,10 @@ python claude-ai-chat-code01.py
 | `/nostream` | 논스트리밍 모드 활성화 | `/nostream` |
 | `/history` | 대화 히스토리 보기 | `/history` |
 | `/clear` | 대화 히스토리 초기화 | `/clear` |
+| `/run [lang]` | 마지막 응답의 코드 실행 | `/run python` |
+| `/multiline` | 멀티라인 입력 모드 (종료: /end) | `/multiline` |
+| `/shell <cmd>` | 쉘 명령어 실행 (안전 모드) | `/shell pip list` |
+| `/shell! <cmd>` | 쉘 명령어 실행 (위험 명령 허용) | `/shell! rm -rf temp/` |
 | `/help` | 도움말 보기 | `/help` |
 | `/quit` | 종료 | `/quit` |
 
@@ -80,6 +88,17 @@ python claude-ai-chat-code01.py
 
 # 생성된 파일 저장
 👤 You: /save
+
+# 멀티라인 입력
+👤 You: /multiline
+📝 멀티라인 모드 (종료: /end)
+... 다음 코드를 분석해줘:
+... def calculate(x, y):
+...     return x + y
+... /end
+
+# 코드 실행
+👤 You: /run python
 ```
 
 ## 아키텍처
