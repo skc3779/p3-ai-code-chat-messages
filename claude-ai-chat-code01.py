@@ -42,6 +42,9 @@ def print_menu():
     print("  /nostream           - 논스트리밍 모드 활성화")
     print("  /history            - 대화 히스토리 보기")
     print("  /clear              - 대화 히스토리 초기화")
+    print("  /save_history [name]- 대화 히스토리 파일로 저장")
+    print("  /load_history <name>- 저장된 히스토리 로드")
+    print("  /list_history       - 저장된 히스토리 목록")
     print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
     print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
     print("  /tokens             - 토큰 사용량 확인")
@@ -128,7 +131,10 @@ def main():
                         for i, msg in enumerate(assistant.conversation_history, 1):
                             role = "👤" if msg.get('role') == 'user' else "🤖"
                             content = msg.get('content', '')
-                            preview = content[:150].replace('\n', ' ')
+                            if len(content)  > 150:
+                                preview = content[:150].replace('\n', ' ')
+                            else:
+                                preview = content
                             print(f"{role} [{i}]: {preview}{'...' if len(content) > 150 else ''}")
                     else:
                         print("📭 대화 히스토리가 비어있습니다.")
@@ -136,6 +142,30 @@ def main():
                 elif command == '/clear':
                     assistant.conversation_history.clear()
                     print("✅ 대화 히스토리가 초기화되었습니다.")
+
+                elif command == '/save_history':
+                    filepath = args.strip() if args else None
+                    saved_path = assistant.save_history(filepath)
+                    print(f"✅ 히스토리 저장됨: {saved_path}")
+
+                elif command == '/load_history':
+                    if not args:
+                        print("❌ 파일명을 지정하세요. 예: /load_history history_20260125.json")
+                        continue
+                    if assistant.load_history(args.strip()):
+                        print(f"✅ 히스토리 로드됨: {args.strip()}")
+                        print(f"   메시지 수: {len(assistant.conversation_history)}")
+                    else:
+                        print(f"❌ 히스토리 로드 실패: {args.strip()}")
+
+                elif command == '/list_history':
+                    files = assistant.list_history()
+                    if files:
+                        print("\n📋 저장된 히스토리 파일:")
+                        for f in files:
+                            print(f"   - {f}")
+                    else:
+                        print("📭 저장된 히스토리 파일이 없습니다.")
 
                 elif command == '/tokens':
                     stats = TokenManager.get_token_stats(

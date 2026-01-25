@@ -19,6 +19,7 @@ from .package_manager import PackageManager
 from .tool_definitions import FILESYSTEM_TOOLS
 from .token_manager import TokenManager
 from .api_retry import APIRetry
+from .history_manager import HistoryManager
 
 
 class ClaudeCodeAssistant:
@@ -41,6 +42,7 @@ class ClaudeCodeAssistant:
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)
         self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
 
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
@@ -432,3 +434,21 @@ class ClaudeCodeAssistant:
             print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
 
         return saved_files
+
+    def save_history(self, filepath: Optional[str] = None) -> str:
+        """대화 히스토리를 JSON 파일로 저장"""
+        return self.history_manager.save_claude_history(
+            self.conversation_history, self.model_id, filepath
+        )
+    
+    def load_history(self, filepath: str) -> bool:
+        """JSON 파일에서 대화 히스토리 로드"""
+        data = self.history_manager.load_history(filepath)
+        if data and data.get("type") == "claude":
+            self.conversation_history = data.get("messages", [])
+            return True
+        return False
+    
+    def list_history(self) -> List[str]:
+        """저장된 히스토리 파일 목록"""
+        return self.history_manager.list_history_files()

@@ -9,6 +9,7 @@ from src.claude_assistant import ClaudeCodeAssistant
 from src.genai_assistant import GenAICodeAssistant
 from src.token_manager import TokenManager
 from src.api_retry import APIRetry
+from src.history_manager import HistoryManager
 
 __all__ = [
     'FileManager',
@@ -20,5 +21,6 @@ __all__ = [
     'GenAICodeAssistant',
     'TokenManager',
     'APIRetry',
+    'HistoryManager',
 ]
 

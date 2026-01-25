@@ -19,6 +19,7 @@ from .package_manager import PackageManager
 from .llm_config import LLMConfigProvider
 from .token_manager import TokenManager
 from .api_retry import APIRetry
+from .history_manager import HistoryManager
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -41,6 +42,7 @@ class GenAICodeAssistant:
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)
         self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
         # LLM 언어 설정 (기본값 없음)
         self.llm_config = LLMConfigProvider()
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
@@ -383,3 +385,21 @@ class GenAICodeAssistant:
             print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
 
         return saved_files
+
+    def save_history(self, filepath: Optional[str] = None) -> str:
+        """대화 히스토리를 JSON 파일로 저장"""
+        return self.history_manager.save_genai_history(
+            self.conversation_history, self.model_id, filepath
+        )
+    
+    def load_history(self, filepath: str) -> bool:
+        """JSON 파일에서 대화 히스토리 로드"""
+        data = self.history_manager.load_history(filepath)
+        if data and data.get("type") == "genai":
+            self.conversation_history = data.get("messages", [])
+            return True
+        return False
+    
+    def list_history(self) -> List[str]:
+        """저장된 히스토리 파일 목록"""
+        return self.history_manager.list_history_files()
