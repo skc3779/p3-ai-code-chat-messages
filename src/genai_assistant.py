@@ -20,6 +20,7 @@ from .llm_config import LLMConfigProvider
 from .token_manager import TokenManager
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
+from .template_manager import TemplateManager
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -42,10 +43,15 @@ class GenAICodeAssistant:
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)
         self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
         self.history_manager = HistoryManager(self.file_manager.workspace_dir)
+        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
+
         # LLM 언어 설정 (기본값 없음)
         self.llm_config = LLMConfigProvider()
-        self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
+
+        self.default_system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
+
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
 
 [필수] 코드나 파일을 생성할 때는 반드시 아래 형식을 정확히 따르세요:
@@ -87,6 +93,25 @@ class GenAICodeAssistant:
 - 여러 파일은 각각 별도의 코드 블록으로 작성하세요
 - 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
 - 문서작성 시 이모지(Emoji) 사용을 하지 마세요"""
+        
+        self.system_prompt = self.default_system_prompt
+
+    def set_system_prompt_from_template(self, template_name: str) -> bool:
+        """템플릿으로 시스템 프롬프트 변경"""
+        prompt = self.template_manager.get_system_prompt(template_name, "genai")
+        if prompt:
+            self.system_prompt = prompt
+            return True
+        return False
+
+    def reset_system_prompt(self) -> None:
+        """기본 시스템 프롬프트로 복원"""
+        self.system_prompt = self.default_system_prompt
+
+    def list_templates(self) -> List[Dict[str, str]]:
+        """사용 가능한 템플릿 목록"""
+        return self.template_manager.list_templates()
+
     # --------------------------------------------------------------------- #
     # LLM 설정 관련 메서드
     # --------------------------------------------------------------------- #

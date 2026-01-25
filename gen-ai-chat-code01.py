@@ -53,6 +53,9 @@ def print_menu():
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
     print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
     print("  /llm_config <lang>  - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
+    print("  /template <name>    - 시스템 프롬프트 템플릿 변경")
+    print("  /template_list      - 사용 가능한 템플릿 목록")
+    print("  /template_reset     - 기본 시스템 프롬프트로 복귀")
     print("  /watch <pattern>    - 파일 변경 감시 시작 (예: /watch *.py)")
     print("  /unwatch <pattern>  - 파일 변경 감시 중지")
     print("  /watch_list         - 감시 중인 패턴 목록")
@@ -413,6 +416,34 @@ def main():
                     print(f"✅ LLM 설정이 '{lang}' 로 적용되었습니다.")
                     for k, v in cfg.items():
                         print(f"   {k}: {v}")
+
+                    for k, v in cfg.items():
+                        print(f"   {k}: {v}")
+
+                elif command == '/template':
+                    if not args:
+                        print("❌ 템플릿 이름을 입력하세요. (예: /template code-review)")
+                        continue
+                    name = args.strip()
+                    if assistant.set_system_prompt_from_template(name):
+                        print(f"✅ 시스템 프롬프트가 '{name}' 템플릿으로 변경되었습니다.")
+                    else:
+                        print(f"❌ 템플릿을 찾을 수 없습니다: {name}")
+                        print("💡 /template_list 로 목록을 확인하세요.")
+
+                elif command == '/template_list':
+                    templates = assistant.list_templates()
+                    if templates:
+                        print("\n📋 사용 가능한 프롬프트 템플릿:")
+                        for t in templates:
+                            print(f"   - {t['name']}: {t['description']}")
+                    else:
+                        print("📭 사용 가능한 템플릿이 없습니다.")
+                        print(f"💡 {assistant.file_manager.workspace_dir / '.system-prompts'} 폴더에 YAML 파일을 추가하세요.")
+
+                elif command == '/template_reset':
+                    assistant.reset_system_prompt()
+                    print("✅ 기본 시스템 프롬프트로 복귀했습니다.")
 
                 elif command == '/watch':
                     if not args:

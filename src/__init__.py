@@ -11,6 +11,7 @@ from src.token_manager import TokenManager
 from src.api_retry import APIRetry
 from src.history_manager import HistoryManager
 from src.file_watcher import FileWatcher
+from src.template_manager import TemplateManager
 
 __all__ = [
     'FileManager',
@@ -24,5 +25,6 @@ __all__ = [
     'APIRetry',
     'HistoryManager',
     'FileWatcher',
+    'TemplateManager',
 ]
 
