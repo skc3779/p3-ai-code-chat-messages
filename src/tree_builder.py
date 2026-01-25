@@ -24,7 +24,7 @@ class TreeBuilder:
             self,
             workspace_dir: Path,
             should_ignore: Callable[[Path], bool],
-            max_depth: int = 3,
+            max_depth: int = 11,
     ) -> None:
         self.root = workspace_dir
         self.should_ignore = should_ignore

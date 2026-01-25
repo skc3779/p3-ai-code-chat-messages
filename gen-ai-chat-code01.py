@@ -43,8 +43,10 @@ def print_menu():
     print("  /history            - 대화 히스토리 보기")
     print("  /clear              - 대화 히스토리 초기화")
     print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
+    print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
     print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
+    print("  /llm_config <lang>  - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
     print("  /help               - 도움말 보기")
     print("  /quit               - 종료")
     print("=" * 80)
@@ -185,6 +187,8 @@ def main():
 
                     if matched_files:
                         context = assistant.context_builder.build_files_context(matched_files)
+                        history_entry = {"role": "system", "content": context }
+                        assistant.conversation_history.append(f"{history_entry}")
                         print(context)
                     else:
                         print(f"❌ 패턴 '{args}'에 해당하는 파일이 없습니다.")
@@ -274,6 +278,27 @@ def main():
                             if result.get('error'):
                                 print(f"\n⚠️  {result['error']}")
 
+                elif command == '/multiline':
+                    print("📝 멀티라인 모드 (종료: /end)")
+                    lines = []
+                    
+                    while True:
+                        line = input("... ")
+                        
+                        if line.strip() == '/end':
+                            break
+                        
+                        lines.append(line)
+                    
+                    multiline_input = "\n".join(lines).strip()
+                    
+                    if multiline_input:
+                        last_response = assistant.chat(multiline_input, streaming=streaming_mode)
+                        if '```filename:' in last_response:
+                            print("\n💡 응답에 파일이 포함되어 있습니다. /save 명령어로 저장할 수 있습니다.")
+                    else:
+                        print("⚠️ 입력이 비어있습니다.")
+
                 elif command == '/shell' or command == '/shell!':
                     if not args:
                         print("❌ 실행할 명령어를 입력하세요.")
@@ -309,7 +334,21 @@ def main():
                         if result.get('stderr'):
                             print(f"\n🔴 오류 출력:")
                             print(result['stderr'])
-
+                elif command == '/llm_config':
+                    lang = args.strip().lower()
+                    if not lang:
+                        print("❌ 언어를 지정하세요. 예: /llm_config Python")
+                        cfg = assistant.get_llm_config()
+                        print(f"❌ 현재 LLM 설정로 '{assistant.get_llm_language()}' 로 적용 되어있습니다.")
+                        for k, v in cfg.items():
+                            print(f"   {k}: {v}")
+                        continue
+                    assistant.set_llm_language(lang)
+                    cfg = assistant.get_llm_config()
+                    print(f"✅ LLM 설정이 '{lang}' 로 적용되었습니다.")
+                    for k, v in cfg.items():
+                        print(f"   {k}: {v}")
+                        
                 else:
                     print(f"❌ 알 수 없는 명령어: {command}")
                     print("💡 /help를 입력하여 도움말을 확인하세요.")

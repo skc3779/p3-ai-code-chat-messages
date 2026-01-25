@@ -17,7 +17,7 @@ class ContextBuilder:
         self.file_manager = file_manager
         self.max_context_size = 100000  # 최대 컨텍스트 크기 (문자 수)
 
-    def build_file_tree2(self, max_depth: int = 3) -> str:
+    def build_file_tree2(self, max_depth: int = 11) -> str:
         """파일 트리 구조 생성 (레거시)"""
         tree_lines = [f"📁 프로젝트 구조 (작업 디렉토리: {self.file_manager.workspace_dir})\n"]
 
@@ -48,7 +48,7 @@ class ContextBuilder:
         add_tree_item(self.file_manager.workspace_dir)
         return "\n".join(tree_lines)
 
-    def build_file_tree(self, max_depth: int = 3) -> str:
+    def build_file_tree(self, max_depth: int = 11) -> str:
         """TreeBuilder를 사용하여 파일 트리 구조 생성"""
         builder = TreeBuilder(
             workspace_dir=self.file_manager.workspace_dir,

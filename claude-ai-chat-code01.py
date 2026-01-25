@@ -42,6 +42,7 @@ def print_menu():
     print("  /history            - 대화 히스토리 보기")
     print("  /clear              - 대화 히스토리 초기화")
     print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
+    print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
     print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
     print("  /help               - 도움말 보기")
@@ -179,6 +180,8 @@ def main():
 
                     if matched_files:
                         context = assistant.context_builder.build_files_context(matched_files)
+                        history_entry = {"role": "user", "content": f"[파일 컨텍스트 로드됨]\n{context}"}
+                        assistant.conversation_history.append(history_entry)
                         print(context)
                     else:
                         print(f"❌ 패턴 '{args}'에 해당하는 파일이 없습니다.")
@@ -219,7 +222,7 @@ def main():
                 elif command == '/run':
                     if not last_response:
                         print("❌ 실행할 코드가 없습니다. 먼저 AI에게 코드 생성을 요청하세요.")
-                        continue
+                        continuef
                     
                     language = args.strip() if args else 'python'
                     code_blocks = assistant.code_executor.extract_code_from_response(last_response)
@@ -267,6 +270,27 @@ def main():
                                 print(result['stderr'])
                             if result.get('error'):
                                 print(f"\n⚠️  {result['error']}")
+
+                elif command == '/multiline':
+                    print("📝 멀티라인 모드 (종료: /end)")
+                    lines = []
+                    
+                    while True:
+                        line = input("... ")
+                        
+                        if line.strip() == '/end':
+                            break
+                        
+                        lines.append(line)
+                    
+                    multiline_input = "\n".join(lines).strip()
+                    
+                    if multiline_input:
+                        last_response = assistant.chat(multiline_input, streaming=streaming_mode)
+                        if '```filename:' in last_response:
+                            print("\n💡 응답에 파일이 포함되어 있습니다. /save 명령어로 저장할 수 있습니다.")
+                    else:
+                        print("⚠️ 입력이 비어있습니다.")
 
                 elif command == '/shell' or command == '/shell!':
                     if not args:

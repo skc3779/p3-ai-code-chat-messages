@@ -51,6 +51,11 @@ class ClaudeCodeAssistant:
 
 [필수] 파일 시스템 조작, Git 작업, 패키지 확인이 필요한 경우 제공된 도구(Tools)를 사용하세요.
 
+```tool_code
+{"name": "도구이름", "input": {"키": "값"}}
+```
+
+사용 가능한 도구:
 1. 파일 시스템:
 - 파일 읽기: read_file
 - 파일 쓰기: write_file
@@ -67,11 +72,16 @@ class ClaudeCodeAssistant:
 3. 환경 분석:
 - 패키지 목록: list_packages(language="python"|"node")
 
+예시:
+```tool_code
+{"name": "read_file", "input": {"path": "src/main.py"}}
+```
+
 주의사항:
 - 반드시 ```filename: 형식을 사용하세요 (```python, ```javascript 등 언어 식별자 사용 금지)
 - 여러 파일은 각각 별도의 코드 블록으로 작성하세요
-- 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요"""
-
+- 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
+- 문서작성 시 이모지(Emoji) 사용을 하지 마세요"""
     def chat(self, user_message: str, streaming: bool = True,
              include_context: bool = False, file_patterns: Optional[List[str]] = None) -> str:
         """AI와 채팅"""
@@ -97,7 +107,7 @@ class ClaudeCodeAssistant:
         body = {
             "model": self.model_id,
             "messages": messages,
-            "max_tokens": 8192,
+            "max_tokens": 4096,
             "system": self.system_prompt,
             "tools": FILESYSTEM_TOOLS,  # 도구 정의 추가
             "stream": streaming
@@ -345,25 +355,64 @@ class ClaudeCodeAssistant:
     # 기존 메서드 호환성 유지 (chat 메서드 내에서 호출됨)
     # extract_and_save_files는 이전과 동일하게 유지
     def extract_and_save_files(self, response: str) -> List[str]:
-        """AI 응답에서 파일을 추출하여 저장"""
-        pattern = r'```filename:(.+?)\n(.*?)```'
-        matches = re.findall(pattern, response, re.DOTALL)
+        """
+        AI 응답에서 ````filename:```` 로 시작하는 파일 블록을 추출하여 저장합니다.
+        파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
+        올바르게 전체 내용을 캡처하도록 라인 기반 파서를 사용합니다.
+        """
+        saved_files: List[str] = []
 
-        saved_files = []
+        # 라인 단위로 파싱하기 위해 문자열을 분리
+        lines = response.splitlines()
 
-        for filepath_str, content in matches:
-            filepath_str = filepath_str.strip()
-            filepath = self.file_manager.workspace_dir / filepath_str
+        collecting: bool = False               # 현재 파일 블록을 수집 중인지 여부
+        current_path: str = ""                 # 현재 파일의 상대 경로
+        current_content: List[str] = []        # 현재 파일에 쓸 내용 라인들
 
-            if filepath.exists():
-                print(f"\n⚠️  파일이 이미 존재합니다: {filepath_str}")
-                confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
-                if confirm != 'y':
-                    print(f"⏭️  건너뛰기: {filepath_str}")
-                    continue
+        for line in lines:
+            stripped = line.strip()
 
-            if self.file_manager.write_file(filepath, content.strip()):
-                saved_files.append(filepath_str)
-                print(f"✅ 파일 저장됨: {filepath_str}")
+            # ── 파일 블록 시작 ──
+            if not collecting and stripped.startswith("```filename:"):
+                # ````filename:경로/파일명.ext```` 형태에서 경로 추출
+                current_path = stripped[len("```filename:"):].strip()
+                collecting = True
+                current_content = []
+                continue
+
+            # ── 파일 블록 종료 ── (정확히 세 개의 백틱만 있는 라인)
+            if collecting and stripped == "```":
+                file_path = self.file_manager.workspace_dir / current_path
+
+                # 파일이 이미 존재하면 덮어쓰기 여부 확인
+                if file_path.exists():
+                    print(f"\n⚠️  파일이 이미 존재합니다: {current_path}")
+                    confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
+                    if confirm != 'y':
+                        print(f"⏭️  건너뛰기: {current_path}")
+                        collecting = False
+                        continue
+
+                # 파일에 내용 기록
+                file_content = "\n".join(current_content).strip()
+                if self.file_manager.write_file(file_path, file_content):
+                    saved_files.append(current_path)
+                    print(f"✅ 파일 저장됨: {current_path}")
+                else:
+                    print(f"❌ 파일 저장 실패: {current_path}")
+
+                # 상태 초기화
+                collecting = False
+                current_path = ""
+                current_content = []
+                continue
+
+            # ── 파일 블록 내부 ──
+            if collecting:
+                current_content.append(line)
+
+        # 닫히지 않은 파일 블록이 남아있는 경우 경고
+        if collecting:
+            print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
 
         return saved_files

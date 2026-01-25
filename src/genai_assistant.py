@@ -16,7 +16,7 @@ from .code_executor import CodeExecutor
 from .terminal_executor import TerminalExecutor
 from .git_manager import GitManager
 from .package_manager import PackageManager
-
+from .llm_config import LLMConfigProvider
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -38,7 +38,8 @@ class GenAICodeAssistant:
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)
         self.package_manager = PackageManager(self.file_manager.workspace_dir)
-
+        # LLM 언어 설정 (기본값 없음)
+        self.llm_config = LLMConfigProvider()
         self.system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
 
@@ -79,29 +80,30 @@ class GenAICodeAssistant:
 주의사항:
 - 반드시 ```filename: 형식을 사용하세요 (```python, ```javascript 등 언어 식별자 사용 금지)
 - 여러 파일은 각각 별도의 코드 블록으로 작성하세요
-- 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요"""
+- 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
+- 문서작성 시 이모지(Emoji) 사용을 하지 마세요"""
+    # --------------------------------------------------------------------- #
+    # LLM 설정 관련 메서드
+    # --------------------------------------------------------------------- #
 
     def get_llm_config(self) -> Dict:
-        """LLM 설정 반환"""
-        return {
-            "max_new_tokens": 8192,
-            "seed": None,
-            "top_k": 14,
-            "top_p": 0.94,
-            "temperature": 0.4,
-            "repetition_penalty": 1.04
-        }
+        """
+        LLM 파라미터를 반환합니다.
+        기본값에 더해 현재 설정된 언어의 미세 조정된 파라미터를 반환합니다.
+        """
+        return self.llm_config.get_config()
 
-    def get_llm_config(self) -> Dict:
-        """LLM 설정 반환"""
-        return {
-            "max_new_tokens": 8192,
-            "seed": None,
-            "top_k": 14,
-            "top_p": 0.94,
-            "temperature": 0.4,
-            "repetition_penalty": 1.04
-        }
+    def set_llm_language(self, language: str) -> None:
+        """
+        사용자가 지정한 프로그래밍 언어에 맞춰 LLM 파라미터를 조정합니다.
+        현재 구현은 언어에 따라 system_prompt에 간단히 힌트를 추가하는 형태이며,
+        필요에 따라 더 정교한 프롬프트 엔지니어링을 적용이 가능합니다.
+        """
+        if not language: return
+        self.llm_config.set_language(language.lower())
+
+    def get_llm_language(self) -> str:
+        return self.llm_config.get_language()
 
     def _execute_tool(self, tool_name: str, tool_input: Dict) -> str:
         """도구 실행"""
@@ -273,26 +275,89 @@ class GenAICodeAssistant:
 
         return content
 
+    # def extract_and_save_files(self, response: str) -> List[str]:
+    #     """AI 응답에서 파일을 추출하여 저장"""
+    #     pattern = r'```filename:(.+?)\n(.*?)```'
+    #     matches = re.findall(pattern, response, re.DOTALL)
+    #
+    #     saved_files = []
+    #
+    #     for filepath_str, content in matches:
+    #         filepath_str = filepath_str.strip()
+    #         filepath = self.file_manager.workspace_dir / filepath_str
+    #
+    #         if filepath.exists():
+    #             print(f"\n⚠️  파일이 이미 존재합니다: {filepath_str}")
+    #             confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
+    #             if confirm != 'y':
+    #                 print(f"⏭️  건너뛰기: {filepath_str}")
+    #                 continue
+    #
+    #         if self.file_manager.write_file(filepath, content.strip()):
+    #             saved_files.append(filepath_str)
+    #             print(f"✅ 파일 저장됨: {filepath_str}")
+    #
+    #     return saved_files
+
     def extract_and_save_files(self, response: str) -> List[str]:
-        """AI 응답에서 파일을 추출하여 저장"""
-        pattern = r'```filename:(.+?)\n(.*?)```'
-        matches = re.findall(pattern, response, re.DOTALL)
+        """
+        AI 응답에서 ````filename:```` 로 시작하는 파일 블록을 추출하여 저장합니다.
+        파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
+        올바르게 전체 내용을 캡처하도록 라인 기반 파서를 사용합니다.
+        """
+        saved_files: List[str] = []
 
-        saved_files = []
+        # 라인 단위로 파싱하기 위해 문자열을 분리
+        lines = response.splitlines()
 
-        for filepath_str, content in matches:
-            filepath_str = filepath_str.strip()
-            filepath = self.file_manager.workspace_dir / filepath_str
+        collecting: bool = False               # 현재 파일 블록을 수집 중인지 여부
+        current_path: str = ""                 # 현재 파일의 상대 경로
+        current_content: List[str] = []        # 현재 파일에 쓸 내용 라인들
 
-            if filepath.exists():
-                print(f"\n⚠️  파일이 이미 존재합니다: {filepath_str}")
-                confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
-                if confirm != 'y':
-                    print(f"⏭️  건너뛰기: {filepath_str}")
-                    continue
+        for line in lines:
+            stripped = line.strip()
 
-            if self.file_manager.write_file(filepath, content.strip()):
-                saved_files.append(filepath_str)
-                print(f"✅ 파일 저장됨: {filepath_str}")
+            # ── 파일 블록 시작 ──
+            if not collecting and stripped.startswith("```filename:"):
+                # ````filename:경로/파일명.ext```` 형태에서 경로 추출
+                current_path = stripped[len("```filename:"):].strip()
+                collecting = True
+                current_content = []
+                continue
+
+            # ── 파일 블록 종료 ── (정확히 세 개의 백틱만 있는 라인)
+            if collecting and stripped == "```":
+                file_path = self.file_manager.workspace_dir / current_path
+
+                # 파일이 이미 존재하면 덮어쓰기 여부 확인
+                if file_path.exists():
+                    print(f"\n⚠️  파일이 이미 존재합니다: {current_path}")
+                    confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
+                    if confirm != 'y':
+                        print(f"⏭️  건너뛰기: {current_path}")
+                        collecting = False
+                        continue
+
+                # 파일에 내용 기록
+                file_content = "\n".join(current_content).strip()
+                if self.file_manager.write_file(file_path, file_content):
+                    saved_files.append(current_path)
+                    print(f"✅ 파일 저장됨: {current_path}")
+                else:
+                    print(f"❌ 파일 저장 실패: {current_path}")
+
+                # 상태 초기화
+                collecting = False
+                current_path = ""
+                current_content = []
+                continue
+
+            # ── 파일 블록 내부 ──
+            if collecting:
+                current_content.append(line)
+
+        # 닫히지 않은 파일 블록이 남아있는 경우 경고
+        if collecting:
+            print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
 
         return saved_files
