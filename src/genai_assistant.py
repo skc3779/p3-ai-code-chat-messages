@@ -184,8 +184,9 @@ class GenAICodeAssistant:
             full_message = user_message
 
         # 토큰 관리를 위한 히스토리 자동 트리밍 (GenAI 한도 적용)
+        history_dicts = [{"content": c} for c in self.conversation_history]
         self.conversation_history_dicts = TokenManager.auto_trim_history(
-            [{\"role\": \"user\", \"content\": c} for c in self.conversation_history],
+            history_dicts,
             max_tokens=TokenManager.MAX_TOKENS_GENAI
         )
         # 트리밍 후 실제 히스토리에 반영
@@ -196,6 +197,8 @@ class GenAICodeAssistant:
         # API 호출 - GenAI API 형식
         contents = self.conversation_history.copy()
         contents.append(full_message)
+
+        print(f"### 요청 메세지 히스토리  : {contents}")
 
         body = {
             "modelIds": [self.model_id],
@@ -230,7 +233,7 @@ class GenAICodeAssistant:
             return ""
 
     def _chat_streaming(self, api_url: str, body: Dict,
-                        original_message: str, full_message: str) -> str:
+                        user_message: str, full_message: str) -> str:
         """스트리밍 모드 채팅"""
         # 재시도 로직 적용
         response = APIRetry.retry_request(
@@ -264,9 +267,9 @@ class GenAICodeAssistant:
         print("\n")
 
         # 히스토리에 추가
-        self.conversation_history.append(original_message)
+        self.conversation_history.append(f"[User Context]\n{user_message}")
         if result_message:
-            self.conversation_history.append(result_message)
+            self.conversation_history.append(f"[Assistant Context]\n{result_message}")
 
         return result_message
 

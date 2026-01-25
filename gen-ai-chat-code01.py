@@ -202,8 +202,7 @@ def main():
 
                     if matched_files:
                         context = assistant.context_builder.build_files_context(matched_files)
-                        history_entry = {"role": "user", "content": f"[파일 컨텍스트]\n{context}"}
-                        assistant.conversation_history.append(f"{history_entry}")
+                        assistant.conversation_history.append(f"[File Context]\n{context}")
                         print(context)
                     else:
                         print(f"❌ 패턴 '{args}'에 해당하는 파일이 없습니다.")

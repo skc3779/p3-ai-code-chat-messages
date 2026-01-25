@@ -112,6 +112,8 @@ class ClaudeCodeAssistant:
         messages = self.conversation_history.copy()
         messages.append({"role": "user", "content": full_message})
 
+        print(f"### 요청 메세지 히스토리  : {messages}")
+
         body = {
             "model": self.model_id,
             "messages": messages,
@@ -175,7 +177,7 @@ class ClaudeCodeAssistant:
         except Exception as e:
             return f"도구 실행 오류: {str(e)}"
 
-    def _chat_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
+    def _chat_streaming(self, api_url: str, body: Dict, user_message: str) -> str:
         """스트리밍 모드 채팅 (Tool Use 지원)"""
         # 재시도 로직 적용
         response = APIRetry.retry_request(
@@ -250,7 +252,7 @@ class ClaudeCodeAssistant:
         full_text = "".join([c['text'] for c in current_message_content if c['type'] == 'text'])
         
         # 히스토리 업데이트 (User)
-        self.conversation_history.append({"role": "user", "content": original_message})
+        self.conversation_history.append({"role": "user", "content": user_message})
         
         # AI 응답 (Assistant) - 텍스트 + Tool Use 블록 포함
         # 주의: Claude API는 content가 리스트일 수 있음

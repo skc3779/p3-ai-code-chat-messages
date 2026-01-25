@@ -88,4 +88,12 @@ Claude Code Assistant는 터미널에서 Anthropic Claude API를 활용하여 �
 
 ---
 
+@SRS_Claude_Code_Assistant_Improvements_v1.0.016.md 문서에서 P2-01에 대한 개선사항을 FSD 문서로 작성해줘
+- FSD 문서는 docs/specs/requirements 폴더에 FSD로 시작하는 v1.0.018 버전의 문서에 저장한다
+- 문서의 내용이 길지 않게 작성해줘
 
+### 2.2 P2 - High (2주 내 개선)
+
+| ID | 개선 사항 | 현재 문제 | 개선 방안 |
+|----|-----------|----------|----------|
+| P2-01 | 대화 히스토리 저장/로드 | 세션 종료 시 히스토리 손실 | JSON 파일로 히스토리 영속화 |
