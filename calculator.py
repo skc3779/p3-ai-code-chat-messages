@@ -19,15 +19,16 @@ def main():
         print("2. 뺄셈")
         print("3. 곱셈")
         print("4. 나눗셈")
-        print("5. 종료")
+        print("5. 나머지")
+        print("6. 종료")
         
-        choice = input("원하는 연산을 선택하세요 (1-5): ")
+        choice = input("원하는 연산을 선택하세요 (1-6): ")
         
-        if choice == '5':
+        if choice == '6':
             print("계산기를 종료합니다.")
             break
         
-        if choice not in ['1', '2', '3', '4']:
+        if choice not in ['1', '2', '3', '4', '5']:
             print("잘못된 선택입니다. 다시 선택해주세요.")
             continue
         
@@ -50,6 +51,9 @@ def main():
         elif choice == '4':
             result = divide(num1, num2)
             print(f"{num1} / {num2} = {result}")
+        elif choice == '5':
+            result = divide(num1, num2)
+            print(f"{num1} % {num2} = {result}")
 
 if __name__ == "__main__":
     main()

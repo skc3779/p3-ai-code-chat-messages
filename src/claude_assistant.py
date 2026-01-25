@@ -199,54 +199,66 @@ class ClaudeCodeAssistant:
         
         print("\n🤖 AI: ", end="", flush=True)
 
-        for event in client.events():
-            if event.data:
-                try:
-                    data = json.loads(event.data)
-                    event_type = data.get('type')
+        try:
+            for event in client.events():
+                if event.data:
+                    try:
+                        data = json.loads(event.data)
+                        event_type = data.get('type')
 
-                    # 텍스트 컨텐츠
-                    if event_type == 'content_block_delta':
-                        delta = data.get('delta', {})
-                        if delta.get('type') == 'text_delta':
-                            text = delta.get('text', '')
-                            print(text, end="", flush=True)
-                            current_message_content.append({"type": "text", "text": text})
-                        elif delta.get('type') == 'input_json_delta':
-                            # Tool Use JSON 조각 수신
-                            tool_json_accumulated += delta.get('partial_json', '')
+                        # 텍스트 컨텐츠
+                        if event_type == 'content_block_delta':
+                            delta = data.get('delta', {})
+                            if delta.get('type') == 'text_delta':
+                                text = delta.get('text', '')
+                                print(text, end="", flush=True)
+                                current_message_content.append({"type": "text", "text": text})
+                            elif delta.get('type') == 'input_json_delta':
+                                # Tool Use JSON 조각 수신
+                                tool_json_accumulated += delta.get('partial_json', '')
 
-                    # Tool Use 시작
-                    elif event_type == 'content_block_start':
-                        content_block = data.get('content_block', {})
-                        if content_block.get('type') == 'tool_use':
-                            tool_use_block = content_block
-                            tool_json_accumulated = ""
-                            print(f"\n🔨 도구 호출: {tool_use_block.get('name')}...", end="", flush=True)
+                        # Tool Use 시작
+                        elif event_type == 'content_block_start':
+                            content_block = data.get('content_block', {})
+                            if content_block.get('type') == 'tool_use':
+                                tool_use_block = content_block
+                                tool_json_accumulated = ""
+                                print(f"\n🔨 도구 호출: {tool_use_block.get('name')}...", end="", flush=True)
 
-                    # Tool Use 종료 (여기서는 JSON 완성만 확인 가능, 실제 실행은 메시지 종료 후 또는 stop_reason에서 처리)
-                    elif event_type == 'content_block_stop':
-                        if tool_use_block:
-                            # JSON 파싱 시도
-                            try:
-                                tool_input = json.loads(tool_json_accumulated)
-                                tool_use_block['input'] = tool_input
-                                current_message_content.append(tool_use_block)
-                                tool_use_block = None # 리셋
-                            except json.JSONDecodeError:
-                                print("\n⚠️ 도구 입력 파싱 실패")
+                        # Tool Use 종료
+                        elif event_type == 'content_block_stop':
+                            if tool_use_block:
+                                # JSON 파싱 시도
+                                try:
+                                    tool_input = json.loads(tool_json_accumulated)
+                                    tool_use_block['input'] = tool_input
+                                    current_message_content.append(tool_use_block)
+                                    tool_use_block = None # 리셋
+                                except json.JSONDecodeError:
+                                    print("\n⚠️ 도구 입력 파싱 실패")
 
-                    elif event_type == 'message_delta':
-                        # stop_reason 확인 가능
-                        delta = data.get('delta', {})
-                        if delta.get('stop_reason') == 'tool_use':
-                            pass # 스트림 종료 후 처리
+                        elif event_type == 'message_delta':
+                            delta = data.get('delta', {})
+                            # stop_reason 확인 가능 (필요 시 처리)
+                            pass
 
-                    elif event_type == 'message_stop':
-                        break
-                        
-                except json.JSONDecodeError:
-                    continue
+                        elif event_type == 'message_stop':
+                            break
+                            
+                    except json.JSONDecodeError:
+                        continue
+        except (requests.exceptions.ChunkedEncodingError, 
+                requests.exceptions.ConnectionError, 
+                requests.exceptions.ReadTimeout) as e:
+            # 스트림 중단 예외 처리
+            print(f"\n\n[⚠️ 스트리밍 중단됨: {str(e)}]")
+            error_msg = "\n[⚠️ 네트워크 오류로 인해 응답이 중단되었습니다.]"
+            current_message_content.append({"type": "text", "text": error_msg})
+        except Exception as e:
+            # 기타 예외
+            print(f"\n\n[❌ 스트리밍 오류: {str(e)}]")
+            error_msg = f"\n[❌ 오류 발생: {str(e)}]"
+            current_message_content.append({"type": "text", "text": error_msg})
 
         print("\n")
 

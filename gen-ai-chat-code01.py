@@ -18,6 +18,7 @@ from src import (
     ContextBuilder,
     GenAICodeAssistant,
     TokenManager,
+    FileWatcher,
 )
 
 
@@ -52,6 +53,9 @@ def print_menu():
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
     print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
     print("  /llm_config <lang>  - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
+    print("  /watch <pattern>    - 파일 변경 감시 시작 (예: /watch *.py)")
+    print("  /unwatch <pattern>  - 파일 변경 감시 중지")
+    print("  /watch_list         - 감시 중인 패턴 목록")
     print("  /help               - 도움말 보기")
     print("  /quit               - 종료")
     print("=" * 80)
@@ -97,6 +101,23 @@ def main():
         model_id=YOUR_MODEL_ID,
         workspace_dir=workspace
     )
+
+    # 파일 감시자 초기화 (변경 시 자동 컨텍스트 갱신)
+    def on_file_changed(filepath: str):
+        """파일 변경 콜백: 컨텍스트 자동 갱신"""
+        from pathlib import Path
+        try:
+            rel_path = Path(filepath).relative_to(workspace)
+            print(f"\n🔄 파일 변경 감지: {rel_path}")
+            # 변경된 파일을 컨텍스트에 추가
+            context = assistant.context_builder.build_files_context([Path(filepath)])
+            if context:
+                assistant.conversation_history.append(f"[File Updated: {rel_path}]\n{context}")
+                print(f"✅ 컨텍스트 자동 갱신 완료")
+        except Exception as e:
+            print(f"⚠️  컨텍스트 갱신 실패: {e}")
+
+    file_watcher = FileWatcher(workspace, callback=on_file_changed)
 
     streaming_mode = True
     last_response = ""
@@ -392,6 +413,43 @@ def main():
                     print(f"✅ LLM 설정이 '{lang}' 로 적용되었습니다.")
                     for k, v in cfg.items():
                         print(f"   {k}: {v}")
+
+                elif command == '/watch':
+                    if not args:
+                        print("❌ 감시할 패턴을 지정하세요. 예: /watch *.py")
+                        continue
+                    pattern = args.strip()
+                    if file_watcher.add_watch(pattern):
+                        print(f"✅ 파일 감시 시작: {pattern}")
+                        print(f"   현재 감시 패턴: {file_watcher.get_watched_patterns()}")
+                    else:
+                        print("❌ 파일 감시 추가 실패 (watchdog 설치 필요: pip install watchdog)")
+
+                elif command == '/unwatch':
+                    if not args:
+                        print("❌ 제거할 패턴을 지정하세요. 예: /unwatch *.py")
+                        continue
+                    pattern = args.strip()
+                    if file_watcher.remove_watch(pattern):
+                        print(f"✅ 파일 감시 중지: {pattern}")
+                        remaining = file_watcher.get_watched_patterns()
+                        if remaining:
+                            print(f"   남은 패턴: {remaining}")
+                        else:
+                            print("   모든 감시가 중지되었습니다.")
+                    else:
+                        print(f"❌ 해당 패턴을 찾을 수 없습니다: {pattern}")
+
+                elif command == '/watch_list':
+                    patterns = file_watcher.get_watched_patterns()
+                    if patterns:
+                        print("\n👁️  감시 중인 패턴:")
+                        for p in patterns:
+                            print(f"   - {p}")
+                        print(f"   상태: {'🟢 실행 중' if file_watcher.is_running() else '🔴 중지됨'}")
+                    else:
+                        print("📭 감시 중인 패턴이 없습니다.")
+                        print("💡 /watch <pattern> 으로 감시를 시작하세요.")
                         
                 else:
                     print(f"❌ 알 수 없는 명령어: {command}")

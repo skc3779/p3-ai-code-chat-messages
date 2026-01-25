@@ -103,3 +103,73 @@ Claude Code Assistant는 터미널에서 Anthropic Claude API를 활용하여 �
 구현 내용을 릴리즈 노트로 정리해줘
 - 문서는 docs/releases 폴더에 RELEASE로 시작하는 v1.0.017 버전의 문서에 저장한다  
 - RELEASE 문서의 내용이 길지 않게 작성해줘  
+
+
+---
+
+@SRS_Claude_Code_Assistant_Improvements_v1.0.016.md 문서에서 P2-03에 대한 개선사항을 FSD 문서로 작성해줘
+- FSD 문서는 docs/specs/requirements 폴더에 FSD로 시작하는 v1.0.018 버전의 문서에 저장한다
+- 문서의 내용이 길지 않게 작성해줘
+
+### 2.2 P2 - High (2주 내 개선)
+
+| ID | 개선 사항 | 현재 문제 | 개선 방안 |
+|----|-----------|----------|----------|
+| P2-03 | 파일 변경 감지 | 수동 `/read` 필요 | watchdog 기반 자동 컨텍스트 갱신 |
+
+
+---
+
+구현 내용을 릴리즈 노트로 정리해줘
+- docs\specs\requirements\FSD_File_Change_Detection_v1.0.018.md
+- docs\specs\requirements\FSD_Streaming_Error_Handling_v1.0.019.md
+- 2건의 FSD 문서를 기반으로 docs/specs/releases 폴더에 RELEASE로 시작하는 v1.0.018, v1.0.019 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해줘  
+
+---
+
+미구현 개선사항을 claude-ai-chat-code01.py에 구현해줘
+- docs\specs\requirements\FSD_File_Change_Detection_v1.0.018.md 에 대한 내용
+- gen-ai-chat-code01.py 에는 FSD_File_Change_Detection_v1.0.018.md에 대한 내용이 구현되어 있습니다.
+- claude-ai-chat-code01.py 에는 FSD_File_Change_Detection_v1.0.018.md에 대한 내용이 구현되어 있지 않습니다.
+
+---
+
+
+## file_watcher.py
+
+```python
+    def add_watch(self, pattern: str) -> bool:
+        """
+        감시 대상 패턴 추가
+        
+        Args:
+            pattern: glob 패턴 (예: *.py, src/*.js)
+            
+        Returns:
+            성공 여부
+        """
+        if not WATCHDOG_AVAILABLE:
+            return False
+            
+        with self._lock:
+            self.patterns.add(pattern)
+            
+            # Observer가 실행 중이면 핸들러 패턴 업데이트
+            if self._handler:
+                self._handler.patterns = self.patterns.copy()
+                
+            # 자동 시작
+            if not self._running:
+                self.start()
+```                
+
+```shell
+# 사용자 명령 프롬프트
+/watch *.py
+```
+
+사용자 명령 프롬프트 이후 `file_watcher.py` 의 add_watch `self.start()` 이후 시스템이 먹통이 된다. 
+`file_watcher.py` 프로그램의 동작 원리를 분석해서 BUG 문서를 만들어 설명해줘
+- 문서는 docs/specs/requirements 폴더에 BUG 로 시작하는 v1.0.021 버전의 문서에 저장한다  
+
