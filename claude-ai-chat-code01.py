@@ -229,6 +229,7 @@ def main():
                         print(f"  ... 외 {len(files) - 50}개 파일")
 
                 elif command == '/tree':
+                    assistant.file_manager.reload_ignore_patterns()
                     tree = assistant.context_builder.build_file_tree()
                     print(f"\n{tree}")
 

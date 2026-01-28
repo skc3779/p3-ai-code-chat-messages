@@ -30,7 +30,7 @@ class FileChangeHandler(FileSystemEventHandler):
         self.patterns = patterns
         self.callback = callback
         self.workspace_dir = workspace_dir
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
     
     def _matches_pattern(self, filepath: str) -> bool:
         """파일이 감시 패턴과 일치하는지 확인"""

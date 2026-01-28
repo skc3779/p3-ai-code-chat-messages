@@ -10,12 +10,10 @@ class Ignorer:
     def _match(self, target: str, pattern: str) -> bool:
         """
         `fnmatch` 를 이용해 실제 매칭을 수행.
-        - pattern 이 디렉터리 전용(`.../`)이면 target 뒤에 '/' 를 붙여서 매칭한다.
+        - pattern 이 디렉터리 전용(`.../`)이면 '/'를 제거하고 매칭한다.
+        - 즉, 'folder/' 와 'folder' 를 동일하게 처리하여 인식을 개선함.
         """
-        if pattern.endswith("/"):
-            # 디렉터리 전용 패턴 → target 뒤에 '/' 를 붙여서 매칭
-            return fnmatch.fnmatch(target + "/", pattern)
-        return fnmatch.fnmatch(target, pattern)
+        return fnmatch.fnmatch(target, pattern.rstrip('/'))
 
     def should_ignore(self, path: Path) -> bool:
         """파일·디렉터리를 무시해야 하는지 확인"""

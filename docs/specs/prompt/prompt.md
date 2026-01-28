@@ -189,3 +189,173 @@ Claude Code Assistant는 터미널에서 Anthropic Claude API를 활용하여 �
 | P3-04 | 비용 추적 | API 사용량 미추적 | 토큰/비용 계산 및 표시 | 제외 |
 | P3-05 | 자동 완성 | 명령어 수동 입력 | Tab 자동 완성 지원 | 미구현 |
 
+---
+
+claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파일을 다시 읽어 와서 반영하도록 개선해주고 RELEASE 문서를 작성해줘
+- specs/releases 폴더에 RELEASE로 시작하는 v1.0.022 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해줘  
+
+
+---
+
+ignorer.py 의 .gitignore 파일에 .idea 폴더외 .idea/ 폴더도 동일하게 제외로 인식하도록 개선해줘
+- [폴더명] [폴더명]/ 동일하게 인식되도록 개선한다
+- specs/releases 폴더에 RELEASE로 시작하는 v1.0.023 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해줘  
+
+---
+
+```tree
+👤 You: /tree
+
+📁 프로젝트 구조 (작업 디렉터리: C:\03_sources\skc3779_srcs\j8-json-wsdl-simple-demon)
+📁 j8-json-wsdl-simple-demon/
+├── 📁 .vscode/
+│   └── 📄 settings.json
+├── 📁 adapter/
+│   ├── 📁 src/
+│   │   ├── 📁 main/
+│   │   │   ├── 📁 java/
+│   │   │   │   └── 📁 com/
+│   │   │   │       └── 📁 example/
+│   │   │   │           └── 📁 adapter/
+│   │   │   │               ├── 📁 client/
+│   │   │   │               │   └── 📄 OrderSoapClient.java
+│   │   │   │               ├── 📁 config/
+│   │   │   │               │   └── 📄 SoapConfig.java
+│   │   │   │               ├── 📁 controller/
+│   │   │   │               │   ├── 📄 AdapterController.java
+│   │   │   │               │   └── 📄 GlobalExceptionHandler.java
+│   │   │   │               ├── 📁 mapper/
+│   │   │   │               │   └── 📄 OrderMapper.java
+│   │   │   │               ├── 📁 model/
+│   │   │   │               │   ├── 📄 OrderRequestDto.java
+│   │   │   │               │   └── 📄 OrderResponseDto.java
+│   │   │   │               ├── 📁 service/
+│   │   │   │               │   └── 📄 OrderService.java
+│   │   │   │               ├── 📁 soap/
+│   │   │   │               │   ├── 📄 CreateOrderRequest.java
+│   │   │   │               │   ├── 📄 CreateOrderResponse.java
+│   │   │   │               │   └── 📄 ObjectFactory.java
+│   │   │   │               └── 📄 AdapterApplication.java
+│   │   │   └── 📁 resources/
+│   │   │       └── 📄 application.yml
+│   │   └── 📁 test/
+│   │       └── 📁 java/
+│   ├── 📁 target/
+│   │   ├── 📁 classes/
+│   │   │   ├── 📁 com/
+│   │   │   │   └── 📁 example/
+│   │   │   │       └── 📁 adapter/
+│   │   │   │           ├── 📁 client/
+│   │   │   │           ├── 📁 config/
+│   │   │   │           ├── 📁 controller/
+│   │   │   │           ├── 📁 mapper/
+│   │   │   │           ├── 📁 model/
+│   │   │   │           ├── 📁 service/
+│   │   │   │           ├── 📁 soap/
+│   │   │   └── 📄 application.yml
+│   │   ├── 📁 generated-sources/
+│   │   │   └── 📁 annotations/
+│   │   │       └── 📁 com/
+│   │   │           └── 📁 example/
+│   │   │               └── 📁 adapter/
+│   │   │                   └── 📁 mapper/
+│   │   │                       └── 📄 OrderMapperImpl.java
+│   │   ├── 📁 generated-test-sources/
+│   │   │   └── 📁 test-annotations/
+│   │   └── 📁 maven-status/
+│   │       └── 📁 maven-compiler-plugin/
+│   │           ├── 📁 compile/
+│   │           │   └── 📁 default-compile/
+│   │           │       ├── 📄 createdFiles.lst
+│   │           │       └── 📄 inputFiles.lst
+│   │           └── 📁 testCompile/
+│   │               └── 📁 default-testCompile/
+│   │                   └── 📄 inputFiles.lst
+│   └── 📄 pom.xml
+├── 📁 backend/
+│   ├── 📁 logs/
+│   ├── 📁 src/
+│   │   ├── 📁 main/
+│   │   │   ├── 📁 java/
+│   │   │   │   └── 📁 com/
+│   │   │   │       └── 📁 example/
+│   │   │   │           └── 📁 backend/
+│   │   │   │               ├── 📁 config/
+│   │   │   │               │   └── 📄 WebServiceConfig.java
+│   │   │   │               ├── 📁 endpoint/
+│   │   │   │               │   └── 📄 OrderEndpoint.java
+│   │   │   │               ├── 📁 interceptor/
+│   │   │   │               │   └── 📄 SoapLoggingInterceptor.java
+│   │   │   │               ├── 📁 service/
+│   │   │   │               │   └── 📄 OrderProcessingService.java
+│   │   │   │               ├── 📁 soap/
+│   │   │   │               │   ├── 📄 CreateOrderRequest.java
+│   │   │   │               │   ├── 📄 CreateOrderResponse.java
+│   │   │   │               │   ├── 📄 ObjectFactory.java
+│   │   │   │               │   └── 📄 package-info.java
+│   │   │   │               └── 📄 BackendApplication.java
+│   │   │   └── 📁 resources/
+│   │   │       ├── 📁 schemas/
+│   │   │       │   └── 📄 order.xsd
+│   │   │       ├── 📄 application.yml
+│   │   │       └── 📄 logback-spring.xml
+│   │   └── 📁 test/
+│   │       └── 📁 java/
+│   ├── 📁 target/
+│   │   ├── 📁 classes/
+│   │   │   ├── 📁 com/
+│   │   │   │   └── 📁 example/
+│   │   │   │       └── 📁 backend/
+│   │   │   │           ├── 📁 config/
+│   │   │   │           ├── 📁 endpoint/
+│   │   │   │           ├── 📁 interceptor/
+│   │   │   │           ├── 📁 service/
+│   │   │   │           ├── 📁 soap/
+│   │   │   ├── 📁 schemas/
+│   │   │   │   └── 📄 order.xsd
+│   │   │   ├── 📄 application.yml
+│   │   │   └── 📄 logback-spring.xml
+│   │   ├── 📁 generated-sources/
+│   │   │   └── 📁 annotations/
+│   │   ├── 📁 generated-test-sources/
+│   │   │   └── 📁 test-annotations/
+│   │   └── 📁 maven-status/
+│   │       └── 📁 maven-compiler-plugin/
+│   │           ├── 📁 compile/
+│   │           │   └── 📁 default-compile/
+│   │           │       ├── 📄 createdFiles.lst
+│   │           │       └── 📄 inputFiles.lst
+│   │           └── 📁 testCompile/
+│   │               └── 📁 default-testCompile/
+│   │                   └── 📄 inputFiles.lst
+│   └── 📄 pom.xml
+├── 📁 docs/
+│   ├── 📁 drafts/
+│   ├── 📁 implementations/
+│   ├── 📁 incident-reports/
+│   │   └── 📄 ir-jaxb-objectfactory_v1.0.003.md
+│   ├── 📁 prompts/
+│   │   ├── 📄 prompt-documents.md
+│   │   ├── 📄 prompt-incident.md
+│   │   └── 📄 prompt-requirement.md
+│   └── 📁 specs/
+│       ├── 📁 02_requirements/
+│       │   ├── 📄 fsd-soap-backend-server_v1.0.005.md
+│       │   ├── 📄 prd-json-wsdl_v1.0.001.md
+│       │   └── 📄 troubleshooting-jaxb-api_v1.0.002.md
+│       └── 📁 10_release-notes/
+│           ├── 📄 json-soap-flow-guide_v1.0.004.md
+│           └── 📄 json-soap-flow-guide_v1.0.010.md
+├── 📁 logs/
+├── 📁 target/
+│   ├── 📁 generated-sources/
+│   │   └── 📁 annotations/
+│   └── 📁 generated-test-sources/
+│       └── 📁 test-annotations/
+├── 📄 .gitignore
+
+.gitignore 파일에 `target/` 를 추가해도 무시되지 않는데, 버그를 개선해줘
+- specs/releases 폴더에 RELEASE로 시작하는 v1.0.024 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해줘  

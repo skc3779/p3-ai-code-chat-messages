@@ -2,10 +2,12 @@
 FileManager - 로컬 파일 시스템 관리 모듈
 """
 
-import fnmatch
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
+
+
+from .ignorer import Ignorer
 
 
 class FileManager:
@@ -13,9 +15,9 @@ class FileManager:
 
     def __init__(self, workspace_dir: str = "."):
         self.workspace_dir = Path(workspace_dir).resolve()
-        self.ignore_patterns = self._load_ignore_patterns()
+        self.ignorer = Ignorer(self.workspace_dir, self.load_ignore_patterns())
 
-    def _load_ignore_patterns(self) -> List[str]:
+    def load_ignore_patterns(self) -> List[str]:
         """gitignore 스타일 패턴 로드"""
         patterns = [
             '*.pyc', '__pycache__', '.git', '.venv', 'venv',
@@ -26,18 +28,22 @@ class FileManager:
         if gitignore_path.exists():
             with open(gitignore_path, 'r', encoding='utf-8') as f:
                 patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
+        
+        # .ignore 파일도 지원
+        ignore_path_custom = self.workspace_dir / '.ignore'
+        if ignore_path_custom.exists():
+             with open(ignore_path_custom, 'r', encoding='utf-8') as f:
+                patterns.extend([line.strip() for line in f if line.strip() and not line.startswith('#')])
 
         return patterns
 
+    def reload_ignore_patterns(self):
+        """ignore 패턴 다시 로드"""
+        self.ignorer = Ignorer(self.workspace_dir, self.load_ignore_patterns())
+
     def should_ignore(self, path: Path) -> bool:
         """파일/디렉토리를 무시해야 하는지 확인"""
-        rel_path = path.relative_to(self.workspace_dir)
-        path_str = str(rel_path)
-
-        for pattern in self.ignore_patterns:
-            if fnmatch.fnmatch(path_str, pattern) or fnmatch.fnmatch(path.name, pattern):
-                return True
-        return False
+        return self.ignorer.should_ignore(path)
 
     def list_files(self, extensions: Optional[List[str]] = None, max_depth: int = 5) -> List[Path]:
         """작업 공간의 파일 목록 반환"""
