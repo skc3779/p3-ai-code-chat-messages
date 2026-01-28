@@ -1,6 +1,6 @@
 # FSD: 명령어 자동 완성 (P3-05)
 
-> **문서 버전**: v1.0.023  
+> **문서 버전**: v1.0.0xx 
 > **작성일**: 2026-01-25  
 > **상태**: Draft  
 > **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md

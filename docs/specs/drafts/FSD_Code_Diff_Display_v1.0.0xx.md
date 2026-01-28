@@ -1,6 +1,6 @@
 # FSD: 코드 Diff 표시 기능 (P3-03)
 
-> **문서 버전**: v1.0.022  
+> **문서 버전**: v1.0.0xx  
 > **작성일**: 2026-01-25  
 > **상태**: Draft  
 > **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md
