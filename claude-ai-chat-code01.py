@@ -5,7 +5,6 @@ Claude Code Assistant - AI 코딩 어시스턴트
 모듈화된 버전: src/ 패키지에서 클래스들을 import합니다.
 """
 
-import fnmatch
 import os
 from pathlib import Path
 
@@ -18,6 +17,7 @@ from src import (
     ClaudeCodeAssistant,
     TokenManager,
     FileWatcher,
+    FilePatternMatcher,
 )
 
 
@@ -238,14 +238,10 @@ def main():
                         print("❌ 파일 패턴을 지정하세요. 예: /read src/*.py")
                         continue
 
+                    pattern_matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
                     patterns = args.split()
                     all_files = assistant.file_manager.list_files()
-                    matched_files = []
-
-                    for pattern in patterns:
-                        matched = [f for f in all_files
-                                   if fnmatch.fnmatch(str(f.relative_to(assistant.file_manager.workspace_dir)), pattern)]
-                        matched_files.extend(matched)
+                    matched_files = pattern_matcher.filter_files(all_files, patterns)
 
                     if matched_files:
                         context = assistant.context_builder.build_files_context(matched_files)

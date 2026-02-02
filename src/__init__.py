@@ -12,6 +12,7 @@ from src.api_retry import APIRetry
 from src.history_manager import HistoryManager
 from src.file_watcher import FileWatcher
 from src.template_manager import TemplateManager
+from src.file_pattern_matcher import FilePatternMatcher
 
 __all__ = [
     'FileManager',
@@ -26,5 +27,6 @@ __all__ = [
     'HistoryManager',
     'FileWatcher',
     'TemplateManager',
+    'FilePatternMatcher',
 ]
 

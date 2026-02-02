@@ -205,157 +205,56 @@ ignorer.py 의 .gitignore 파일에 .idea 폴더외 .idea/ 폴더도 동일하�
 
 ---
 
-```tree
-👤 You: /tree
+## 콘솔
 
-📁 프로젝트 구조 (작업 디렉터리: C:\03_sources\skc3779_srcs\j8-json-wsdl-simple-demon)
-📁 j8-json-wsdl-simple-demon/
-├── 📁 .vscode/
-│   └── 📄 settings.json
-├── 📁 adapter/
-│   ├── 📁 src/
-│   │   ├── 📁 main/
-│   │   │   ├── 📁 java/
-│   │   │   │   └── 📁 com/
-│   │   │   │       └── 📁 example/
-│   │   │   │           └── 📁 adapter/
-│   │   │   │               ├── 📁 client/
-│   │   │   │               │   └── 📄 OrderSoapClient.java
-│   │   │   │               ├── 📁 config/
-│   │   │   │               │   └── 📄 SoapConfig.java
-│   │   │   │               ├── 📁 controller/
-│   │   │   │               │   ├── 📄 AdapterController.java
-│   │   │   │               │   └── 📄 GlobalExceptionHandler.java
-│   │   │   │               ├── 📁 mapper/
-│   │   │   │               │   └── 📄 OrderMapper.java
-│   │   │   │               ├── 📁 model/
-│   │   │   │               │   ├── 📄 OrderRequestDto.java
-│   │   │   │               │   └── 📄 OrderResponseDto.java
-│   │   │   │               ├── 📁 service/
-│   │   │   │               │   └── 📄 OrderService.java
-│   │   │   │               ├── 📁 soap/
-│   │   │   │               │   ├── 📄 CreateOrderRequest.java
-│   │   │   │               │   ├── 📄 CreateOrderResponse.java
-│   │   │   │               │   └── 📄 ObjectFactory.java
-│   │   │   │               └── 📄 AdapterApplication.java
-│   │   │   └── 📁 resources/
-│   │   │       └── 📄 application.yml
-│   │   └── 📁 test/
-│   │       └── 📁 java/
-│   ├── 📁 target/
-│   │   ├── 📁 classes/
-│   │   │   ├── 📁 com/
-│   │   │   │   └── 📁 example/
-│   │   │   │       └── 📁 adapter/
-│   │   │   │           ├── 📁 client/
-│   │   │   │           ├── 📁 config/
-│   │   │   │           ├── 📁 controller/
-│   │   │   │           ├── 📁 mapper/
-│   │   │   │           ├── 📁 model/
-│   │   │   │           ├── 📁 service/
-│   │   │   │           ├── 📁 soap/
-│   │   │   └── 📄 application.yml
-│   │   ├── 📁 generated-sources/
-│   │   │   └── 📁 annotations/
-│   │   │       └── 📁 com/
-│   │   │           └── 📁 example/
-│   │   │               └── 📁 adapter/
-│   │   │                   └── 📁 mapper/
-│   │   │                       └── 📄 OrderMapperImpl.java
-│   │   ├── 📁 generated-test-sources/
-│   │   │   └── 📁 test-annotations/
-│   │   └── 📁 maven-status/
-│   │       └── 📁 maven-compiler-plugin/
-│   │           ├── 📁 compile/
-│   │           │   └── 📁 default-compile/
-│   │           │       ├── 📄 createdFiles.lst
-│   │           │       └── 📄 inputFiles.lst
-│   │           └── 📁 testCompile/
-│   │               └── 📁 default-testCompile/
-│   │                   └── 📄 inputFiles.lst
-│   └── 📄 pom.xml
-├── 📁 backend/
-│   ├── 📁 logs/
-│   ├── 📁 src/
-│   │   ├── 📁 main/
-│   │   │   ├── 📁 java/
-│   │   │   │   └── 📁 com/
-│   │   │   │       └── 📁 example/
-│   │   │   │           └── 📁 backend/
-│   │   │   │               ├── 📁 config/
-│   │   │   │               │   └── 📄 WebServiceConfig.java
-│   │   │   │               ├── 📁 endpoint/
-│   │   │   │               │   └── 📄 OrderEndpoint.java
-│   │   │   │               ├── 📁 interceptor/
-│   │   │   │               │   └── 📄 SoapLoggingInterceptor.java
-│   │   │   │               ├── 📁 service/
-│   │   │   │               │   └── 📄 OrderProcessingService.java
-│   │   │   │               ├── 📁 soap/
-│   │   │   │               │   ├── 📄 CreateOrderRequest.java
-│   │   │   │               │   ├── 📄 CreateOrderResponse.java
-│   │   │   │               │   ├── 📄 ObjectFactory.java
-│   │   │   │               │   └── 📄 package-info.java
-│   │   │   │               └── 📄 BackendApplication.java
-│   │   │   └── 📁 resources/
-│   │   │       ├── 📁 schemas/
-│   │   │       │   └── 📄 order.xsd
-│   │   │       ├── 📄 application.yml
-│   │   │       └── 📄 logback-spring.xml
-│   │   └── 📁 test/
-│   │       └── 📁 java/
-│   ├── 📁 target/
-│   │   ├── 📁 classes/
-│   │   │   ├── 📁 com/
-│   │   │   │   └── 📁 example/
-│   │   │   │       └── 📁 backend/
-│   │   │   │           ├── 📁 config/
-│   │   │   │           ├── 📁 endpoint/
-│   │   │   │           ├── 📁 interceptor/
-│   │   │   │           ├── 📁 service/
-│   │   │   │           ├── 📁 soap/
-│   │   │   ├── 📁 schemas/
-│   │   │   │   └── 📄 order.xsd
-│   │   │   ├── 📄 application.yml
-│   │   │   └── 📄 logback-spring.xml
-│   │   ├── 📁 generated-sources/
-│   │   │   └── 📁 annotations/
-│   │   ├── 📁 generated-test-sources/
-│   │   │   └── 📁 test-annotations/
-│   │   └── 📁 maven-status/
-│   │       └── 📁 maven-compiler-plugin/
-│   │           ├── 📁 compile/
-│   │           │   └── 📁 default-compile/
-│   │           │       ├── 📄 createdFiles.lst
-│   │           │       └── 📄 inputFiles.lst
-│   │           └── 📁 testCompile/
-│   │               └── 📁 default-testCompile/
-│   │                   └── 📄 inputFiles.lst
-│   └── 📄 pom.xml
-├── 📁 docs/
-│   ├── 📁 drafts/
-│   ├── 📁 implementations/
-│   ├── 📁 incident-reports/
-│   │   └── 📄 ir-jaxb-objectfactory_v1.0.003.md
-│   ├── 📁 prompts/
-│   │   ├── 📄 prompt-documents.md
-│   │   ├── 📄 prompt-incident.md
-│   │   └── 📄 prompt-requirement.md
-│   └── 📁 specs/
-│       ├── 📁 02_requirements/
-│       │   ├── 📄 fsd-soap-backend-server_v1.0.005.md
-│       │   ├── 📄 prd-json-wsdl_v1.0.001.md
-│       │   └── 📄 troubleshooting-jaxb-api_v1.0.002.md
-│       └── 📁 10_release-notes/
-│           ├── 📄 json-soap-flow-guide_v1.0.004.md
-│           └── 📄 json-soap-flow-guide_v1.0.010.md
-├── 📁 logs/
-├── 📁 target/
-│   ├── 📁 generated-sources/
-│   │   └── 📁 annotations/
-│   └── 📁 generated-test-sources/
-│       └── 📁 test-annotations/
-├── 📄 .gitignore
+```console
 
-.gitignore 파일에 `target/` 를 추가해도 무시되지 않는데, 버그를 개선해줘
-- specs/releases 폴더에 RELEASE로 시작하는 v1.0.024 버전의 릴리즈 노트를 작성한다  
-- RELEASE 문서의 내용이 길지 않게 작성해줘  
+👤 You: /read c:\03_sources\skc3779_srcs\p3-ai-code-chat-messages\.system-prompts\code-review.yaml
+❌ 패턴 'c:\03_sources\skc3779_srcs\p3-ai-code-chat-messages\.system-prompts\code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read code-review.yaml                                                                    
+
+================================================================================
+📄 파일: .system-prompts\code-review.yaml
+================================================================================
+```yaml
+name: code-review
+description: 시니어 개발자 관점의 코드 리뷰
+system_prompt: |
+  당신은 엄격하고 꼼꼼한 시니어 소프트웨어 엔지니어입니다.
+  사용자가 제공한 코드를 다음 기준에 따라 리뷰하고 개선안을 제시하세요:
+
+  1. 버그 및 잠재적 오류
+  2. 성능 최적화 (시간 복잡도 등)
+  3. 가독성 및 유지보수성 (명명 규칙, 모듈화)
+  4. 보안 취약점
+
+  구체적인 예시 코드와 함께, 친절하지만 단호한 어조로 조언해주세요.
+
+  (주의: 코드 수정이나 생성이 필요한 경우, 파일 저장 형식 ```filename:...``` 을 준수해야 파일을 저장할 수 있습니다.)
+
+```
+
+
+👤 You: /read .system-prompt/code-review.yaml
+❌ 패턴 '.system-prompt/code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read .system-prompt\code-review.yaml
+❌ 패턴 '.system-prompt\code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read ./.system-prompt\code-review.yaml
+❌ 패턴 './.system-prompt\code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read .\.system-prompt\code-review.yaml
+❌ 패턴 '.\.system-prompt\code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read ./.system-prompt/code-review.yaml
+❌ 패턴 './.system-prompt/code-review.yaml'에 해당하는 파일이 없습니다.
+
+👤 You: /read ./.system-prompt/*.yaml          
+❌ 패턴 './.system-prompt/*.yaml'에 해당하는 파일이 없습니다.
+```
+
+아직도 `콘솔`과 같이 `/read <파일명>` 명령어를 실행시 일부는 파일을 보여주지 않는 오류 현상이 발생해 좀더 파일명과 다양한 경로 '\` `/` 표현에도 파일을 읽은 수 있도록 추가 개선해줘.
+- specs/releases 폴더에 RELEASE로 시작하는 v1.0.025 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해 주는데 핵심 내용은 포함 해줘
