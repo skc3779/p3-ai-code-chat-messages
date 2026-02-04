@@ -20,11 +20,13 @@ class TerminalExecutor:
         # Node.js 관련
         'node', 'npm', 'npx', 'yarn',
         # 파일 시스템 (읽기)
-        'ls', 'dir', 'cat', 'type', 'head', 'tail', 'find', 'grep',
-        # 파일 시스템 (쓰기)
+        'ls', 'dir', 'cat', 'type', 'head', 'tail', 'find', 'grep', 'more',
+        # 파일 시스템 (쓰기 - 제한적)
         'mkdir', 'touch', 'echo',
         # 기타 유틸리티
-        'pwd', 'which', 'where', 'env', 'set',
+        'pwd', 'cd', # cd는 subprocess에서 의미 없지만 허용 목록에 포함
+        'whoami', 'date', 'time', 'hostname',
+        'where', 'which', 'env', 'set',
         # Git
         'git',
         # 빌드 도구
@@ -33,14 +35,22 @@ class TerminalExecutor:
     
     # 위험 명령어 (shell! 에서만 허용)
     DANGEROUS_COMMANDS = [
-        'rm', 'del', 'rmdir', 'rd',
-        'mv', 'move', 'cp', 'copy', 'xcopy',
-        'chmod', 'chown',
-        'kill', 'taskkill',
-        'shutdown', 'reboot',
-        'format', 'fdisk',
-        'curl', 'wget',  # 네트워크 요청
-        'ssh', 'scp',
+        # 파일/디렉토리 삭제
+        'rm', 'del', 'erase', 'rmdir', 'rd',
+        # 파일 이동/복사 (덮어쓰기 위험)
+        'mv', 'move', 'cp', 'copy', 'xcopy', 'robocopy',
+        # 권한 변경
+        'chmod', 'chown', 'attrib', 'icacls',
+        # 프로세스 종료
+        'kill', 'taskkill', 'pkill',
+        # 시스템 제어
+        'shutdown', 'reboot', 'restart-computer', 'stop-computer',
+        # 디스크 작업
+        'format', 'fdisk', 'diskpart',
+        # 네트워크 (다운로드 등)
+        'curl', 'wget', 'ssh', 'scp', 'ftp', 'telnet',
+        # 레지스트리 (Windows)
+        'reg',
     ]
     
     def __init__(self, workspace_dir: Path, timeout: int = 60):
@@ -86,6 +96,8 @@ class TerminalExecutor:
                 shell=True,
                 capture_output=True,
                 text=True,
+                encoding='utf-8',
+                errors='replace',
                 timeout=self.timeout,
                 cwd=str(self.workspace_dir),
                 env=os.environ.copy()

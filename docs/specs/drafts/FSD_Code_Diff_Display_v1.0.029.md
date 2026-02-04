@@ -1,6 +1,6 @@
 # FSD: 코드 Diff 표시 기능 (P3-03)
 
-> **문서 버전**: v1.0.0xx  
+> **문서 버전**: v1.0.028  
 > **작성일**: 2026-01-25  
 > **상태**: Draft  
 > **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md
@@ -51,3 +51,10 @@ AI가 생성한 전체 코드를 단순히 출력하는 대신, 기존 코드와
 * `ClaudeCodeAssistant`로 코드 수정 요청 후 `/diff` 확인.
 * `GenAICodeAssistant`로 코드 수정 요청 후 `/diff` 확인.
 
+## 5. 단위 테스트 코드 작성
+* `tests/test_diff_viewer.py`
+* `tests/test_claude_tool_use.py`
+* `tests/test_genai_tool_use.py`
+
+## 6. 릴리즈 노트 작성
+* `docs/specs/releases/RELEASE_v1.0.028.md`

@@ -19,6 +19,7 @@ from src import (
     TokenManager,
     FileWatcher,
     FilePatternMatcher,
+    CLIInputHandler,
 )
 
 
@@ -125,13 +126,17 @@ def main():
     streaming_mode = True
     last_response = ""
 
+    # CLI 입력 처리기 초기화
+    input_handler = CLIInputHandler()
+
     print_menu()
     print(f"\n📂 현재 작업 디렉토리: {workspace}")
     print(f"🔄 현재 모드: {'스트리밍' if streaming_mode else '논스트리밍'}")
 
     while True:
         try:
-            user_input = input("\n👤 You: ").strip()
+            # 자동 완성이 적용된 입력 받기
+            user_input = input_handler.get_input("\n👤 You: ")
 
             if not user_input:
                 continue

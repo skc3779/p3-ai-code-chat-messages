@@ -14,6 +14,7 @@ from src.file_watcher import FileWatcher
 from src.template_manager import TemplateManager
 from src.file_pattern_matcher import FilePatternMatcher
 from src.response_parser import ResponseParser
+from src.cli_input import CLIInputHandler
 
 __all__ = [
     'FileManager',
@@ -30,5 +31,6 @@ __all__ = [
     'TemplateManager',
     'FilePatternMatcher',
     'ResponseParser',
+    'CLIInputHandler',
 ]
 

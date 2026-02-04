@@ -1,6 +1,6 @@
 # FSD: 명령어 자동 완성 (P3-05)
 
-> **문서 버전**: v1.0.0xx 
+> **문서 버전**: v1.0.028 
 > **작성일**: 2026-01-25  
 > **상태**: Draft  
 > **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md
@@ -49,3 +49,8 @@ CLI 환경에서 명령어 입력 시 Tab 키를 이용한 자동 완성(Auto-co
 * `claude-ai-chat-code01.py` 실행 후 자동 완성 테스트.
 * `gen-ai-chat-code01.py` 실행 후 자동 완성 테스트.
 
+## 5. 단위 테스트 코드 작성
+* `tests/test_cli_input.py`
+
+## 6. 릴리즈 노트 작성
+* `docs/specs/releases/RELEASE_v1.0.028.md`
