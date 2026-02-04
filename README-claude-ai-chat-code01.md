@@ -59,7 +59,7 @@ python claude-ai-chat-code01.py
 |--------|------|------|
 | `/files [ext]` | 프로젝트 파일 목록 | `/files .py .js` |
 | `/tree` | 프로젝트 구조 보기 | `/tree` |
-| `/read <pattern>` | 파일 읽기 | `/read src/*.py` |
+| `/read <pattern>` | 파일 읽기 (파일명, 상대경로, 와일드카드 지원) | `/read *.py`, `/read src/utils.py`, `/read src/claude*.py src/gen*.py` |
 | `/context <pattern> <질문>` | 파일 컨텍스트 포함 질문 | `/context *.py README 작성해줘` |
 | `/save` | AI 응답에서 파일 추출 및 저장 | `/save` |
 | `/workspace [path]` | 작업 디렉토리 변경 | `/workspace ./src` |
@@ -111,6 +111,10 @@ python claude-ai-chat-code01.py
 │  │ FileManager │  │ TreeBuilder  │  │   ContextBuilder    │ │
 │  │  (파일 I/O) │  │ (트리 생성)  │  │  (컨텍스트 구성)    │ │
 │  └─────────────┘  └──────────────┘  └─────────────────────┘ │
+│  ┌──────────────────────────────────────────────────────────┐ │
+│  │                 FilePatternMatcher                       │ │
+│  │         (파일 패턴 매칭 및 필터링, .gitignore 처리)      │ │
+│  └──────────────────────────────────────────────────────────┘ │
 ├─────────────────────────────────────────────────────────────┤
 │                    Claude API (SSE Streaming)               │
 │                 https://api.anthropic.com/v1/messages       │

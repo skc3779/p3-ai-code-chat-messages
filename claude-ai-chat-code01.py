@@ -156,8 +156,8 @@ def main():
                         for i, msg in enumerate(assistant.conversation_history, 1):
                             role = "👤" if msg.get('role') == 'user' else "🤖"
                             content = msg.get('content', '')
-                            if len(content)  > 150:
-                                preview = content[:150].replace('\n', ' ')
+                            if len(content)  > 100:
+                                preview = content[:100].replace('\n', ' ')
                             else:
                                 preview = content
                             print(f"{role} [{i}]: {preview}{'...' if len(content) > 150 else ''}")
