@@ -119,22 +119,30 @@ python gen-ai-chat-code01.py
 │   ├── context_builder.py    # 프롬프트 컨텍스트 구성
 │   ├── tool_definitions.py   # AI 도구(Tool) 스키마 정의
 │   └── tree_builder.py       # 디렉토리 트리 시각화
-└── tests/
-    ├── test_commands.py      # 명령어/실행기 단위 테스트
-    └── test_tool_use.py      # Tool Use 기능 단위 테스트
+├── tests/
+│   ├── __init__.py           # 테스트 패키지 초기화
+│   ├── test_file_manager.py  # FileManager 테스트
+│   ├── test_code_executor.py # CodeExecutor 테스트
+│   ├── test_response_parser.py # ResponseParser 테스트
+│   └── ...                   # 기타 단위 테스트 파일들
 ```
 
 ### 단위 테스트 실행
 작성된 기능들의 정상 동작을 검증하려면 단위 테스트를 실행하세요.
 
 ```bash
-# 기본 명령어 및 실행기 테스트
-python tests/test_commands.py
+# 모든 테스트 실행 (권장)
+python -m unittest discover tests
 
-# Tool Use (파일/Git/패키지) 기능 테스트
-python tests/test_tool_use.py
+# 개별 테스트 파일 실행
+python tests/test_file_manager.py
+python tests/test_code_executor.py
+# ... 기타 개별 파일들
+
+# 모듈 방식 실행
+python -m unittest tests.test_response_parser
 ```
-> **참고**: `tests/` 폴더 내의 테스트 파일들은 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다.
+> **참고**: `tests/` 폴더 내의 테스트 파일들은 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다. 모듈 방식으로 실행하려면 `tests/` 디렉토리에 `__init__.py`가 존재해야 합니다.
 
 ---
 

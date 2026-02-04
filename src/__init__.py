@@ -13,6 +13,7 @@ from src.history_manager import HistoryManager
 from src.file_watcher import FileWatcher
 from src.template_manager import TemplateManager
 from src.file_pattern_matcher import FilePatternMatcher
+from src.response_parser import ResponseParser
 
 __all__ = [
     'FileManager',
@@ -28,5 +29,6 @@ __all__ = [
     'FileWatcher',
     'TemplateManager',
     'FilePatternMatcher',
+    'ResponseParser',
 ]
 

@@ -201,7 +201,7 @@ claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파
 ignorer.py 의 .gitignore 파일에 .idea 폴더외 .idea/ 폴더도 동일하게 제외로 인식하도록 개선해줘
 - [폴더명] [폴더명]/ 동일하게 인식되도록 개선한다
 - specs/releases 폴더에 RELEASE로 시작하는 v1.0.023 버전의 릴리즈 노트를 작성한다  
-- RELEASE 문서의 내용이 길지 않게 작성해줘  
+- RELEASE 문서의 핵심은 포함하고 내용은 길지 않게 작성해줘  
 
 ---
 
@@ -258,3 +258,13 @@ system_prompt: |
 아직도 `콘솔`과 같이 `/read <파일명>` 명령어를 실행시 일부는 파일을 보여주지 않는 오류 현상이 발생해 좀더 파일명과 다양한 경로 '\` `/` 표현에도 파일을 읽은 수 있도록 추가 개선해줘.
 - specs/releases 폴더에 RELEASE로 시작하는 v1.0.025 버전의 릴리즈 노트를 작성한다  
 - RELEASE 문서의 내용이 길지 않게 작성해 주는데 핵심 내용은 포함 해줘
+
+---
+
+
+`/context <파일패턴> <질문>` 명령어를 아래와 같이 개선해줘
+- <파일패턴> :  [*.py, src/*.js, src/*.py] 와 같은 glob 패턴
+- <질문> : 파일의 내용을 보고 <질문>에 대한 답변을 해줘
+
+예1 : `/context [src/*.py] 이 코드를 리팩토링해줘`
+예2 : `/context [./gen*.py, src/*.py, docs/*.md] 이 코드와 MD파일을 분석해서 README.md 파일을 작성해줘`

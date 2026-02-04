@@ -162,11 +162,11 @@ def main():
                         print("\n📜 대화 히스토리:")
                         for i, msg in enumerate(assistant.conversation_history, 1):
                             role = "👤" if i % 2 == 1 else "🤖"
-                            if len(msg) > 150:
-                                preview = msg[:150].replace('\n', ' ')
+                            if len(msg) > 120:
+                                preview = msg[:120].replace('\n', ' ')
                             else:
                                 preview = msg
-                            print(f"{role} [{i}]: {preview}{'...' if len(msg) > 150 else ''}")
+                            print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
                     else:
                         print("📭 대화 히스토리가 비어있습니다.")
 
@@ -262,21 +262,40 @@ def main():
                     if not args:
                         print("❌ 형식: /context <파일패턴> <질문>")
                         print("예: /context src/*.py 이 코드를 리팩토링해줘")
+                        print("예: /context [src/*.py, docs/*.md] README 작성해줘")
                         continue
 
-                    parts = args.split(maxsplit=1)
-                    if len(parts) < 2:
+                    file_patterns = []
+                    question = ""
+
+                    # [pattern1, pattern2] 형식 확인
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            patterns_str = args[1:end_idx]
+                            file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
+                            question = args[end_idx+1:].strip()
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        # 기존 단일 패턴 지원
+                        parts = args.split(maxsplit=1)
+                        if len(parts) < 2:
+                            print("❌ 질문을 입력하세요.")
+                            continue
+                        file_patterns = [parts[0]]
+                        question = parts[1]
+
+                    if not question:
                         print("❌ 질문을 입력하세요.")
                         continue
-
-                    pattern = parts[0]
-                    question = parts[1]
 
                     last_response = assistant.chat(
                         question,
                         streaming=streaming_mode,
                         include_context=True,
-                        file_patterns=[pattern]
+                        file_patterns=file_patterns
                     )
 
                 elif command == '/save':

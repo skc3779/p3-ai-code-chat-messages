@@ -20,7 +20,9 @@ from .tool_definitions import FILESYSTEM_TOOLS
 from .token_manager import TokenManager
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
+from .history_manager import HistoryManager
 from .template_manager import TemplateManager
+from .response_parser import ResponseParser
 
 
 class ClaudeCodeAssistant:
@@ -45,6 +47,7 @@ class ClaudeCodeAssistant:
         self.package_manager = PackageManager(self.file_manager.workspace_dir)
         self.history_manager = HistoryManager(self.file_manager.workspace_dir)
         self.template_manager = TemplateManager(self.file_manager.workspace_dir)
+        self.response_parser = ResponseParser(self.file_manager)
 
         self.default_system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
@@ -136,7 +139,7 @@ class ClaudeCodeAssistant:
         messages = self.conversation_history.copy()
         messages.append({"role": "user", "content": full_message})
 
-        print(f"### 요청 메세지 히스토리  : {messages}")
+        # print(f"### 요청 메세지 히스토리  : {messages}")
 
         body = {
             "model": self.model_id,
@@ -412,62 +415,7 @@ class ClaudeCodeAssistant:
         파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
         올바르게 전체 내용을 캡처하도록 라인 기반 파서를 사용합니다.
         """
-        saved_files: List[str] = []
-
-        # 라인 단위로 파싱하기 위해 문자열을 분리
-        lines = response.splitlines()
-
-        collecting: bool = False               # 현재 파일 블록을 수집 중인지 여부
-        current_path: str = ""                 # 현재 파일의 상대 경로
-        current_content: List[str] = []        # 현재 파일에 쓸 내용 라인들
-
-        for line in lines:
-            stripped = line.strip()
-
-            # ── 파일 블록 시작 ──
-            if not collecting and stripped.startswith("```filename:"):
-                # ````filename:경로/파일명.ext```` 형태에서 경로 추출
-                current_path = stripped[len("```filename:"):].strip()
-                collecting = True
-                current_content = []
-                continue
-
-            # ── 파일 블록 종료 ── (정확히 세 개의 백틱만 있는 라인)
-            if collecting and stripped == "```":
-                file_path = self.file_manager.workspace_dir / current_path
-
-                # 파일이 이미 존재하면 덮어쓰기 여부 확인
-                if file_path.exists():
-                    print(f"\n⚠️  파일이 이미 존재합니다: {current_path}")
-                    confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
-                    if confirm != 'y':
-                        print(f"⏭️  건너뛰기: {current_path}")
-                        collecting = False
-                        continue
-
-                # 파일에 내용 기록
-                file_content = "\n".join(current_content).strip()
-                if self.file_manager.write_file(file_path, file_content):
-                    saved_files.append(current_path)
-                    print(f"✅ 파일 저장됨: {current_path}")
-                else:
-                    print(f"❌ 파일 저장 실패: {current_path}")
-
-                # 상태 초기화
-                collecting = False
-                current_path = ""
-                current_content = []
-                continue
-
-            # ── 파일 블록 내부 ──
-            if collecting:
-                current_content.append(line)
-
-        # 닫히지 않은 파일 블록이 남아있는 경우 경고
-        if collecting:
-            print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
-
-        return saved_files
+        return self.response_parser.parse_and_save(response)
 
     def save_history(self, filepath: Optional[str] = None) -> str:
         """대화 히스토리를 JSON 파일로 저장"""
