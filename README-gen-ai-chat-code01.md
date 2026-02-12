@@ -18,14 +18,15 @@ GenAI Code Assistant는 터미널에서 커스텀 GenAI API (Lego Platform)를 �
 | ⚙️ **LLM 설정** | temperature, top_k, top_p 등 파라미터 커스터마이징 |
 | 🚀 **코드 실행** | AI가 생성한 코드를 직접 실행 (Python/JS/Bash) |
 | 💻 **쉘 명령어** | 터미널 명령어 직접 실행 |
-| 📝 **멀티라인 입력** | 여러 줄의 프롬프트 입력 지원 |
+| ⌨️ **스마트 입력** | Tab 자동완성 및 Ctrl+Enter 멀티라인 실행 |
+| 📝 **멀티라인 컨텍스트** | `/context` 명령어에서 여러 줄 질문 지원 |
 
 ## 설치
 
 ### 1. 의존성 설치
 
 ```bash
-pip install requests sseclient-py python-dotenv
+pip install -r requirements.txt
 ```
 
 ### 2. 환경 변수 설정
@@ -55,6 +56,12 @@ YOUR_MODEL_ID=your_model_id_here
 python gen-ai-chat-code01.py
 ```
 
+### 입력 방법
+
+* **Enter**: 새 줄 추가 (멀티라인 입력)
+* **Ctrl+Enter**: 명령어 실행
+* **Tab**: 명령어 자동완성 (예: `/wo` + Tab → `/workspace`)
+
 ### 명령어
 
 | 명령어 | 설명 | 예시 |
@@ -62,7 +69,7 @@ python gen-ai-chat-code01.py
 | `/files [ext]` | 프로젝트 파일 목록 | `/files .py .js` |
 | `/tree` | 프로젝트 구조 보기 | `/tree` |
 | `/read <pattern>` | 파일 읽기 (파일명, 상대경로, 와일드카드 지원) | `/read *.py`, `/read src/utils.py`, `/read src/claude*.py src/gen*.py` |
-| `/context <pattern> <질문>` | 파일 컨텍스트 포함 질문 | `/context *.py README 작성해줘` |
+| `/context <pattern> [질문]` | 파일 컨텍스트 포함 질문 (질문 생략 시 멀티라인 모드) | `/context *.py` |
 | `/save` | AI 응답에서 파일 추출 및 저장 | `/save` |
 | `/workspace [path]` | 작업 디렉토리 변경 | `/workspace ./src` |
 | `/stream` | 스트리밍 모드 활성화 | `/stream` |

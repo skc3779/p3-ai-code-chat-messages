@@ -271,7 +271,9 @@ def main():
 
                 elif command == '/context':
                     if not args:
-                        print("❌ 형식: /context <파일패턴> <질문>")
+                        print("❌ 형식: /context <파일패턴> [질문]")
+                        print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
+                        print("예: /context src/*.py")
                         print("예: /context src/*.py 이 코드를 리팩토링해줘")
                         print("예: /context [src/*.py, docs/*.md] README 작성해줘")
                         continue
@@ -292,11 +294,15 @@ def main():
                     else:
                         # 기존 단일 패턴 지원
                         parts = args.split(maxsplit=1)
-                        if len(parts) < 2:
+                        file_patterns = [parts[0]]
+                        question = parts[1] if len(parts) >= 2 else ""
+
+                    # 질문이 없는 경우 멀티라인 입력
+                    if not question:
+                        question = input_handler.get_multiline_legacy()
+                        if not question.strip():
                             print("❌ 질문을 입력하세요.")
                             continue
-                        file_patterns = [parts[0]]
-                        question = parts[1]
 
                     if not question:
                         print("❌ 질문을 입력하세요.")

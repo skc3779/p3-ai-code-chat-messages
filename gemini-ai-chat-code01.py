@@ -182,14 +182,23 @@ def main():
 
                 elif command == '/context':
                     if not args:
-                        print("❌ 사용법: /context <파일패턴> <질문>")
+                        print("❌ 사용법: /context <파일패턴> [질문]")
+                        print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
                         continue
+                    
                     context_parts = args.split(maxsplit=1)
-                    if len(context_parts) < 2:
-                        print("❌ 질문을 입력하세요.")
-                        continue
                     patterns = context_parts[0].split(',')
-                    question = context_parts[1]
+                    
+                    # 질문이 포함된 경우 (한 줄 입력)
+                    if len(context_parts) >= 2:
+                        question = context_parts[1]
+                    else:
+                        # 질문이 없는 경우 (멀티라인 입력)
+                        question = cli_handler.get_multiline_legacy()
+                        if not question.strip():
+                            print("❌ 질문을 입력하세요.")
+                            continue
+                    
                     last_response = assistant.chat(
                         question, streaming=streaming,
                         include_context=True, file_patterns=patterns
@@ -210,11 +219,14 @@ def main():
                 elif command == '/workspace':
                     if args:
                         new_workspace = Path(args).resolve()
-                        if new_workspace.is_dir():
-                            assistant.file_manager.set_workspace(new_workspace)
+                        if new_workspace.exists() and new_workspace.is_dir():
+                            assistant.file_manager = FileManager(str(new_workspace))
+                            assistant.context_builder = ContextBuilder(assistant.file_manager)
+                            file_watcher.stop()
+                            file_watcher = FileWatcher(str(new_workspace))
                             print(f"✅ 작업 디렉토리 변경: {new_workspace}")
                         else:
-                            print(f"❌ 디렉토리를 찾을 수 없습니다: {args}")
+                            print(f"❌ 유효하지 않은 디렉토리: {args}")
                     else:
                         print(f"📂 현재 작업 디렉토리: {assistant.file_manager.workspace_dir}")
 
