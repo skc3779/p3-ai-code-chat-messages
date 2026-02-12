@@ -19,6 +19,7 @@ from src import (
     FileWatcher,
     FilePatternMatcher,
     CLIInputHandler,
+    DiffViewer,
 )
 
 
@@ -48,6 +49,8 @@ def print_menu():
     print("  /load_history <name>- 저장된 히스토리 로드")
     print("  /list_history       - 저장된 히스토리 목록")
     print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
+    print("  /diff               - 마지막 응답의 코드 변경사항 Diff 표시")
+    print("  /apply              - Diff 내용을 실제 파일에 적용")
     print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
     print("  /tokens             - 토큰 사용량 확인")
     print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
@@ -118,6 +121,9 @@ def main():
 
     streaming_mode = True
     last_response = ""
+    
+    # DiffViewer 초기화
+    diff_viewer = DiffViewer()
 
     # CLI 입력 처리기 초기화
     input_handler = CLIInputHandler()
@@ -471,6 +477,54 @@ def main():
                             print("   모든 감시가 중지되었습니다.")
                     else:
                         print(f"❌ 해당 패턴을 찾을 수 없습니다: {pattern}")
+
+                elif command == '/diff':
+                    if not last_response:
+                        print("❌ 비교할 응답이 없습니다. 먼저 AI에게 코드 수정을 요청하세요.")
+                        continue
+                    
+                    suggestions = diff_viewer.extract_code_suggestions(last_response)
+                    
+                    if not suggestions:
+                        print("❌ 응답에서 코드 제안을 찾을 수 없습니다.")
+                        print("💡 코드는 ```filename:path/to/file.ext 형식이어야 합니다.")
+                        continue
+                    
+                    print(f"\n🔍 {len(suggestions)}개의 파일 변경 제안을 발견했습니다:\n")
+                    
+                    for i, suggestion in enumerate(suggestions, 1):
+                        filepath = assistant.file_manager.workspace_dir / suggestion['filepath']
+                        new_content = suggestion['content']
+                        
+                        print(f"{'='*70}")
+                        print(f"📄 [{i}] {suggestion['filepath']}")
+                        print(f"{'='*70}")
+                        
+                        diff_result, file_exists = diff_viewer.generate_diff_for_file(
+                            filepath, new_content, assistant.file_manager
+                        )
+                        print(diff_result)
+                        
+                        # 변경 통계 표시
+                        if file_exists:
+                            original = assistant.file_manager.read_file(filepath) or ""
+                            stats = diff_viewer.get_diff_stats(original, new_content)
+                            print(diff_viewer.format_stats_display(stats))
+                        else:
+                            print(f"📝 새 파일: {len(new_content.splitlines())}줄")
+                        
+                        print()
+                    
+                    if len(suggestions) == 1:
+                        print("💡 /apply 명령어로 변경사항을 적용할 수 있습니다.")
+                    else:
+                        print("💡 여러 파일이 있습니다. 각 파일을 개별적으로 저장하려면 /save를 사용하세요.")
+
+                elif command == '/apply':
+                    success, message = diff_viewer.apply_diff(assistant.file_manager)
+                    print(message)
+                    if success:
+                        print("💡 다른 변경사항이 있다면 /diff로 다시 확인하세요.")
 
                 elif command == '/watch_list':
                     patterns = file_watcher.get_watched_patterns()

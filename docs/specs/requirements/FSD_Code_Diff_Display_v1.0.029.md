@@ -1,6 +1,6 @@
 # FSD: 코드 Diff 표시 기능 (P3-03)
 
-> **문서 버전**: v1.0.028  
+> **문서 버전**: v1.0.029
 > **작성일**: 2026-01-25  
 > **상태**: Draft  
 > **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md
@@ -57,4 +57,4 @@ AI가 생성한 전체 코드를 단순히 출력하는 대신, 기존 코드와
 * `tests/test_genai_tool_use.py`
 
 ## 6. 릴리즈 노트 작성
-* `docs/specs/releases/RELEASE_v1.0.028.md`
+* `docs/specs/releases/RELEASE_v1.0.029.md`

@@ -290,3 +290,6 @@ claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파
 - RELEASE 문서의 내용이 길지 않게 작성해줘  
 
 
+---
+
+python requirements.txt

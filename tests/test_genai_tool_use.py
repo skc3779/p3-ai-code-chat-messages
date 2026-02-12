@@ -131,5 +131,52 @@ Second tool:
         self.assertEqual(result, "")
 
 
+class TestGenAIDiffViewerIntegration(unittest.TestCase):
+    """GenAI 어시스턴트와 DiffViewer 통합 테스트"""
+    
+    def setUp(self):
+        """테스트 환경 설정"""
+        from src.diff_viewer import DiffViewer
+        self.diff_viewer = DiffViewer()
+    
+    def test_extract_and_diff_from_genai_response(self):
+        """GenAI 응답에서 코드 추출 및 Diff 생성 테스트"""
+        # GenAI가 반환하는 형식의 응답
+        response = """
+Here's the updated code:
+
+```python filename:src/utils.py
+def format_number(n):
+    \"\"\"Format number with commas\"\"\"
+    return f"{n:,}"
+
+def parse_number(s):
+    \"\"\"Parse formatted number\"\"\"
+    return int(s.replace(",", ""))
+```
+
+I've added a parse_number function.
+"""
+        suggestions = self.diff_viewer.extract_code_suggestions(response)
+        
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]['filepath'], Path('src/utils.py'))
+        self.assertIn('def format_number', suggestions[0]['content'])
+        self.assertIn('def parse_number', suggestions[0]['content'])
+    
+    def test_diff_stats(self):
+        """변경 통계 테스트"""
+        original = "line1\nline2"
+        new = "line1\nline2\nline3\nline4"
+        
+        stats = self.diff_viewer.get_diff_stats(original, new)
+        
+        self.assertEqual(stats['added'], 2)
+        self.assertEqual(stats['deleted'], 0)
+        self.assertEqual(stats['original_lines'], 2)
+        self.assertEqual(stats['new_lines'], 4)
+
+
 if __name__ == '__main__':
     unittest.main()
+

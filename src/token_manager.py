@@ -11,6 +11,7 @@ class TokenManager:
     # 플랫폼별 컨텍스트 윈도우의 75%를 안전 한도로 설정
     MAX_TOKENS_CLAUDE = 150000   # Claude: 200K의 75%
     MAX_TOKENS_GENAI = 96000     # GenAI: 128K의 75%
+    MAX_TOKENS_GEMINI = 786000   # Gemini: 1M의 약 75%
     
     # 기본값 (Claude 기준)
     DEFAULT_MAX_TOKENS = 150000

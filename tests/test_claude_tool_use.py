@@ -164,5 +164,49 @@ class TestClaudeToolUse(unittest.TestCase):
             self.assertEqual(content[0]['content'], "print('hello')")
 
 
+class TestClaudeDiffViewerIntegration(unittest.TestCase):
+    """Claude 어시스턴트와 DiffViewer 통합 테스트"""
+    
+    def setUp(self):
+        """테스트 환경 설정"""
+        from src.diff_viewer import DiffViewer
+        self.diff_viewer = DiffViewer()
+    
+    def test_extract_and_diff_from_claude_response(self):
+        """Claude 응답에서 코드 추출 및 Diff 생성 테스트"""
+        # Claude가 반환하는 형식의 응답
+        response = """
+Here's the updated code:
+
+```filename:src/calculator.py
+def add(a, b):
+    \"\"\"Add two numbers\"\"\"
+    return a + b
+
+def subtract(a, b):
+    \"\"\"Subtract b from a\"\"\"
+    return a - b
+```
+
+I've added a new subtract function.
+"""
+        suggestions = self.diff_viewer.extract_code_suggestions(response)
+        
+        self.assertEqual(len(suggestions), 1)
+        self.assertEqual(suggestions[0]['filepath'], Path('src/calculator.py'))
+        self.assertIn('def add', suggestions[0]['content'])
+        self.assertIn('def subtract', suggestions[0]['content'])
+    
+    def test_diff_with_original_file(self):
+        """원본 파일과의 Diff 생성 테스트"""
+        original = "def add(a, b):\n    return a + b"
+        new = "def add(a, b):\n    return a + b\n\ndef subtract(a, b):\n    return a - b"
+        
+        diff = self.diff_viewer.generate_colored_diff(original, new)
+        
+        self.assertIn('+def subtract', diff)
+
+
 if __name__ == '__main__':
     unittest.main()
+

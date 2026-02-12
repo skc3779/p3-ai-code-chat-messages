@@ -7,6 +7,7 @@ from src.tree_builder import TreeBuilder
 from src.context_builder import ContextBuilder
 from src.claude_assistant import ClaudeCodeAssistant
 from src.genai_assistant import GenAICodeAssistant
+from src.gemini_assistant import GeminiCodeAssistant
 from src.token_manager import TokenManager
 from src.api_retry import APIRetry
 from src.history_manager import HistoryManager
@@ -15,6 +16,7 @@ from src.template_manager import TemplateManager
 from src.file_pattern_matcher import FilePatternMatcher
 from src.response_parser import ResponseParser
 from src.cli_input import CLIInputHandler
+from src.diff_viewer import DiffViewer
 
 __all__ = [
     'FileManager',
@@ -24,6 +26,7 @@ __all__ = [
     'ContextBuilder',
     'ClaudeCodeAssistant',
     'GenAICodeAssistant',
+    'GeminiCodeAssistant',
     'TokenManager',
     'APIRetry',
     'HistoryManager',
@@ -32,5 +35,5 @@ __all__ = [
     'FilePatternMatcher',
     'ResponseParser',
     'CLIInputHandler',
+    'DiffViewer',
 ]
-

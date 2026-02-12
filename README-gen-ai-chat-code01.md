@@ -164,6 +164,95 @@ Content-Type: application/json
 | `CHUNK` | 텍스트 청크 (`content` 필드) |
 | `DONE` | 메시지 종료 |
 
+### Response (스트리밍 모드)
+
+SSE(Server-Sent Events) 스트림으로 응답이 전달됩니다.
+
+```json
+// 각 SSE 이벤트의 data 필드
+{
+  "event_status": "CHUNK",
+  "content": "응답 텍스트 조각"
+}
+```
+
+```json
+// 스트림 종료 이벤트
+{
+  "event_status": "DONE"
+}
+```
+
+**스트리밍 응답 처리 흐름:**
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│  SSE Stream                                                       │
+├──────────────────────────────────────────────────────────────────┤
+│  event: message                                                   │
+│  data: {"event_status":"CHUNK","content":"안녕"}                   │
+│                                                                   │
+│  event: message                                                   │
+│  data: {"event_status":"CHUNK","content":"하세요"}                 │
+│                                                                   │
+│  event: message                                                   │
+│  data: {"event_status":"CHUNK","content":"!"}                      │
+│                                                                   │
+│  event: message                                                   │
+│  data: {"event_status":"DONE"}                                     │
+└──────────────────────────────────────────────────────────────────┘
+```
+
+### Response (논스트리밍 모드)
+
+단일 JSON 응답으로 전달됩니다.
+
+```json
+{
+  "content": "전체 응답 텍스트",
+  "modelId": "사용된 모델 ID",
+  "usage": {
+    "prompt_tokens": 150,
+    "completion_tokens": 200,
+    "total_tokens": 350
+  }
+}
+```
+
+### 응답 필드 상세
+
+| 필드 | 타입 | 설명 |
+|------|------|------|
+| `event_status` | string | 스트리밍 이벤트 상태 (`CHUNK` / `DONE`) |
+| `eventStatus` | string | `event_status`의 대체 키 (호환성) |
+| `content` | string | 응답 텍스트 내용 |
+| `modelId` | string | 응답을 생성한 모델 ID |
+| `usage` | object | 토큰 사용량 정보 (논스트리밍에서만) |
+
+### 응답 파싱 예시 (Python)
+
+```python
+import sseclient
+import requests
+
+# 스트리밍 모드
+response = requests.post(api_url, headers=headers, json=body, stream=True)
+client = sseclient.SSEClient(response)
+
+result_message = ""
+for event in client.events():
+    if event.data:
+        data = json.loads(event.data)
+        event_status = data.get('event_status') or data.get('eventStatus')
+        content = data.get('content', '')
+        
+        if event_status == 'CHUNK' and content:
+            print(content, end="", flush=True)
+            result_message += content
+        elif event_status == 'DONE':
+            break
+```
+
 ## LLM 설정
 
 `get_llm_config()` 메서드에서 다음 파라미터를 조정할 수 있습니다:

@@ -40,6 +40,18 @@ class HistoryManager:
         }
         return self._save_json(data, filepath)
     
+    def save_gemini_history(self, messages: List[Dict], model_id: str,
+                            filepath: Optional[str] = None) -> str:
+        """Gemini 형식 히스토리 저장 (Dict 기반, role: user/model)"""
+        data = {
+            "version": "1.0",
+            "type": "gemini",
+            "created_at": datetime.now().isoformat(),
+            "model_id": model_id,
+            "messages": messages
+        }
+        return self._save_json(data, filepath)
+    
     def _save_json(self, data: Dict, filepath: Optional[str] = None) -> str:
         """JSON 파일로 저장"""
         if filepath is None:
