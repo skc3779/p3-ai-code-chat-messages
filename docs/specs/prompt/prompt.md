@@ -289,7 +289,14 @@ claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파
 - specs/releases 폴더에 RELEASE로 시작하는 v1.0.022 버전의 릴리즈 노트를 작성한다  
 - RELEASE 문서의 내용이 길지 않게 작성해줘  
 
+---
+
+새로 추가된 라이브러리에 대해 `requirements.txt` 에 포함 해줘. 
 
 ---
 
-python requirements.txt
+`/multiline` 을 제외한 사용자 명령어 입력시 `enter` 입력시 실행되는 형태를 `shift + enter` 로 FSD 문서를 만들어줘
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.031 버전의 문서를 작성한다  
+- FSD 문서의 내용이 길지 않게 작성해줘
+
+---
