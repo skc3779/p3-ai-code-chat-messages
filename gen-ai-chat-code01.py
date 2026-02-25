@@ -132,8 +132,11 @@ def main():
     # DiffViewer 초기화
     diff_viewer = DiffViewer()
 
-    # CLI 입력 처리기 초기화
-    input_handler = CLIInputHandler()
+    # CLI 입력 처리기 초기화 (슬래시 명령어 인라인 제안 + 하단 상태 바)
+    input_handler = CLIInputHandler(
+        workspace=workspace,
+        model_name=YOUR_MODEL_ID or 'GenAI'
+    )
 
     print_menu()
     print(f"\n📂 현재 작업 디렉토리: {workspace}")
@@ -229,6 +232,7 @@ def main():
                             file_watcher.stop()
                             file_watcher = FileWatcher(str(new_workspace), callback=on_file_changed)
                             workspace = str(new_workspace)
+                            input_handler.update_workspace(workspace)
                             print(f"✅ 작업 디렉토리 변경: {new_workspace}")
                         else:
                             print(f"❌ 유효하지 않은 디렉토리: {args}")

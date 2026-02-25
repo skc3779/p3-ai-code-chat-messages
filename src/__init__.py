@@ -17,6 +17,7 @@ from src.file_pattern_matcher import FilePatternMatcher
 from src.response_parser import ResponseParser
 from src.cli_input import CLIInputHandler
 from src.diff_viewer import DiffViewer
+from src.command_registry import CommandRegistry
 
 __all__ = [
     'FileManager',
@@ -36,4 +37,5 @@ __all__ = [
     'ResponseParser',
     'CLIInputHandler',
     'DiffViewer',
+    'CommandRegistry',
 ]

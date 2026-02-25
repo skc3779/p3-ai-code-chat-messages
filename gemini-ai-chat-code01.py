@@ -101,8 +101,11 @@ def main():
     # DiffViewer 초기화
     diff_viewer = DiffViewer()
 
-    # CLI 입력 핸들러 초기화
-    cli_handler = CLIInputHandler()
+    # CLI 입력 핸들러 초기화 (슬래시 명령어 인라인 제안 + 하단 상태 바)
+    cli_handler = CLIInputHandler(
+        workspace=workspace,
+        model_name=GEMINI_MODEL_ID
+    )
 
     # FileWatcher 초기화
     file_watcher = FileWatcher(workspace)
@@ -223,6 +226,7 @@ def main():
                             file_watcher.stop()
                             file_watcher = FileWatcher(str(new_workspace))
                             workspace = str(new_workspace)
+                            cli_handler.update_workspace(workspace)
                             print(f"✅ 작업 디렉토리 변경: {new_workspace}")
                         else:
                             print(f"❌ 유효하지 않은 디렉토리: {args}")
