@@ -321,3 +321,27 @@ FSD 문서는 제미나이와 동일한 명령어 필터링 기능 등 잘 설�
 - 이미지의 필터링 구조를 잘설명하고 있는지 검토한다.
 - 하단 좌측에 경로, 우측에 모델을 정보를 표현되어 있는지 검토한다.
 - 기능과 관련없는 내용은 삭제한다.
+
+---
+
+
+🌳 프로젝트 구조:
+📁 프로젝트 구조 (작업 디렉터리: C:\03_sources\ai_srcs\gemini-demos)
+📁 gemini-demos/
+├── 📁 .chat_history/
+├── 📁 .system-prompts/
+├── 📁 GDRB_NOTION/
+├── 📁 src/
+│   ├── 📁 models/
+│   │   └── 📄 User.java
+│   ├── 📁 utils/
+│   │   └── 📄 MathHelper.java
+│   └── 📄 MainApp.java
+└── 📄 README.md
+> /read README.md
+
+❌ 오류 발생: 'FilePatternMatcher' object has no attribute 'match_patterns'
+> /read README.md
+
+파일을 읽는 기능이 제대로 동작하지 않는 문제를 개선하는 문서를 만들어줘
+- specs/requirements 폴더에 BUG v1.0.0048 버전으로 문서화한다.

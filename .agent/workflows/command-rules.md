@@ -8,29 +8,32 @@ description: Python 테스트 및 PowerShell 명령어 실행 규칙
 
 ## 0. 한글 인코딩 설정 (필수 선행)
 
-Windows PowerShell에서 **한글이 깨지는 현상**을 방지하기 위해, 명령어 실행 전 반드시 UTF-8 코드 페이지를 설정합니다.
+Windows PowerShell 명령어 파이프라인에서 **한글이 깨지는 현상**을 방지하기 위해, 명령어 실행 전 반드시 다음 UTF-8 인코딩 3종 세트를 설정합니다. (`chcp 65001` 단독 사용 시 파이프라인에서 깨짐 현상 발생)
 
 ### 규칙
-- **모든 `run_command` 호출 시** `chcp 65001` 을 명령어 앞에 붙여 실행합니다.
-- `chcp 65001` 은 콘솔의 코드 페이지를 UTF-8로 변경하여 한글 출력이 정상적으로 표시되도록 합니다.
+- **모든 `run_command` 호출 시** 명령어 앞에 다음 접두사를 반드시 붙여 실행합니다:
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $env:PYTHONIOENCODING="utf-8";`
+- 이는 콘솔 출력창 인코딩, 파이프라인 입출력 인코딩, Python 내부 스트림 인코딩을 일관되게 UTF-8로 맞춥니다.
 
 ### 사용 방법
 ```powershell
+# 핵심 인코딩 프리셋을 변수나 직접 인라인으로 삽입하여 명령어 실행
+$enc = '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $env:PYTHONIOENCODING="utf-8";'
+
 # 단일 명령어 실행
-chcp 65001; python -m unittest tests.test_module_name -v
-
-# 파이프라인과 함께
-chcp 65001; python -m tests.test_command_suggestion 2>&1 | ForEach-Object { $_ }
-
-# Python 스크립트 실행
-chcp 65001; python gemini-ai-chat-code01.py
+Invoke-Expression "$enc python -m unittest tests.test_module_name -v"
+# 또는 직접 붙여넣기
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; $OutputEncoding = [System.Text.Encoding]::UTF8; $env:PYTHONIOENCODING="utf-8"; python -m tests.test_command_suggestion 2>&1 | ForEach-Object { $_ }
 ```
 
 ### 잘못된 방법 (피해야 할 것)
 ```powershell
-# chcp 없이 실행 - 한글이 깨져서 출력됨
+# chcp 65001 단독 사용 - 파이프라인(| ForEach-Object) 이후 한글이 깨져서 출력됨
+chcp 65001; python -m tests.test_command_suggestion 2>&1 | ForEach-Object { $_ }
+# 결과: [OK] ?꾩껜 紐낅졊?? 29媛?  ← 여전히 깨짐
+
+# 설정 없이 실행
 python -m tests.test_command_suggestion
-# 결과: [OK] ?꾩껜 紐낅졊?? 29媛?  ← 깨짐
 ```
 
 ## 1. Python 테스트 실행
