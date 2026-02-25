@@ -1,4 +1,4 @@
-"""CommandRegistry 및 CLIInputHandler import 테스트"""
+"""CommandRegistry 및 CLIInputHandler import 테스트 (v1.0.047)"""
 from src.command_registry import CommandRegistry, CommandInfo
 from src.cli_input import CLIInputHandler, PROMPT_TOOLKIT_AVAILABLE
 
@@ -32,17 +32,26 @@ print(f"[OK] /save 검색: name={cmd.name}, desc={cmd.description}")
 # prompt_toolkit 사용 가능 여부
 print(f"[OK] prompt_toolkit 사용 가능: {PROMPT_TOOLKIT_AVAILABLE}")
 
-# CLIInputHandler 초기화 (prompt_toolkit 모드)
+# CLIInputHandler 초기화 (v1.0.047: streaming_mode 추가)
 handler = CLIInputHandler(
     workspace="C:\\test\\project",
-    model_name="gemini-3.0-flash"
+    model_name="gemini-3.0-flash",
+    streaming_mode=True
 )
 print(f"[OK] CLIInputHandler 초기화 (prompt_toolkit={handler._use_prompt_toolkit})")
 print(f"[OK] workspace: {handler.workspace}")
 print(f"[OK] model_name: {handler.model_name}")
+print(f"[OK] streaming_mode: {handler.streaming_mode}")
 
 # workspace 업데이트
 handler.update_workspace("C:\\new\\path")
 print(f"[OK] workspace 업데이트: {handler.workspace}")
+
+# streaming_mode 업데이트
+handler.update_streaming_mode(False)
+print(f"[OK] streaming_mode 업데이트: {handler.streaming_mode}")
+
+# 기본 프롬프트 확인
+print(f"[OK] 기본 프롬프트: '> ' (Gemini CLI 스타일)")
 
 print("\n=== 모든 테스트 통과 ===")

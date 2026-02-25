@@ -101,10 +101,11 @@ def main():
     # DiffViewer 초기화
     diff_viewer = DiffViewer()
 
-    # CLI 입력 핸들러 초기화 (슬래시 명령어 인라인 제안 + 하단 상태 바)
+    # CLI 입력 핸들러 초기화 (Gemini CLI 스타일 TUI)
     cli_handler = CLIInputHandler(
         workspace=workspace,
-        model_name=GEMINI_MODEL_ID
+        model_name=GEMINI_MODEL_ID,
+        streaming_mode=True
     )
 
     # FileWatcher 초기화
@@ -120,7 +121,7 @@ def main():
 
     while True:
         try:
-            user_input = cli_handler.get_input("👤 You: ")
+            user_input = cli_handler.get_input("> ")
 
             if not user_input:
                 continue
@@ -235,10 +236,12 @@ def main():
 
                 elif command == '/stream':
                     streaming = True
+                    cli_handler.update_streaming_mode(True)
                     print("✅ 스트리밍 모드 활성화")
 
                 elif command == '/nostream':
                     streaming = False
+                    cli_handler.update_streaming_mode(False)
                     print("✅ 논스트리밍 모드 활성화")
 
                 elif command == '/history':

@@ -6,6 +6,33 @@ description: Python 테스트 및 PowerShell 명령어 실행 규칙
 
 이 프로젝트에서 명령어 실행 시 준수해야 할 규칙입니다.
 
+## 0. 한글 인코딩 설정 (필수 선행)
+
+Windows PowerShell에서 **한글이 깨지는 현상**을 방지하기 위해, 명령어 실행 전 반드시 UTF-8 코드 페이지를 설정합니다.
+
+### 규칙
+- **모든 `run_command` 호출 시** `chcp 65001` 을 명령어 앞에 붙여 실행합니다.
+- `chcp 65001` 은 콘솔의 코드 페이지를 UTF-8로 변경하여 한글 출력이 정상적으로 표시되도록 합니다.
+
+### 사용 방법
+```powershell
+# 단일 명령어 실행
+chcp 65001; python -m unittest tests.test_module_name -v
+
+# 파이프라인과 함께
+chcp 65001; python -m tests.test_command_suggestion 2>&1 | ForEach-Object { $_ }
+
+# Python 스크립트 실행
+chcp 65001; python gemini-ai-chat-code01.py
+```
+
+### 잘못된 방법 (피해야 할 것)
+```powershell
+# chcp 없이 실행 - 한글이 깨져서 출력됨
+python -m tests.test_command_suggestion
+# 결과: [OK] ?꾩껜 紐낅졊?? 29媛?  ← 깨짐
+```
+
 ## 1. Python 테스트 실행
 
 ### 올바른 방법

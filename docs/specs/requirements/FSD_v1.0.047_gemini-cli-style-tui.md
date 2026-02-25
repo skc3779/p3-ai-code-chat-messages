@@ -196,198 +196,64 @@ Gemini CLI에는 상단에도 정보 바가 있습니다:
 
 ---
 
-## 3. 설계
+## 3. 구현 내용 및 설계 사항 (최종 반영)
 
-### 3.1 prompt_toolkit 커스텀 레이아웃 (핵심)
+### 3.1 `prompt_toolkit` 커스텀 레이아웃 (핵심)
 
-`prompt_toolkit`의 기본 Completer 드롭다운 대신 **커스텀 `full_screen` 또는 `Layout`**을 사용하여 Gemini CLI와 동일한 인라인 목록을 구현합니다.
+`prompt_toolkit`의 기본 `CompletionsMenu` 드롭다운 팝업 방식 대신, 전체 터미널 화면 너비를 사용하는 **커스텀 `Application` 및 `Layout` 계층 구조**를 도입하여 Gemini CLI와 동일한 인라인 목록을 구현했습니다.
 
-#### 3.1.1 접근 방식: `prompt_toolkit` Application 레이아웃
+#### 3.1.1 레이아웃 구조 (`HSplit` 기반)
 
-```python
-from prompt_toolkit.layout import Layout, HSplit, Window, FormattedTextControl
-from prompt_toolkit.layout.containers import ConditionalContainer
-from prompt_toolkit.filters import Condition
-from prompt_toolkit.widgets import TextArea
-from prompt_toolkit.application import Application
-from prompt_toolkit.key_binding import KeyBindings
-from prompt_toolkit.formatted_text import FormattedText
+전체 UI는 위에서 아래로 세로 분할(`HSplit`)되는 3개의 계층(`Window`)으로 구성됩니다.
 
+1. **입력 영역 (`BufferControl`)**: `> ` 프롬프트와 사용자의 입력 텍스트를 표시합니다.
+2. **제안 표시 영역 (`ConditionalContainer` + `FormattedTextControl`)**: 조건에 따라 나타나며, 필터링된 명령어 목록을 보여줍니다.
+3. **하단 상태 바 영역 (`FormattedTextControl`)**: 항상 표시되며, 현재 작업 경로, 모드, 모델 정보를 포함합니다.
 
-class GeminiStyleCLI:
-    """Gemini CLI 스타일 TUI"""
-    
-    def __init__(self, registry, workspace="", model_name=""):
-        self.registry = registry
-        self.workspace = workspace
-        self.model_name = model_name
-        self.current_filter = ""
-        self.filtered_commands = []
-        self.selected_index = 0
-        self.max_visible = 8  # 한 번에 표시할 최대 항목 수
-        self.scroll_offset = 0
-        
-        self._build_layout()
-    
-    def _build_layout(self):
-        """레이아웃 구성"""
-        # 입력 영역
-        self.input_area = TextArea(
-            prompt="> ",
-            multiline=False,
-        )
-        
-        # 명령어 제안 영역 (입력 아래)
-        self.suggestion_control = FormattedTextControl(
-            self._get_suggestion_text
-        )
-        
-        # 하단 상태 바
-        self.toolbar_control = FormattedTextControl(
-            self._get_toolbar_text
-        )
-        
-        # 레이아웃
-        self.layout = Layout(
-            HSplit([
-                # 입력 영역
-                self.input_area,
-                # 명령어 제안 (조건부 표시)
-                ConditionalContainer(
-                    Window(self.suggestion_control),
-                    filter=Condition(lambda: len(self.filtered_commands) > 0)
-                ),
-                # 하단 상태 바
-                Window(self.toolbar_control, height=1),
-            ])
-        )
-    
-    def _get_suggestion_text(self):
-        """명령어 제안 목록 텍스트 생성"""
-        result = []
-        
-        # 표시할 명령어 범위 계산
-        visible = self.filtered_commands[
-            self.scroll_offset:self.scroll_offset + self.max_visible
-        ]
-        
-        for i, cmd in enumerate(visible):
-            actual_index = self.scroll_offset + i
-            display_name = cmd.name.lstrip('/')  # / 제거
-            
-            # 선택된 항목 하이라이트
-            if actual_index == self.selected_index:
-                style = 'class:command-selected'
-            else:
-                style = 'class:command-name'
-            
-            result.append((style, f"  {display_name:<18}"))
-            result.append(('class:command-desc', f"{cmd.description}\n"))
-        
-        # 스크롤 인디케이터
-        total = len(self.filtered_commands)
-        if self.scroll_offset + self.max_visible < total:
-            result.append(('class:scroll-indicator', "  ▼\n"))
-        
-        # 페이지네이션
-        page = (self.scroll_offset // self.max_visible) + 1
-        total_pages = (total + self.max_visible - 1) // self.max_visible
-        result.append(('class:pagination', f"  ({page}/{total_pages})\n"))
-        
-        return FormattedText(result)
-    
-    def _get_toolbar_text(self):
-        """하단 상태 바 텍스트"""
-        path = self.workspace
-        if len(path) > 40:
-            path = path[:15] + "\\..." + path[-22:]
-        
-        model_info = f"/model {self.model_name}" if self.model_name else ""
-        center_info = "streaming"
-        
-        return FormattedText([
-            ('class:toolbar-path', f" {path}"),
-            ('class:toolbar-center', f"     {center_info}"),
-            ('class:toolbar-model', f"     {model_info}"),
-        ])
-```
+#### 3.1.2 입력 및 필터링 메커니즘 (`Buffer.on_text_changed`)
 
-#### 3.1.2 스타일 정의
+입력 `Buffer`의 텍스트가 변경될 때마다 필터링이 수행됩니다.
+- 입력값이 `/`로 시작하고 띄어쓰기가 없을 때: `CommandRegistry.filter_commands` 호출
+- 제안 목록이 조건부 컨테이너를 통해 즉시 화면에 노출 (전체 화면 너비 활용)
+
+#### 3.1.3 포맷팅 및 동적 렌더링 (`FormattedTextControl`)
+
+`FormattedTextControl`에 콜백 함수(`_render_suggestions`, `_render_toolbar`)를 연결하여, 커서 이동이나 브라우저 크기 조절 시마다 터미널 치수(`shutil.get_terminal_size()`)를 고려하여 동적으로 다시 그리도록 적용했습니다.
+
+- **명령어 이름 표시:** 명령어 이름의 슬래시(`/`) 접두사를 없애고(`lstrip('/')`), 가장 긴 명령어 길이에 맞춰 동적으로 간격을 띄워(`name_width`) 정렬합니다.
+- **테두리 제거:** 기본 프레임을 쓰지 않고 단순 텍스트 패딩만으로 Gemini CLI 같은 테두리 없는 "플랫화된(Flat)" UI를 완성했습니다.
+- **상태 바 하이라이트:** 3영역(좌, 중, 우) 간의 여백(`gap1`, `gap2`)을 동적으로 계산하여 끝과 끝에 정렬합니다.
+
+### 3.2 스타일(Style) 적용 내역
+
+명령어 제목과 설명을 명확히 구분하기 위한 어두운 테마 기반 스타일:
 
 ```python
-from prompt_toolkit.styles import Style
-
-gemini_style = Style.from_dict({
-    # 명령어 이름 (볼드/컬러)
-    'command-name': 'bold #d4d4d4',
-    'command-selected': 'bold bg:#3a3a3a #ffffff',
-    'command-desc': '#808080',
-    
-    # 스크롤 & 페이지네이션
-    'scroll-indicator': '#606060',
-    'pagination': '#606060',
-    
-    # 하단 상태 바
-    'toolbar-path': 'bold #a0a0a0',
-    'toolbar-center': '#707070',
-    'toolbar-model': 'bold #a0a0a0',
+GEMINI_STYLE = Style.from_dict({
+    'cmd-name':         'bold #e0e0e0',          # 기본 명령어 (단순 밝은회색)
+    'cmd-name-selected':'bold bg:#3a3a3a #ffffff', # 선택된 명령어 반전 (흰색/bg회색)
+    'cmd-desc':         '#707070',               # 설명 (dim)
+    'cmd-desc-selected':'bg:#3a3a3a #909090',    # 선택된 설명
+    'scroll-indicator':  '#505050',
+    'pagination':        '#606060',
+    'toolbar':           'bg:#1a1a2e #a0a0a0',   # 하단 상태 바 배경
+    'toolbar-path':      'bold',
+    'toolbar-center':    'italic',
+    'toolbar-model':     'bold',
 })
 ```
 
-#### 3.1.3 키 바인딩
+### 3.3 키 바인딩 제어 (`KeyBindings`)
 
-```python
-kb = KeyBindings()
+명령어 목록 컨트롤을 위한 커스텀 키 설정 내역입니다:
+- **`Up` / `Down`**: 명령어 선택 인덱스(`_selected_idx`) 증가/감소. 최대 가시 영역에 도달 시 스크롤 변수(`_scroll_offset`) 점진적 갱신.
+- **`Tab`**: 현재 선택된 명령어를 치환(완성)한 후 뒤에 띄어쓰기 한 칸 추가하고, 목록 비활성화.
+- **`Enter`**: 제안 영역이 열려있는 상태라면 Tab과 동일하게 완성 수행(`completion confirm`); 이미 완성 상태이거나 제안 영역이 닫혀 있다면 명령어 또는 대화를 AI로 전송.
+- **`Esc`**: 제안 영역 끄기 (`_show_suggestions = False`). 비어있는 상태에서 누를 경우 현재 입력값 전체 취소 및 즉시 반환.
 
-@kb.add('up')
-def _(event):
-    """명령어 선택 위로 이동"""
-    cli.selected_index = max(0, cli.selected_index - 1)
-    # 스크롤 조정
-    if cli.selected_index < cli.scroll_offset:
-        cli.scroll_offset = cli.selected_index
+### 3.4 대안 접근 평가 (`prompt_toolkit Completer`) vs 최종 구현 방향
 
-@kb.add('down')
-def _(event):
-    """명령어 선택 아래로 이동"""
-    total = len(cli.filtered_commands)
-    cli.selected_index = min(total - 1, cli.selected_index + 1)
-    # 스크롤 조정
-    if cli.selected_index >= cli.scroll_offset + cli.max_visible:
-        cli.scroll_offset = cli.selected_index - cli.max_visible + 1
-
-@kb.add('tab')
-def _(event):
-    """선택된 명령어를 입력에 적용"""
-    if cli.filtered_commands:
-        cmd = cli.filtered_commands[cli.selected_index]
-        event.app.current_buffer.text = cmd.name + ' '
-        event.app.current_buffer.cursor_position = len(cmd.name) + 1
-
-@kb.add('escape')
-def _(event):
-    """제안 목록 닫기"""
-    cli.filtered_commands = []
-```
-
-### 3.2 대안: prompt_toolkit Completer 커스터마이징
-
-`Application` 전체를 커스텀하지 않고, 기존 `PromptSession`의 Completer 표시 방식만 변경하는 접근:
-
-```python
-from prompt_toolkit.layout.menus import CompletionsMenu
-
-# 드롭다운 대신 MultiColumnCompletionsMenu 사용
-session = PromptSession(
-    completer=SlashCommandCompleter(registry),
-    complete_while_typing=True,
-    # 완성 메뉴를 아래에 표시하도록 커스텀
-    complete_style=CompleteStyle.MULTI_COLUMN,
-)
-```
-
-> **한계**: `prompt_toolkit`의 내장 CompletionsMenu는 레이아웃 위치(위/아래)를 간단히 전환할 수 있지만, Gemini CLI처럼 `/` 없이 이름만 표시하거나 페이지네이션을 추가하기 어려움.
-> **결론**: 커스텀 레이아웃(3.1 방식) 권장.
+FSD 계획 시 고려했던 `PromptSession` + 커스텀 Completer 드롭다운 스타일 지정 방식(`CompleteStyle.MULTI_COLUMN` 등)은, *"/ 접두사를 제외하고 보여주면서 실제 완성은 접두사까지 하도록"* 하는 세부 제어나 *목록 하단에 `(1/16)` 형태의 페이지네이션 등을 삽입*하는데 극히 제약적이었습니다. 이에 따라 최종적으로 **저수준 `Application` API 조작 기반**으로 구현 우회하여 Gemini CLI 요구사항을 완벽히 수용했습니다.
 
 ---
 

@@ -125,10 +125,11 @@ def main():
     # DiffViewer 초기화
     diff_viewer = DiffViewer()
 
-    # CLI 입력 처리기 초기화 (슬래시 명령어 인라인 제안 + 하단 상태 바)
+    # CLI 입력 처리기 초기화 (Gemini CLI 스타일 TUI)
     input_handler = CLIInputHandler(
         workspace=workspace,
-        model_name=CLAUDE_MODEL_ID
+        model_name=CLAUDE_MODEL_ID,
+        streaming_mode=True
     )
 
     print_menu()
@@ -138,7 +139,7 @@ def main():
     while True:
         try:
             # 자동 완성이 적용된 입력 받기
-            user_input = input_handler.get_input("\n👤 You: ")
+            user_input = input_handler.get_input("> ")
 
             if not user_input:
                 continue
@@ -158,10 +159,12 @@ def main():
 
                 elif command == '/stream':
                     streaming_mode = True
+                    input_handler.update_streaming_mode(True)
                     print("✅ 스트리밍 모드로 변경되었습니다.")
 
                 elif command == '/nostream':
                     streaming_mode = False
+                    input_handler.update_streaming_mode(False)
                     print("✅ 논스트리밍 모드로 변경되었습니다.")
 
                 elif command == '/history':
