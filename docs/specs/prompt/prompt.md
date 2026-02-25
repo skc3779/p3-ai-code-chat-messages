@@ -300,3 +300,11 @@ claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파
 - FSD 문서의 내용이 길지 않게 작성해줘
 
 ---
+
+
+gemini-ai-chat-code01.py 의 /save 명령어의 버그를 개선해줘
+- /save 시 프로젝트 소스코드의 위치를 workspace 경로로 인식하는 문제 발생.
+- /workspace <파일경로> 의 위치를 base 경로로 설정되도록 한다. 
+- BUG v1.0.0042 버전으로 문서화해줘
+
+

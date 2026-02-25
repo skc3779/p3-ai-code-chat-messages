@@ -225,9 +225,10 @@ def main():
                 elif command == '/workspace':
                     if args:
                         new_workspace = Path(args).resolve()
-                        if new_workspace.exists() and new_workspace.is_dir():
-                            assistant.file_manager = FileManager(str(new_workspace))
-                            assistant.context_builder = ContextBuilder(assistant.file_manager)
+                        if assistant.change_workspace(str(new_workspace)):
+                            file_watcher.stop()
+                            file_watcher = FileWatcher(str(new_workspace), callback=on_file_changed)
+                            workspace = str(new_workspace)
                             print(f"✅ 작업 디렉토리 변경: {new_workspace}")
                         else:
                             print(f"❌ 유효하지 않은 디렉토리: {args}")

@@ -407,6 +407,25 @@ def main():
         return full_text
 
     # 기존 메서드 호환성 유지 (chat 메서드 내에서 호출됨)
+    def change_workspace(self, new_workspace_dir: str) -> bool:
+        """작업 디렉토리를 변경하고 관련 내부 참조를 모두 갱신합니다."""
+        new_path = Path(new_workspace_dir).resolve()
+
+        if not new_path.exists() or not new_path.is_dir():
+            return False
+
+        self.file_manager = FileManager(str(new_path))
+        self.context_builder = ContextBuilder(self.file_manager)
+        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
+        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
+        self.git_manager = GitManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
+        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
+        self.response_parser = ResponseParser(self.file_manager)
+
+        return True
+
     # extract_and_save_files는 이전과 동일하게 유지
     def extract_and_save_files(self, response: str) -> List[str]:
         """

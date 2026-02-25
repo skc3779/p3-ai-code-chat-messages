@@ -45,7 +45,7 @@ class FileManager:
         """파일/디렉토리를 무시해야 하는지 확인"""
         return self.ignorer.should_ignore(path)
 
-    def list_files(self, extensions: Optional[List[str]] = None, max_depth: int = 5) -> List[Path]:
+    def list_files(self, extensions: Optional[List[str]] = None, max_depth: int = 11) -> List[Path]:
         """작업 공간의 파일 목록 반환"""
         files = []
 
