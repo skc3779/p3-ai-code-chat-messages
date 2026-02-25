@@ -302,9 +302,17 @@ claude-ai-chat-code01.py , gen-ai-chat-code01.py 의 /tree 명령시 .ignore 파
 ---
 
 
-gemini-ai-chat-code01.py 의 /save 명령어의 버그를 개선해줘
+gemini-ai-chat-code01.py 의 /save 명령어의 BUG를 개선하는 문서를 만들어줘
 - /save 시 프로젝트 소스코드의 위치를 workspace 경로로 인식하는 문제 발생.
 - /workspace <파일경로> 의 위치를 base 경로로 설정되도록 한다. 
-- BUG v1.0.0042 버전으로 문서화해줘
+- gemini-ai-chat-code01.py, claude-ai-chat-code01.py 모두 동일한 문제가 있는지 검토한다.
+- specs/requirements 폴더에 BUG v1.0.0042 버전으로 문서화한다.
 
+
+---
+
+gemini cli 처럼 명령 프롬프트 하단에 `/` 입력시 사용가능한 명령어 목록을 보여주도록 개선하는 FSD 문서를 만들어줘.
+- `/s` 입력시 `/save` 명령어만 보여주는 것이 아니라 사용가능한 명령어 목록을 필터링해서 보여준다.
+- `/` 입력시 사용가능한 명령어 목록을 보여준다.
+- specs/requirements 폴더에 FSD v1.0.046 버전으로 문서화한다.
 
