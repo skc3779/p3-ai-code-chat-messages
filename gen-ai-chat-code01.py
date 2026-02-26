@@ -308,7 +308,7 @@ def main():
 
                     # 질문이 없는 경우 멀티라인 입력
                     if not question:
-                        question = input_handler.get_multiline_legacy()
+                        question = input_handler.get_multiline()
                         if not question.strip():
                             print("❌ 질문을 입력하세요.")
                             continue
@@ -354,7 +354,7 @@ def main():
 
                     # 질문이 없는 경우 멀티라인 입력
                     if not question:
-                        question = input_handler.get_multiline_legacy()
+                        question = input_handler.get_multiline()
                         if not question.strip():
                             print("❌ 질문을 입력하세요.")
                             continue
@@ -457,19 +457,8 @@ def main():
                                 print(f"\n⚠️  {result['error']}")
 
                 elif command == '/multiline':
-                    print("📝 멀티라인 모드 (종료: /end)")
-                    lines = []
-                    
-                    while True:
-                        line = input("... ")
-                        
-                        if line.strip() == '/end':
-                            break
-                        
-                        lines.append(line)
-                    
-                    multiline_input = "\n".join(lines).strip()
-                    
+                    multiline_input = input_handler.get_multiline()
+
                     if multiline_input:
                         last_response = assistant.chat(multiline_input, streaming=streaming_mode)
                         if '```filename:' in last_response:

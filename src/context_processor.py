@@ -62,7 +62,8 @@ class ContextProcessor:
                 print("🤖 AI 처리 중...")
                 response = self.assistant.chat(
                     prompt,
-                    streaming=self.streaming
+                    streaming=self.streaming,
+                    include_context=False
                 )
                 processed_count += 1
 

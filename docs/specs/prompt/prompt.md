@@ -409,3 +409,53 @@ FSD 문서는 제미나이와 동일한 명령어 필터링 기능 등 잘 설�
 - specs/requirements 폴더에 FSD로 시작하는 v1.0.050 버전의 문서를 작성한다
 - `/context`, `/auto_context`, `/multiline` 명령어 입력시 입력 및 붙여넣기 텍스트 삭제 및 수정이 가능하도록 한다.
 - gen-ai-chat-code01.py, claude-ai-chat-code01.py, gemini-ai-chat-code01.py 모두 동일한 기능이 구현되도록 한다.
+
+```cmd
+> /multiline
+📝 멀티라인 모드 (Meta+Enter로 전송, /end로 종료, Esc 취소)
+... a
+텍스트 1
+텍스트 2
+텍스트 3
+
+```
+
+Meta+Enter로 멀티라인 종료 기능은 작동하지 않음, 신규라인에서 `/end` 입력시 자동삭제되고 위쪽 라인의 마지막 입력위치로 커서 이동되는 버그
+- Meta+Enter: 전송 기능 필요 없음 제거 (mac, windows 충돌 이슈)
+- `/end`로 만 종료되도록 기능을 개선하는 BUG 문서를 만들어줘
+- specs/requirements 폴더에 BUG로 시작하는 v1.0.050 버전의 문서를 작성한다
+- gen-ai-chat-code01.py, claude-ai-chat-code01.py, gemini-ai-chat-code01.py 모두 동일한 기능이 구현되도록 한다.
+
+---
+
+```cmd
+> /multiline
+📝 멀티라인 모드 (Meta+Enter로 전송, /end로 종료, Esc 취소)
+... a
+b
+c
+```
+
+멀티라인 입력시 기존아래와 같이 입력이 이쁘게 되지 않음. 
+
+```cmd
+> /multiline
+📝 멀티라인 모드 (Meta+Enter로 전송, /end로 종료, Esc 취소)
+... a
+... b
+... c
+... /end
+```
+
+---
+
+FSD v1.0.049, v1.0.050 버전에 대한 RELEASE 문서를 작성해줘
+- specs/releases 폴더에 RELEASE로 각각의 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서의 내용이 길지 않게 작성해줘  
+
+--- 
+
+제미나이 CLI처럼 ANSI Art (안시 아트) 를 이용해서 프로그램 실행시 이쁘게 출력되도록 개선해줘
+- 문구는 `>> GEN AI CODE CHAT <<`
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.051 버전의 문서를 작성한다
+- gen-ai-chat-code01.py, claude-ai-chat-code01.py, gemini-ai-chat-code01.py 모두 동일한 기능이 구현되도록 한다.

@@ -26,6 +26,7 @@ try:
     from prompt_toolkit.layout import Layout, HSplit, Window, ConditionalContainer
     from prompt_toolkit.layout.controls import BufferControl, FormattedTextControl
     from prompt_toolkit.layout.processors import BeforeInput
+    from prompt_toolkit.layout.margins import PromptMargin
     from prompt_toolkit.styles import Style
     PROMPT_TOOLKIT_AVAILABLE = True
 except ImportError:
@@ -388,6 +389,127 @@ class CLIInputHandler:
         except KeyboardInterrupt:
             print()
             return ""
+
+    def get_multiline(self) -> str:
+        """
+        멀티라인 텍스트 편집 입력 (prompt_toolkit 사용)
+
+        - ↑↓←→ 키로 전체 텍스트 탐색 및 수정
+        - Enter: 줄바꿈 (마지막 줄이 /end이면 입력 확정)
+        - Esc / Ctrl+C: 입력 취소
+        - prompt_toolkit 미설치 시 get_multiline_legacy() 폴백
+        """
+        if not PROMPT_TOOLKIT_AVAILABLE or not getattr(self, '_use_prompt_toolkit', False):
+            return self.get_multiline_legacy()
+
+        print("📝 멀티라인 모드 (/end로 종료, Esc 취소)")
+
+        try:
+            multiline_result = [None]  # 클로저용 리스트
+
+            # ── 멀티라인 Buffer ──
+            ml_buffer = Buffer(multiline=True)
+
+            # ── 키 바인딩 ──
+            kb = KeyBindings()
+
+            @kb.add('enter')
+            def _enter(event):
+                buf = event.app.current_buffer
+                text = buf.text
+                lines = text.split('\n')
+
+                # 현재 줄(마지막 줄)이 /end이면 종료
+                # 커서가 마지막 줄에 있고 그 줄이 /end인지 확인
+                doc = buf.document
+                current_line = doc.current_line_before_cursor + doc.current_line_after_cursor
+                if current_line.strip() == '/end':
+                    # /end 줄을 제거한 결과 생성
+                    result_lines = []
+                    for line in lines:
+                        if line.strip() != '/end':
+                            result_lines.append(line)
+                    multiline_result[0] = '\n'.join(result_lines)
+                    event.app.exit()
+                else:
+                    # 일반 줄바꿈
+                    buf.insert_text('\n')
+
+            @kb.add('escape')
+            def _escape(event):
+                multiline_result[0] = ""
+                event.app.exit()
+
+            @kb.add('c-c')
+            def _ctrl_c(event):
+                multiline_result[0] = ""
+                event.app.exit()
+
+            @kb.add('c-d')
+            def _ctrl_d(event):
+                # Ctrl+D: 현재 내용으로 확정
+                multiline_result[0] = event.app.current_buffer.text
+                event.app.exit()
+
+            # ── 레이아웃 ──
+            # PromptMargin: 모든 줄에 '... ' 프롬프트 표시
+            multiline_margin = PromptMargin(
+                get_prompt=lambda: [('', '... ')],
+                get_continuation=lambda width, line_number, is_soft_wrap: [('', '... ')],
+            )
+
+            input_window = Window(
+                BufferControl(
+                    buffer=ml_buffer,
+                ),
+                left_margins=[multiline_margin],
+                wrap_lines=True,
+            )
+
+            # 안내 바
+            help_bar = Window(
+                FormattedTextControl(
+                    FormattedText([
+                        ('class:toolbar', ' /end: 전송 | Esc: 취소 '),
+                    ])
+                ),
+                height=1,
+                style='class:toolbar',
+            )
+
+            layout = Layout(
+                HSplit([
+                    input_window,
+                    help_bar,
+                ])
+            )
+
+            app = Application(
+                layout=layout,
+                key_bindings=kb,
+                style=GEMINI_STYLE if PROMPT_TOOLKIT_AVAILABLE else None,
+                full_screen=False,
+                erase_when_done=True,
+            )
+
+            # 실행
+            app.run()
+
+            result = multiline_result[0]
+            if result is None:
+                result = ml_buffer.text
+
+            # erase_when_done으로 지워진 내용 복원 표시
+            if result and result.strip():
+                preview_lines = result.split('\n')
+                for line in preview_lines:
+                    print(f"... {line}")
+
+            return result.strip() if result else ""
+
+        except Exception as e:
+            print(f"⚠️  멀티라인 입력 오류, 레거시 모드로 전환: {e}")
+            return self.get_multiline_legacy()
 
     def get_multiline_legacy(self) -> str:
         """레거시 멀티라인 입력 (/multiline 명령어용)"""

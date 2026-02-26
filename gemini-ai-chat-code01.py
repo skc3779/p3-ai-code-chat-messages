@@ -129,14 +129,7 @@ def main():
 
             # 멀티라인 모드 처리
             if user_input.lower() == '/multiline':
-                print("📝 멀티라인 입력 모드 (/end로 종료):")
-                lines = []
-                while True:
-                    line = input("... ")
-                    if line.lower() == '/end':
-                        break
-                    lines.append(line)
-                user_input = '\n'.join(lines)
+                user_input = cli_handler.get_multiline()
                 if not user_input:
                     continue
 
@@ -173,7 +166,8 @@ def main():
                         continue
                     patterns = args.split()
                     matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
-                    matched_files = matcher.match_patterns(patterns)
+                    all_files = assistant.file_manager.list_files()
+                    matched_files = matcher.filter_files(all_files, patterns)
                     if matched_files:
                         for filepath in matched_files[:5]:
                             content = assistant.file_manager.read_file(filepath)
@@ -199,7 +193,7 @@ def main():
                         question = context_parts[1]
                     else:
                         # 질문이 없는 경우 (멀티라인 입력)
-                        question = cli_handler.get_multiline_legacy()
+                        question = cli_handler.get_multiline()
                         if not question.strip():
                             print("❌ 질문을 입력하세요.")
                             continue
@@ -239,7 +233,7 @@ def main():
 
                     # 질문이 없는 경우 멀티라인 입력
                     if not question:
-                        question = cli_handler.get_multiline_legacy()
+                        question = cli_handler.get_multiline()
                         if not question.strip():
                             print("❌ 질문을 입력하세요.")
                             continue
