@@ -29,42 +29,95 @@ def load_environment():
     load_dotenv(dotenv_path=env_path, override=True)
 
 
+def _supports_color() -> bool:
+    """현재 터미널이 ANSI 컬러를 지원하는지 확인하고 Windows에서는 ANSI 모드를 활성화"""
+    import sys
+    # NO_COLOR 환경변수 확인 (표준 no-color.org 규약)
+    if os.environ.get('NO_COLOR'):
+        return False
+    # stdout이 TTY인지 확인 (파이프 출력 시 색상 코드 제거)
+    if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+        return False
+    # Windows: ANSI 가상 터미널 처리 활성화 시도
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+            return True
+        except Exception:
+            return False
+    return True
+
+
+def print_banner():
+    """ANSI Art 배너 출력 - >> GEN AI CODE CHAT <<"""
+    use_color = _supports_color()
+
+    # ANSI 컬러 정의
+    C  = '\033[96m' if use_color else ''   # Bright Cyan
+    M  = '\033[95m' if use_color else ''   # Bright Magenta
+    G  = '\033[92m' if use_color else ''   # Bright Green
+    Y  = '\033[93m' if use_color else ''   # Bright Yellow
+    B  = '\033[94m' if use_color else ''   # Blue
+    BD = '\033[1m'  if use_color else ''   # Bold
+    R  = '\033[0m'  if use_color else ''   # Reset
+
+    banner = f"""
+{C}╔══════════════════════════════════════════════════════════════════════════════╗{R}
+{C}║{R}                                                                              {C}║{R}
+{C}║{R}        {M}{BD} ██████╗ ███████╗███╗   ██╗      █████╗ ██╗{R}                           {C}║{R}
+{C}║{R}        {M}{BD}██╔════╝ ██╔════╝████╗  ██║     ██╔══██╗██║{R}                           {C}║{R}
+{C}║{R}        {G}{BD}██║  ███╗█████╗  ██╔██╗ ██║     ███████║██║{R}                           {C}║{R}
+{C}║{R}        {G}{BD}██║   ██║██╔══╝  ██║╚██╗██║     ██╔══██║██║{R}                           {C}║{R}
+{C}║{R}        {Y}{BD}╚██████╔╝███████╗██║ ╚████║     ██║  ██║██║{R}                           {C}║{R}
+{C}║{R}        {Y}{BD} ╚═════╝ ╚══════╝╚═╝  ╚═══╝     ╚═╝  ╚═╝╚═╝{R}                           {C}║{R}
+{C}║{R}                                                                              {C}║{R}
+{C}║{R}         {B}{BD}>> GEN AI CODE CHAT <<!{R}                                              {C}║{R}
+{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  v1.0.051{R}                           {C}║{R}
+{C}║{R}                                                                              {C}║{R}
+{C}╚══════════════════════════════════════════════════════════════════════════════╝{R}
+"""
+    print(banner)
+
+
 def print_menu():
     """메뉴 출력"""
     print("\n" + "=" * 80)
     print("🤖 Claude Code Assistant - AI 코딩 어시스턴트")
     print("=" * 80)
     print("명령어:")
-    print("  /files [ext]        - 프로젝트 파일 목록 (예: /files .py .js)")
-    print("  /tree               - 프로젝트 구조 보기")
-    print("  /read <pattern>     - 파일 읽기 (예: /read src/*.py)")
-    print("  /context <pattern>  - 컨텍스트 포함하여 질문 (예: /context src/*.py)")
-    print("  /auto_context      - 파일 단위 자동 반복 처리 (예: /auto_context [original/*.md])")
-    print("  /save               - AI 응답에서 파일 추출 및 저장")
-    print("  /workspace [path]   - 작업 디렉토리 변경")
-    print("  /stream             - 스트리밍 모드 활성화 (기본값)")
-    print("  /nostream           - 논스트리밍 모드 활성화")
-    print("  /history            - 대화 히스토리 보기")
-    print("  /clear              - 대화 히스토리 초기화")
-    print("  /save_history [name]- 대화 히스토리 파일로 저장")
-    print("  /load_history <name>- 저장된 히스토리 로드")
-    print("  /list_history       - 저장된 히스토리 목록")
-    print("  /run [lang]         - 마지막 응답의 코드 실행 (python/js/bash)")
-    print("  /diff               - 마지막 응답의 코드 변경사항 Diff 표시")
-    print("  /apply              - Diff 내용을 실제 파일에 적용")
-    print("  /multiline          - 멀티라인 입력 모드 (종료: /end)")
-    print("  /tokens             - 토큰 사용량 확인")
-    print("  /shell <cmd>        - 쉘 명령어 실행 (안전 모드)")
-    print("  /shell! <cmd>       - 쉘 명령어 실행 (위험 명령 허용)")
-    print("  /template <name>    - 시스템 프롬프트 템플릿 변경")
-    print("  /template_list      - 사용 가능한 템플릿 목록")
-    print("  /template_reset     - 기본 시스템 프롬프트로 복귀")
-    print("  /watch <pattern>    - 파일 변경 감시 시작 (예: /watch *.py)")
-    print("  /unwatch <pattern>  - 파일 변경 감시 중지")
-    print("  /watch_list         - 감시 중인 패턴 목록")
-    print("  /help               - 도움말 보기")
-    print("  /quit               - 종료")
-    print("=" * 80)
+    print("  /files [ext]          - 프로젝트 파일 목록 (예: /files .py .js)")
+    print("  /tree                 - 프로젝트 구조 보기")
+    print("  /read <pattern>       - 파일 읽기 (예: /read src/*.py)")
+    print("  /context <pattern>    - 컨텍스트 포함하여 질문 (예: /context src/*.py)")
+    print("  /auto_context         - 파일 단위 자동 반복 처리 (예: /auto_context [original/*.md])")
+    print("  /save                 - AI 응답에서 파일 추출 및 저장")
+    print("  /workspace [path]     - 작업 디렉토리 변경")
+    print("  /stream               - 스트리밍 모드 활성화 (기본값)")
+    print("  /nostream             - 논스트리밍 모드 활성화")
+    print("  /history              - 대화 히스토리 보기")
+    print("  /clear                - 대화 히스토리 초기화")
+    print("  /save_history [name]  - 대화 히스토리 파일로 저장")
+    print("  /load_history <name>  - 저장된 히스토리 로드")
+    print("  /list_history         - 저장된 히스토리 목록")
+    print("  /run [lang]           - 마지막 응답의 코드 실행 (python/js/bash)")
+    print("  /diff                 - 마지막 응답의 코드 변경사항 Diff 표시")
+    print("  /apply                - Diff 내용을 실제 파일에 적용")
+    print("  /multiline            - 멀티라인 입력 모드 (종료: /end)")
+    print("  /tokens               - 토큰 사용량 확인")
+    print("  /shell <cmd>          - 쉘 명령어 실행 (안전 모드)")
+    print("  /shell! <cmd>         - 쉘 명령어 실행 (위험 명령 허용)")
+    print("  /llm_config <lang>    - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
+    print("  /template <name>      - 시스템 프롬프트 템플릿 변경")
+    print("  /template_list        - 사용 가능한 템플릿 목록")
+    print("  /template_reset       - 기본 시스템 프롬프트로 복귀")
+    print("  /watch <pattern>      - 파일 변경 감시 시작 (예: /watch *.py)")
+    print("  /unwatch <pattern>    - 파일 변경 감시 중지")
+    print("  /watch_list           - 감시 중인 패턴 목록")
+    print("  /help                 - 도움말 보기")
+    print("  /quit                 - 종료")
     print("=" * 80)
     print("\n💡 사용 예시:")
     print("  - '/context *.py 이 프로젝트에 README.md를 작성해줘'")
@@ -133,9 +186,11 @@ def main():
         streaming_mode=True
     )
 
+    print_banner()
     print_menu()
     print(f"\n📂 현재 작업 디렉토리: {workspace}")
     print(f"🔄 현재 모드: {'스트리밍' if streaming_mode else '논스트리밍'}")
+
 
     while True:
         try:

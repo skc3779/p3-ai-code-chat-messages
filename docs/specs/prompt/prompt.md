@@ -449,7 +449,7 @@ c
 
 ---
 
-FSD v1.0.049, v1.0.050 버전에 대한 RELEASE 문서를 작성해줘
+FSD v1.0.049, v1.0.050, v1.0.051 버전에 대한 RELEASE 문서를 작성해줘
 - specs/releases 폴더에 RELEASE로 각각의 버전의 릴리즈 노트를 작성한다  
 - RELEASE 문서의 내용이 길지 않게 작성해줘  
 
