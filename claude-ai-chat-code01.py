@@ -39,6 +39,7 @@ def print_menu():
     print("  /tree               - 프로젝트 구조 보기")
     print("  /read <pattern>     - 파일 읽기 (예: /read src/*.py)")
     print("  /context <pattern>  - 컨텍스트 포함하여 질문 (예: /context src/*.py)")
+    print("  /auto_context      - 파일 단위 자동 반복 처리 (예: /auto_context [original/*.md])")
     print("  /save               - AI 응답에서 파일 추출 및 저장")
     print("  /workspace [path]   - 작업 디렉토리 변경")
     print("  /stream             - 스트리밍 모드 활성화 (기본값)")
@@ -311,6 +312,74 @@ def main():
                         include_context=True,
                         file_patterns=file_patterns
                     )
+
+                elif command == '/auto_context':
+                    if not args:
+                        print("❌ 형식: /auto_context <파일패턴> [질문]")
+                        print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
+                        print("예: /auto_context src/*.py")
+                        print("예: /auto_context src/*.py 이 코드를 리팩토링해줘")
+                        print("예: /auto_context [src/*.py, docs/*.md] README 작성해줘")
+                        continue
+
+                    file_patterns = []
+                    question = ""
+
+                    # [pattern1, pattern2] 형식 확인
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            patterns_str = args[1:end_idx]
+                            file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
+                            question = args[end_idx+1:].strip()
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        # 단일 패턴 지원
+                        parts = args.split(maxsplit=1)
+                        file_patterns = [parts[0]]
+                        question = parts[1] if len(parts) >= 2 else ""
+
+                    # 질문이 없는 경우 멀티라인 입력
+                    if not question:
+                        question = input_handler.get_multiline_legacy()
+                        if not question.strip():
+                            print("❌ 질문을 입력하세요.")
+                            continue
+
+                    # 파일 매칭
+                    pattern_matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
+                    all_files = assistant.file_manager.list_files()
+                    matched_files = pattern_matcher.filter_files(all_files, file_patterns)
+
+                    if not matched_files:
+                        print(f"❌ 패턴 {file_patterns}에 해당하는 파일이 없습니다.")
+                        continue
+
+                    # 매칭 파일 목록 표시
+                    print(f"\n📂 매칭된 파일 {len(matched_files)}개:")
+                    for i, f in enumerate(matched_files, 1):
+                        rel = f.relative_to(assistant.file_manager.workspace_dir)
+                        print(f"  {i}. {rel}")
+
+                    # 사용자 확인
+                    try:
+                        confirm = input("\n▶ 자동 처리를 시작하시겠습니까? (Y/n): ").strip().lower()
+                        if confirm == 'n':
+                            print("⏭️  취소됨")
+                            continue
+                    except (EOFError, KeyboardInterrupt):
+                        continue
+
+                    # 자동 처리 실행
+                    from src.context_processor import ContextProcessor
+                    processor = ContextProcessor(
+                        assistant=assistant,
+                        file_manager=assistant.file_manager,
+                        streaming=streaming_mode
+                    )
+                    processor.process_files(matched_files, question)
 
                 elif command == '/save':
                     if not last_response:

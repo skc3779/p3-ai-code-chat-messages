@@ -30,6 +30,7 @@ class CommandRegistry:
             CommandInfo('/tree', '프로젝트 구조 보기', '/tree'),
             CommandInfo('/read', '파일 읽기', '/read <pattern>'),
             CommandInfo('/context', '컨텍스트 포함하여 질문', '/context <pattern> [질문]'),
+            CommandInfo('/auto_context', '파일 단위 자동 반복 처리', '/auto_context <pattern> [질문]'),
             CommandInfo('/save', 'AI 응답에서 파일 추출 및 저장', '/save'),
             CommandInfo('/workspace', '작업 디렉토리 변경', '/workspace [path]'),
             CommandInfo('/stream', '스트리밍 모드 활성화', '/stream'),
