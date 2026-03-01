@@ -31,8 +31,8 @@ def _get_providers() -> dict[str, BaseProvider]:
 SUPPORTED_MODELS = {
     "gemini/gemini-3-pro-preview": "Google Gemini 3 Pro",
     "gemini/gemini-3-flash-preview": "Google Gemini 3 Flash",
-    "claude/claude-3-5-haiku-latest": "Anthropic Claude 3.5 Haiku",
-    "claude/claude-sonnet-4-5": "Anthropic Claude Sonnet 4.5",
+    "claude/claude-haiku-4-5": "Anthropic Claude Haiku 4.5",
+    "claude/claude-sonnet-4-6": "Anthropic Claude Sonnet 4.6",
     "genai/gpt-oss-120B-medium": "Samsung SCI Portal GPT-OSS 120B Medium",
 }
 

@@ -1,10 +1,12 @@
 """
 GenAI Provider - Samsung SCI Portal (gpt-oss-120B-medium) 형식 변환
 FSD v1.0.052 §4.4.3 / REQ-052-005
+FSD v1.0.053 §4.4.3 / REQ-053-008 — Tool Call 미지원 시 에러 반환
 
 ★ SCI Portal 커스텀 REST API 형식으로 변환
 ★ 인증: X-Client-Key / X-Client-Secret 헤더
 ★ 모델: gpt-oss-120B-medium (120B 파라미터, Medium 등급)
+★ Tool Call 미지원 — tools 요청 시 에러 반환
 """
 
 import os
@@ -14,7 +16,7 @@ import logging
 import httpx
 from typing import AsyncIterator
 
-from providers.base import BaseProvider, ProviderError
+from providers.base import BaseProvider, ProviderError, truncate_for_log
 from models import (
     ChatCompletionRequest,
     ChatCompletionResponse,
@@ -35,6 +37,7 @@ class GenAIProvider(BaseProvider):
     - messages[{role, content}] → prompt[{role, text}]
     - temperature/max_tokens → parameters 객체
     - 인증: X-Client-Key / X-Client-Secret 헤더
+    - ★ tools 요청 시 에러 반환 (미지원)
     """
 
     def __init__(self):
@@ -54,6 +57,15 @@ class GenAIProvider(BaseProvider):
             timeout=120.0,
         )
 
+    def _check_tool_support(self, request: ChatCompletionRequest):
+        """★ Tool Call 미지원 검사 (REQ-053-008)"""
+        if request.tools:
+            raise ProviderError(
+                "GenAI (SCI Portal) does not support tool calling. "
+                "Use gemini/ or claude/ provider for tool_calls.",
+                status_code=400,
+            )
+
     def _transform_request(self, request: ChatCompletionRequest) -> dict:
         """
         OpenAI 형식 → SCI Portal 형식 변환
@@ -62,7 +74,8 @@ class GenAIProvider(BaseProvider):
         return {
             "model_id": request.model,  # "gpt-oss-120B-medium"
             "prompt": [
-                {"role": m.role, "text": m.content} for m in request.messages
+                {"role": m.role, "text": m.content or ""} for m in request.messages
+                if m.role != "tool"  # tool 메시지 제외
             ],
             "parameters": {
                 "temperature": request.temperature if request.temperature is not None else 0.7,
@@ -72,12 +85,15 @@ class GenAIProvider(BaseProvider):
 
     async def chat(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         """SCI Portal API 호출 → OpenAI 형식 응답 변환 (429 재시도 포함)"""
+        self._check_tool_support(request)
         payload = self._transform_request(request)
+        logger.info(f"GenAI chat request: model={request.model}")
 
         resp = await self._retry_on_429(
             lambda: self.client.post(self.base_url, json=payload)
         )
         data = resp.json()
+        logger.info(f"GenAI chat response: {truncate_for_log(data, 500)}")
 
         # SCI Portal 응답 → OpenAI 형식 변환
         content = data.get("response", data.get("text", data.get("result", str(data))))
@@ -105,6 +121,7 @@ class GenAIProvider(BaseProvider):
         에러 핸들링 포함.
         """
         try:
+            self._check_tool_support(request)
             result = await self.chat(request)
             content = result.choices[0].message.content
 
@@ -112,6 +129,9 @@ class GenAIProvider(BaseProvider):
             yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
             yield "data: [DONE]\n\n"
 
+        except ProviderError as e:
+            logger.error(f"GenAI tool error: {e}")
+            yield self._error_chunk(str(e))
         except Exception as e:
             logger.error(f"GenAI stream error: {e}")
             yield self._error_chunk(f"GenAI API error: {str(e)}")

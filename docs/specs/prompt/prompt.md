@@ -513,3 +513,17 @@ response = client.chat.completions.create(
     messages=[{"role": "user", "content": "Hello"}],
 )
 ```
+
+---
+
+FSD_v1.0.052_openai-compatible-proxy.md 에는 tool_call 기능이 빠져있어. tool_call 기능이 포함된 FSD_v1.0.053_openai-compatible-proxy.md 문서를 만들어줘.
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.053 버전의 문서를 작성한다
+- FSD_v1.0.052_openai-compatible-proxy.md 참고한다.
+- SRS_v1.0.052_openai-compatible-provider_v2.md 참고한다.
+- 위 내용에 이해가 안되는 부분이 있다면 질문하면서 나의 피드백을 받아 처리해줘.
+- AI SDK 공식 문서 - OpenAI Compatible : https://sdk.vercel.ai/providers/openai-compatible-providers
+  - 해당문서의 tool_call 관련 구현 내용을 참고한다.
+
+---
+
+@beautifulMention@beautifulMention 동일하게 응답에 대한 로그를 출력하도록 해줘

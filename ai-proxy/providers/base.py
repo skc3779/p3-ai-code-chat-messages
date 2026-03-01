@@ -19,6 +19,27 @@ logger = logging.getLogger("ai-proxy")
 MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # 초 (지수 백오프: 2s, 4s, 8s)
 
+# 로그 출력 기본 최대 길이
+DEFAULT_LOG_MAX_LEN = 300
+
+
+def truncate_for_log(data, max_len: int = DEFAULT_LOG_MAX_LEN) -> str:
+    """
+    로그 출력용 문자열 변환 + 잘라내기.
+
+    - dict/list → JSON 문자열로 변환
+    - 문자열이 max_len보다 짧으면 전체 반환
+    - 길면 max_len까지만 반환 + '...(truncated)' 접미사
+    """
+    if isinstance(data, (dict, list)):
+        text = json.dumps(data, ensure_ascii=False)
+    else:
+        text = str(data)
+
+    if len(text) <= max_len:
+        return text
+    return text[:max_len] + "...(truncated)"
+
 
 class ProviderError(Exception):
     """Provider에서 발생하는 에러 (상태 코드 포함)"""
