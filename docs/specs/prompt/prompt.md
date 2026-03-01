@@ -497,3 +497,19 @@ SRS_v1.0.052_openai-compatible-provider_v2.md 기준으로 코드를 전체 작�
 - SRS_v1.0.052_openai-compatible-provider_v2.md 참고한다.
 - OpenCode Custom Provider 스펙 참고 : https://opencode.ai/docs/providers#custom  
 - 위 내용에 이해가 안되는 부분이 있다면 질문하면서 나의 피드백을 받아 처리해줘.
+
+---
+
+```bash
+# 1. 서버 실행
+cd ai-proxy
+python proxy_server.py
+
+# 2. Python에서 사용
+from openai import OpenAI
+client = OpenAI(base_url="http://localhost:8000/v1", api_key="proxy-secret-key")
+response = client.chat.completions.create(
+    model="gemini/gemini-3-pro-preview",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```

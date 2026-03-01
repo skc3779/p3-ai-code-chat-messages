@@ -494,23 +494,23 @@ curl http://localhost:8000/health
 
 # 모델 목록
 curl http://localhost:8000/v1/models \
-  -H "Authorization: Bearer proxy-secret-key"
+  -H "Authorization: Bearer ai-proxy-secret-key"
 
 # Gemini 호출
 curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer proxy-secret-key" \
+  -H "Authorization: Bearer ai-proxy-secret-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"gemini/gemini-3-pro-preview","messages":[{"role":"user","content":"Hello"}]}'
 
 # Claude 호출
 curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer proxy-secret-key" \
+  -H "Authorization: Bearer ai-proxy-secret-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"claude/claude-3-5-haiku-latest","messages":[{"role":"user","content":"Hello"}]}'
 
 # GenAI 호출
 curl -X POST http://localhost:8000/v1/chat/completions \
-  -H "Authorization: Bearer proxy-secret-key" \
+  -H "Authorization: Bearer ai-proxy-secret-key" \
   -H "Content-Type: application/json" \
   -d '{"model":"genai/gpt-oss-120B-medium","messages":[{"role":"user","content":"Hello"}]}'
 ```

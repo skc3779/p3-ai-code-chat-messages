@@ -1,0 +1,50 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ai-proxy": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "AI Proxy (GenAI/Claude/Gemini)",
+      "options": {
+        "baseURL": "http://localhost:8000/v1",
+        "apiKey": "{env:PROXY_API_KEY}"
+      },
+      "models": {
+        "genai/gpt-oss-120B-medium": {
+          "name": "GenAI GPT-OSS 120B Medium (SCI Portal)",
+          "limit": {
+            "context": 200000,
+            "output": 4096
+          }
+        },
+        "claude/claude-haiku-4-5": {
+          "name": "Claude Haiku 4.5 (Anthropic)",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        },
+        "claude/claude-sonnet-4-6": {
+          "name": "Claude Sonnet 4.6 (Anthropic)",
+          "limit": {
+            "context": 200000,
+            "output": 65536
+          }
+        },
+        "gemini/gemini-3-pro-preview": {
+          "name": "Gemini 3 Pro (Google)",
+          "limit": {
+            "context": 1048576,
+            "output": 65536
+          }
+        },
+        "gemini/gemini-3-flash-preview": {
+          "name": "Gemini 3 Flash (Google)",
+          "limit": {
+            "context": 1048576,
+            "output": 65536
+          }
+        }
+      }
+    }
+  }
+}
