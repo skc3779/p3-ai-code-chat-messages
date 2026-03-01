@@ -459,3 +459,10 @@ FSD v1.0.049, v1.0.050, v1.0.051 버전에 대한 RELEASE 문서를 작성해줘
 - 문구는 `>> GEN AI CODE CHAT <<`
 - specs/requirements 폴더에 FSD로 시작하는 v1.0.051 버전의 문서를 작성한다
 - gen-ai-chat-code01.py, claude-ai-chat-code01.py, gemini-ai-chat-code01.py 모두 동일한 기능이 구현되도록 한다.
+
+---
+
+README-claude-ai-chat-code01.md README-gemini-ai-chat-code01.md README-gen-ai-chat-code01.md 파일의 내용을 업데이트 해줘
+- specs/releases 및 specs/requirements 폴더의 파일들을 참고해서 업데이트 해줘
+
+---

@@ -12,6 +12,24 @@ from typing import List, Tuple
 
 class ContextProcessor:
     """파일 단위 자동 반복 처리기"""
+    
+    def fix_unbalance_backticks(self, text: str) -> str:
+        """
+        텍스트에서 닫히지 않은 백틱을 수정
+        
+        Args:
+            text: 수정할 텍스트
+            
+        Returns:
+            수정된 텍스트
+        """
+        
+        backtick_count = text.count("```")
+        if backtick_count % 2 != 0:
+            if not text.endswith("\n"):
+                text += "\n"
+            text += "```"
+        return text
 
     def __init__(self, assistant, file_manager, streaming: bool = True):
         """
@@ -69,7 +87,7 @@ class ContextProcessor:
 
                 # 4. 응답에서 파일 추출 및 자동 저장
                 if response:
-                    saved = self._auto_save_files(response)
+                    saved = self._auto_save_files(self.fix_unbalance_backticks(response))
                     saved_count += len(saved)
 
                     if not saved:
