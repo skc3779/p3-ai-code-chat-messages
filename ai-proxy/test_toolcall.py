@@ -1,4 +1,4 @@
-"""FSD v1.0.053 Tool Call 테스트"""
+"""FSD v1.0.054 GenAI Tool Call 에뮬레이션 테스트"""
 import httpx
 import json
 
@@ -11,14 +11,14 @@ def test(name, **kwargs):
     print(f"  {name}")
     print(f"{'='*60}")
     try:
-        r = httpx.post(f"{BASE}/v1/chat/completions", headers=HEADERS, json=kwargs, timeout=30)
+        r = httpx.post(f"{BASE}/v1/chat/completions", headers=HEADERS, json=kwargs, timeout=60)
         print(f"  Status: {r.status_code}")
         d = r.json()
         if "error" in d or "detail" in d:
-            print(f"  Error: {json.dumps(d, ensure_ascii=False)[:200]}")
+            print(f"  Error: {json.dumps(d, ensure_ascii=False)[:300]}")
         else:
             msg = d["choices"][0]["message"]
-            print(f"  content: {str(msg.get('content', ''))[:100]}")
+            print(f"  content: {str(msg.get('content', ''))[:200]}")
             print(f"  tool_calls: {msg.get('tool_calls')}")
             print(f"  finish_reason: {d['choices'][0].get('finish_reason')}")
     except Exception as e:
@@ -38,37 +38,56 @@ WEATHER_TOOL = {
     },
 }
 
-# TC-053-008: 하위 호환 (tools 없는 기존 요청)
-test(
-    "TC-053-008: 하위 호환 (tools 없이)",
-    model="gemini/gemini-3-pro-preview",
-    messages=[{"role": "user", "content": "Say hello in one word"}],
-)
+WRITE_TOOL = {
+    "type": "function",
+    "function": {
+        "name": "write",
+        "description": "Write content to a file",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "filePath": {"type": "string", "description": "File path"},
+                "content": {"type": "string", "description": "File content"},
+            },
+            "required": ["filePath", "content"],
+        },
+    },
+}
 
-# TC-053-001: Gemini tool call
+# TC-054-007: 하위 호환 (tools 없이)
 test(
-    "TC-053-001: Gemini tool call",
-    model="gemini/gemini-3-pro-preview",
-    messages=[{"role": "user", "content": "서울의 현재 날씨를 알려줘"}],
-    tools=[WEATHER_TOOL],
-    tool_choice="auto",
-)
-
-# TC-053-003: Claude tool call
-test(
-    "TC-053-003: Claude tool call",
-    model="claude/claude-haiku-4-5",
-    messages=[{"role": "user", "content": "서울의 현재 날씨를 알려줘"}],
-    tools=[WEATHER_TOOL],
-    tool_choice="auto",
-)
-
-# TC-053-007: GenAI tool call (미지원 → 에러)
-test(
-    "TC-053-007: GenAI tool call (미지원)",
+    "TC-054-007: GenAI 하위 호환 (tools 없이)",
     model="genai/gpt-oss-120B-medium",
-    messages=[{"role": "user", "content": "서울의 현재 날씨"}],
-    tools=[WEATHER_TOOL],
+    messages=[{"role": "user", "content": "Say hello"}],
 )
 
-print("\n✅ 테스트 완료")
+# TC-054-001: GenAI tool call (에뮬레이션)
+test(
+    "TC-054-001: GenAI tool call (에뮬레이션)",
+    model="genai/gpt-oss-120B-medium",
+    messages=[{"role": "user", "content": "Get weather for Seoul"}],
+    tools=[WEATHER_TOOL],
+    tool_choice="auto",
+)
+
+# TC-054-001b: GenAI write tool call
+test(
+    "TC-054-001b: GenAI write tool call",
+    model="genai/gpt-oss-120B-medium",
+    messages=[{"role": "user", "content": "Write 'hello world' to hello.md file"}],
+    tools=[WRITE_TOOL],
+    tool_choice="required",
+)
+
+# Gemini 비교 테스트
+test(
+    "비교: Gemini tool call",
+    model="gemini/gemini-3-pro-preview",
+    messages=[{"role": "user", "content": "Get weather for Seoul"}],
+    tools=[WEATHER_TOOL],
+    tool_choice="auto",
+)
+
+print("\n" + "="*60)
+print("  테스트 완료")
+print("="*60)
