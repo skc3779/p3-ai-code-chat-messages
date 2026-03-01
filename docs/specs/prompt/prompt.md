@@ -466,3 +466,34 @@ README-claude-ai-chat-code01.md README-gemini-ai-chat-code01.md README-gen-ai-ch
 - specs/releases 및 specs/requirements 폴더의 파일들을 참고해서 업데이트 해줘
 
 ---
+
+claude code, gemini, gen-ai 등 제공 업체의 API ENDPOINT를 사용하는 방식에서 `@ai-sdk/openai-compatible` 의 OpenAI 호환 공급자를 이용하는 방식으로 ENDPOINT를 단일화 하고자 합니다. `@ai-sdk/openai-compatible` 스펙에 대해 이해하기 쉽게 문서화를 해줘.
+- claude code, gemini, gen-ai API ENDPOINT를 기준으로 가이드 샘플을 포함한다.
+- `@ai-sdk/openai-compatible` 의 내용을 꼭 이해가 필요한 부분에 대해서는 강조하면서 체계적으로 정리한다.
+- specs/api-specs 폴더에 SRS로 시작하는 v1.0.052 버전의 문서를 작성한다.
+
+
+## 참고  
+- OpenAI Compatible Providers : https://ai-sdk.dev/providers/openai-compatible-providers
+- Vercel AI SDK : https://github.com/vercel/ai/tree/main/packages/openai-compatible
+
+---
+
+목표에 그린 흐름도가 내가 이해한 내용과 같은 지 확인해줘.
+
+GenAI,Claude,Gemini Provider 는 OpenAI 호환 인터페이스를 지원하는 로컬 API ENDPOINT 이며, 
+각각의 로컬 API ENDPOINT 에서 기존 GenAI,Claude,Gemini 의 API 서버로 요청을 전달하고 응답을 받는 방식으로 구현되는 방식으로 너가 해당문서를 작성한 것이 맞는지 검토해주고 만일 아니라면 수정해줘.
+
+위 내용에 이해가 안되는 부분이 있다면 질문하면서 나의 피드백을 받아 처리해줘.
+
+
+
+---
+
+SRS_v1.0.052_openai-compatible-provider_v2.md 기준으로 코드를 전체 작성하기 전에.
+로컬 프록시 서버 (Python FastAPI) 서버와 OpenCode 의 Custom Provider 를 이용한 로컬 API ENDPOINT가 잘 구축되었는지 먼저 해보고, 전체 코드를 개선하려구 합니다. 이에 `로컬 프록시 서버 (Python FastAPI) 서버` 구축을 위한 FSD 문서를 만들어줘.
+
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.052 버전의 문서를 작성한다
+- SRS_v1.0.052_openai-compatible-provider_v2.md 참고한다.
+- OpenCode Custom Provider 스펙 참고 : https://opencode.ai/docs/providers#custom  
+- 위 내용에 이해가 안되는 부분이 있다면 질문하면서 나의 피드백을 받아 처리해줘.
