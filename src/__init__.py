@@ -20,6 +20,7 @@ from src.diff_viewer import DiffViewer
 from src.command_registry import CommandRegistry
 from src.context_processor import ContextProcessor
 from src.sensitive_filter import SensitiveWordFilter
+from src.genai_api_logger import GenAIApiLogger
 
 __all__ = [
     'FileManager',
@@ -42,4 +43,5 @@ __all__ = [
     'CommandRegistry',
     'ContextProcessor',
     'SensitiveWordFilter',
+    'GenAIApiLogger',
 ]

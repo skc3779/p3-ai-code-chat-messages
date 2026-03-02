@@ -654,3 +654,17 @@ context 에 민감단어가 들어가면 민감단어 사전짐 기능에 의해
 
 ---
 
+Gen AI 의 경우에는 AI 모델의 API로 전송 전에 Request Header, Request Body 의 내용을 아래 조건에 맞게 log 파일로 저장하는 기능의 FSD 문서를 작성해줘.
+
+- gen-ai-chat-code01.py, genai_assistant.py 를 꼼꼼히 검토한다.
+- log 파일은 `logs/gen-ai` 폴더에 생성한다.
+- log 파일은 JSON 형식으로 생성한다.
+- log 파일은 `request`와 `response`로 구분한다.
+- request 로그는 `gen-ai-request-ID-YYYYMMDDHHMMSS.json` 파일에 저장한다.
+- response 로그는 `gen-ai-response-ID-YYYYMMDDHHMMSS.json` 파일에 저장한다.
+- ID는 고유한 값인 `uuid`를 사용한다.
+- 해당 로그는 플래그를 통해 켜고 끌 수 있도록 한다.
+- `.env` 파일에 `GEN_AI_LOG_ENABLED=true`로 설정하면 로그가 생성되도록 한다.
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.062 버전의 문서를 작성한다.
+
+---

@@ -5,6 +5,7 @@ GenAICodeAssistant - GenAI API 코딩 어시스턴트 모듈
 
 import json
 import re
+import time as _time
 from typing import List, Dict, Optional
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
 from .sensitive_filter import SensitiveWordFilter
+from .genai_api_logger import GenAIApiLogger
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -53,6 +55,9 @@ class GenAICodeAssistant:
 
         # REQ-058-001: 민감 단어 필터 초기화
         self.sensitive_filter = SensitiveWordFilter()
+
+        # REQ-062-001: API 로거 초기화
+        self.api_logger = GenAIApiLogger(workspace_dir)
 
         # LLM 언어 설정 (기본값 없음)
         self.llm_config = LLMConfigProvider()
@@ -274,6 +279,13 @@ class GenAICodeAssistant:
     def _chat_streaming(self, api_url: str, body: Dict,
                         user_message: str, full_message: str) -> str:
         """스트리밍 모드 채팅"""
+        # REQ-062-003: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=True, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
@@ -281,10 +293,17 @@ class GenAICodeAssistant:
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-062-004: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=True, assembled_content=response.text,
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
 
         client = sseclient.SSEClient(response)
         result_message = ""
+        chunk_count = 0
 
         print("\n🤖 AI: ", end="", flush=True)
 
@@ -298,12 +317,21 @@ class GenAICodeAssistant:
                     if event_status == 'CHUNK' and content:
                         print(content, end="", flush=True)
                         result_message += content
+                        chunk_count += 1
                     elif event_status == 'DONE':
                         break
                 except json.JSONDecodeError:
                     continue
 
         print("\n")
+
+        # REQ-062-004: 스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=True, assembled_content=result_message,
+            chunk_count=chunk_count,
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
 
         # 히스토리에 추가
         self.conversation_history.append(f"[User Context]\n{user_message}")
@@ -315,6 +343,13 @@ class GenAICodeAssistant:
     def _chat_non_streaming(self, api_url: str, body: Dict,
                             original_message: str, full_message: str) -> str:
         """논스트리밍 모드 채팅"""
+        # REQ-062-003: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=False, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
@@ -322,10 +357,23 @@ class GenAICodeAssistant:
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-062-004: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=False, response_body={"error": response.text},
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
 
         result = response.json()
         content = result.get('content', '')
+
+        # REQ-062-004: 논스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=False, response_body=result,
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
 
         print(f"\n🤖 AI: {content}\n")
 
