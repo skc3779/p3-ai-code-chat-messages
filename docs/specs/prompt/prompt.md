@@ -535,3 +535,18 @@ genai_provider.py 에 endpoint url 구조가 올바르게 반영되어 있지 �
 - gen-ai api의 request header, request body, response body 의 구조를 꼼꼼히 하고, genai_provider.py 에 올바른 endpoint url 구조를 반영하도록 수정한다. 
 - README-gen-ai-chat-code.md 의 API 사양을 참고한다.
 - specs/requirements 폴더에 FSD로 시작하는 v1.0.055 버전의 문서를 작성한다.
+
+---
+
+
+SCI Portal API는 네이티브 Tool Calling을 지원하지 않아 genai_provider.py에 아래와 같은 로직을 반영했는데 `GenAI GPT-OSS 120B Medium` 모델이 잘 작동하려면,
+초기 
+→ 프록시가 OpenAI tools 형식을 프롬프트 인젝션으로 변환하여 에뮬레이션
+→ AI 응답에서 tool call 패턴을 파싱하여 OpenAI tool_calls 형식으로 반환
+
+---
+
+Gen AI 모델의 경우는 genai_provider.py 에서 contents 필드가 문자열 배열로 되어 있는데, 객체가 들어가는 경우 `Input should be a valid string` 오류가 발생합니다. 검토하고 개선 바랍니다.
+- proxy_server.py 와 genai_provider.py 를 꼼꼼히 검토한다.
+- contents 배열에 문자열이 아닌 객체가 들어가는 경우 문자열로 변환 후 등록 등록되도록 처리한다.
+- 완료시 specs/requirements 폴더에 BUG로 시작하는 v1.0.057 버전의 문서를 작성한다.

@@ -1,6 +1,7 @@
 """
 OpenAI Chat Completions API 호환 Pydantic 스키마
 FSD v1.0.052 §4.3 + FSD v1.0.053 §4.3 Tool Call 지원
+BUG v1.0.057 — content 필드 타입 확장 (str | list 지원)
 """
 
 from pydantic import BaseModel, Field
@@ -39,10 +40,43 @@ class ToolCall(BaseModel):
 
 class ChatMessage(BaseModel):
     """채팅 메시지 (tool call 지원)"""
-    role: str                                       # "system"|"user"|"assistant"|"tool"
-    content: Optional[str] = None                   # ★ None 허용 (tool_calls 시)
-    tool_calls: Optional[list[ToolCall]] = None     # assistant의 도구 호출
-    tool_call_id: Optional[str] = None              # tool role 메시지의 호출 ID
+    role: str                                                    # "system"|"user"|"assistant"|"tool"
+    content: Optional[Union[str, list]] = None                   # ★ str 또는 content parts 배열 허용 (BUG-057)
+    tool_calls: Optional[list[ToolCall]] = None                  # assistant의 도구 호출
+    tool_call_id: Optional[str] = None                           # tool role 메시지의 호출 ID
+
+    def content_as_str(self) -> str:
+        """
+        content를 문자열로 변환하여 반환 (BUG-057).
+
+        OpenAI API에서 content는 두 가지 형태가 가능:
+          1. 문자열: "Hello" → 그대로 반환
+          2. content parts 배열: [{"type":"text","text":"Hello"}, ...] → text 부분 결합
+
+        Returns:
+            str: 변환된 텍스트 문자열 (None이면 빈 문자열)
+        """
+        if self.content is None:
+            return ""
+        if isinstance(self.content, str):
+            return self.content
+        if isinstance(self.content, list):
+            # content parts 배열: [{"type": "text", "text": "..."}] 형태
+            parts = []
+            for part in self.content:
+                if isinstance(part, dict):
+                    if part.get("type") == "text":
+                        parts.append(part.get("text", ""))
+                    else:
+                        # image_url 등 텍스트가 아닌 타입은 설명으로 변환
+                        parts.append(f"[{part.get('type', 'unknown')}]")
+                elif isinstance(part, str):
+                    parts.append(part)
+                else:
+                    parts.append(str(part))
+            return "\n".join(parts)
+        # 기타 타입은 문자열로 변환
+        return str(self.content)
 
 
 class ChatCompletionRequest(BaseModel):

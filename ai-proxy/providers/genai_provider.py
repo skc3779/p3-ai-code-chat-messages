@@ -4,6 +4,7 @@ FSD v1.0.052 §4.4.3 / REQ-052-005
 FSD v1.0.053 §4.4.3 / REQ-053-008
 FSD v1.0.054 / REQ-054-001~009 — Tool Call 프록시 레벨 에뮬레이션
 FSD v1.0.055 / REQ-055-001~007 — Endpoint URL 구조 수정
+BUG v1.0.057 — content 필드 문자열 변환 (str | list 안전 처리)
 
 ★ SCI Portal 커스텀 REST API 형식으로 변환
 ★ 인증: X-Lego-Client-Id / X-Lego-Client-Secret 헤더 (REQ-055-002)
@@ -167,13 +168,13 @@ class GenAIProvider(BaseProvider):
         for m in request.messages:
             if m.role == "system":
                 # system 메시지는 systemPrompt 최상위 키로 분리 (REQ-055-003)
-                system_prompt += (m.content or "")
+                system_prompt += m.content_as_str()  # BUG-057: content_as_str() 사용
 
             elif m.role == "assistant" and m.tool_calls:
                 # ★ assistant + tool_calls → 텍스트 변환 (REQ-054-008)
                 tool_text_parts = []
-                if m.content:
-                    tool_text_parts.append(m.content)
+                if m.content_as_str():
+                    tool_text_parts.append(m.content_as_str())  # BUG-057
                 for tc in m.tool_calls:
                     tool_text_parts.append(
                         f"[Tool Call] {tc.function.name}({tc.function.arguments})"
@@ -192,15 +193,15 @@ class GenAIProvider(BaseProvider):
                                     tool_name = tc.function.name
                                     break
                 contents.append(
-                    f"[Tool Result{' for ' + tool_name if tool_name else ''}]\n{m.content or ''}"
+                    f"[Tool Result{' for ' + tool_name if tool_name else ''}]\n{m.content_as_str()}"  # BUG-057
                 )
 
             else:
                 # user/assistant → 문자열로 변환 (genai_assistant.py 방식)
                 if m.role == "user":
-                    contents.append(f"[User Context]\n{m.content or ''}")
+                    contents.append(f"[User Context]\n{m.content_as_str()}")  # BUG-057
                 else:
-                    contents.append(f"[Assistant Context]\n{m.content or ''}")
+                    contents.append(f"[Assistant Context]\n{m.content_as_str()}")  # BUG-057
 
         # ★ tools → 시스템 프롬프트에 도구 정의 삽입 (REQ-054-001)
         tools_prompt = self._build_tools_prompt(request)

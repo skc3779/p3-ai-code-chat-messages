@@ -119,15 +119,15 @@ class ClaudeProvider(BaseProvider):
             m = request.messages[i]
 
             if m.role == "system":
-                system_msg = m.content
+                system_msg = m.content_as_str()  # BUG-057: content_as_str() 사용
 
             elif m.role == "assistant" and m.tool_calls:
                 # assistant + tool_calls → Anthropic content blocks
                 content_blocks = []
 
                 # 텍스트가 있으면 text 블록 추가
-                if m.content:
-                    content_blocks.append({"type": "text", "text": m.content})
+                if m.content_as_str():  # BUG-057
+                    content_blocks.append({"type": "text", "text": m.content_as_str()})
 
                 # tool_calls → tool_use 블록 변환
                 for tc in m.tool_calls:
@@ -154,7 +154,7 @@ class ClaudeProvider(BaseProvider):
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tm.tool_call_id or "",
-                        "content": tm.content or "",
+                        "content": tm.content_as_str(),  # BUG-057
                     })
                     i += 1
                 messages.append({"role": "user", "content": tool_results})
@@ -162,7 +162,7 @@ class ClaudeProvider(BaseProvider):
 
             else:
                 # 일반 user/assistant 메시지
-                messages.append({"role": m.role, "content": m.content or ""})
+                messages.append({"role": m.role, "content": m.content_as_str()})  # BUG-057
 
             i += 1
 
