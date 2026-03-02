@@ -34,6 +34,7 @@ SUPPORTED_MODELS = {
     "claude/claude-haiku-4-5": "Anthropic Claude Haiku 4.5",
     "claude/claude-sonnet-4-6": "Anthropic Claude Sonnet 4.6",
     "genai/gpt-oss-120B-medium": "Samsung SCI Portal GPT-OSS 120B Medium",
+    "genai/gpt-oss-120B-medium": "Samsung SCI Portal GPT-OSS 120B Medium",
 }
 
 

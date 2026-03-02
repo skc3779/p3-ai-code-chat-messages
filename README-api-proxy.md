@@ -1,10 +1,10 @@
 # AI Proxy Server
 
-**OpenAI 호환 로컬 프록시 서버** — GenAI, Claude, Gemini를 단일 API 엔드포인트로 통합
+**OpenAI 호환 로컬 프록시 서버** — GenAI, Claude, Gemini를 단일 API 엔드포인트로 통합 (Tool Call 지원)
 
 ## 개요
 
-AI Proxy Server는 Python FastAPI 기반의 로컬 프록시 서버로, 3개 AI 공급자(GenAI/SCI Portal, Anthropic Claude, Google Gemini)의 API를 **OpenAI 호환 형식의 단일 엔드포인트**로 통합합니다. 클라이언트에서는 OpenAI SDK의 `base_url`만 프록시 주소로 변경하면, 모델명만 바꿔서 모든 공급자를 동일한 코드로 사용할 수 있습니다.
+AI Proxy Server는 Python FastAPI 기반의 로컬 프록시 서버로, 3개 AI 공급자(GenAI/SCI Portal, Anthropic Claude, Google Gemini)의 API를 **OpenAI 호환 형식의 단일 엔드포인트**로 통합합니다. **Tool Call(도구 호출)** 기능을 포함하여 모든 공급자에서 동일한 OpenAI tools 인터페이스를 사용할 수 있습니다. 클라이언트에서는 OpenAI SDK의 `base_url`만 프록시 주소로 변경하면, 모델명만 바꿔서 모든 공급자를 동일한 코드로 사용할 수 있습니다.
 
 ## 아키텍처
 
@@ -21,11 +21,12 @@ AI Proxy Server는 Python FastAPI 기반의 로컬 프록시 서버로, 3개 AI 
 │        AI Proxy Server (FastAPI)             │
 │        http://localhost:8000                 │
 │                                              │
-│  ┌────────────┐ ┌────────────┐ ┌───────────┐ │
-│  │  Gemini    │ │  Claude    │ │  GenAI    │ │
-│  │  Provider  │ │  Provider  │ │  Provider │ │
-│  │ (패스스루) │ │ (형식변환) │ │ (형식변환)│ │
-│  └─────┬──────┘ └─────┬──────┘ └─────┬─────┘ │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐│
+│  │  Gemini    │ │  Claude    │ │  GenAI     ││
+│  │  Provider  │ │  Provider  │ │  Provider  ││
+│  │ (패스스루  │ │ (형식변환  │ │ (형식변환  ││
+│  │ +TC 정규화)│ │ +TC 변환)  │ │ +TC 에뮬) ││
+│  └─────┬──────┘ └─────┬──────┘ └─────┬──────┘│
 └────────┼──────────────┼──────────────┼───────┘
          ▼              ▼              ▼
    Google API      Anthropic      SCI Portal
@@ -37,14 +38,15 @@ AI Proxy Server는 Python FastAPI 기반의 로컬 프록시 서버로, 3개 AI 
 ```
 ai-proxy/
 ├── proxy_server.py              ← FastAPI 메인 서버 + uvicorn 실행
-├── models.py                    ← Pydantic 요청/응답/에러 스키마
+├── models.py                    ← Pydantic 요청/응답/에러/Tool Call 스키마
 ├── router.py                    ← 모델명 접두사 기반 Provider 라우팅
 ├── providers/
 │   ├── __init__.py              ← Provider 클래스 일괄 export
-│   ├── base.py                  ← Provider 추상 클래스 (chat, stream)
-│   ├── gemini_provider.py       ← Gemini (OpenAI 호환 패스스루)
-│   ├── claude_provider.py       ← Claude (Anthropic ↔ OpenAI 변환)
-│   └── genai_provider.py        ← GenAI SCI Portal (커스텀 ↔ OpenAI 변환)
+│   ├── base.py                  ← Provider 추상 클래스 + 공통 유틸
+│   ├── gemini_provider.py       ← Gemini (패스스루 + Tool Call 정규화)
+│   ├── claude_provider.py       ← Claude (Tool Use ↔ OpenAI Tool Call 변환)
+│   └── genai_provider.py        ← GenAI SCI Portal (Tool Call 에뮬레이션)
+├── test_toolcall.py             ← Tool Call 통합 테스트 스크립트
 ├── .env                         ← API 키 (Git 미추적)
 ├── .env.example                 ← .env 템플릿 (Git 추적)
 └── requirements.txt             ← Python 의존성
@@ -176,13 +178,13 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 ## 지원 모델
 
-| 모델 ID | 공급자 | 설명 |
-|---------|--------|------|
-| `gemini/gemini-3-pro-preview` | Google | Gemini 3 Pro |
-| `gemini/gemini-3-flash-preview` | Google | Gemini 3 Flash |
-| `claude/claude-3-5-haiku-latest` | Anthropic | Claude 3.5 Haiku |
-| `claude/claude-sonnet-4-5` | Anthropic | Claude Sonnet 4.5 |
-| `genai/gpt-oss-120B-medium` | Samsung SCI Portal | GPT-OSS 120B Medium |
+| 모델 ID | 공급자 | 설명 | Tool Call |
+|---------|--------|------|:---------:|
+| `gemini/gemini-3-pro-preview` | Google | Gemini 3 Pro | ✅ 네이티브 |
+| `gemini/gemini-3-flash-preview` | Google | Gemini 3 Flash | ✅ 네이티브 |
+| `claude/claude-haiku-4-5` | Anthropic | Claude Haiku 4.5 | ✅ 변환 |
+| `claude/claude-sonnet-4-6` | Anthropic | Claude Sonnet 4.6 | ✅ 변환 |
+| `genai/gpt-oss-120B-medium` | Samsung SCI Portal | GPT-OSS 120B Medium | ✅ 에뮬레이션 |
 
 ## API 사양
 
@@ -194,7 +196,7 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 | `GET` | `/v1/models` | 지원 모델 목록 |
 | `GET` | `/health` | 서버 상태 확인 |
 
-### Request
+### Request (텍스트)
 
 ```json
 {
@@ -209,7 +211,33 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 }
 ```
 
-### Response
+### Request (Tool Call)
+
+```json
+{
+  "model": "gemini/gemini-3-pro-preview",
+  "messages": [
+    {"role": "user", "content": "Get weather for Seoul"}
+  ],
+  "tools": [{
+    "type": "function",
+    "function": {
+      "name": "get_weather",
+      "description": "Get current weather for a city",
+      "parameters": {
+        "type": "object",
+        "properties": {
+          "city": {"type": "string", "description": "City name"}
+        },
+        "required": ["city"]
+      }
+    }
+  }],
+  "tool_choice": "auto"
+}
+```
+
+### Response (텍스트)
 
 ```json
 {
@@ -221,11 +249,33 @@ curl -X POST http://localhost:8000/v1/chat/completions \
     "message": {"role": "assistant", "content": "Hello! How can I help?"},
     "finish_reason": "stop"
   }],
-  "usage": {
-    "prompt_tokens": 12,
-    "completion_tokens": 8,
-    "total_tokens": 20
-  }
+  "usage": {"prompt_tokens": 12, "completion_tokens": 8, "total_tokens": 20}
+}
+```
+
+### Response (Tool Call)
+
+```json
+{
+  "id": "chatcmpl-1709312345",
+  "object": "chat.completion",
+  "model": "gemini/gemini-3-pro-preview",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": null,
+      "tool_calls": [{
+        "id": "call_abc123",
+        "type": "function",
+        "function": {
+          "name": "get_weather",
+          "arguments": "{\"city\":\"Seoul\"}"
+        }
+      }]
+    },
+    "finish_reason": "tool_calls"
+  }]
 }
 ```
 
@@ -246,24 +296,29 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 `stream: true` 설정 시 Server-Sent Events 형식으로 응답:
 
 ```
+data: {"choices":[{"delta":{"role":"assistant"},"index":0}]}
+
 data: {"choices":[{"delta":{"content":"Hello"},"index":0}]}
 
-data: {"choices":[{"delta":{"content":"! How"},"index":0}]}
+data: {"choices":[{"delta":{"content":" world!"},"index":0}]}
 
-data: {"choices":[{"delta":{"content":" can I help?"},"index":0}]}
+data: {"choices":[{"delta":{},"finish_reason":"stop","index":0}]}
 
 data: [DONE]
 ```
 
 ## 공급자별 변환 로직
 
-### Gemini (패스스루)
+### Gemini (패스스루 + Tool Call 정규화)
 
-- Google 공식 OpenAI 호환 엔드포인트 사용  
-- 변환 없이 요청/응답 그대로 전달
+- Google 공식 OpenAI 호환 엔드포인트 사용
 - Base URL: `https://generativelanguage.googleapis.com/v1beta/openai`
+- 요청/응답 그대로 전달 (tools/tool_choice 포함)
+- ★ **스트리밍 tool_calls 정규화**: `index` 자동 추가, `extra_content` 제거
 
-### Claude (형식 변환)
+### Claude (형식 변환 + Tool Use 양방향 변환)
+
+**기본 메시지 변환:**
 
 | OpenAI 형식 | → | Anthropic 형식 |
 |-------------|---|----------------|
@@ -273,7 +328,19 @@ data: [DONE]
 | `choices[0].message.content` | ← | `content[0].text` |
 | `usage.prompt_tokens` | ← | `usage.input_tokens` |
 
-### GenAI / SCI Portal (커스텀 변환)
+**Tool Call 변환:**
+
+| OpenAI 형식 | ↔ | Anthropic 형식 |
+|-------------|---|----------------|
+| `tools[{function:{name,parameters}}]` | → | `tools[{name,input_schema}]` |
+| `tool_choice: "auto"` | → | `{type: "auto"}` |
+| `tool_choice: "required"` | → | `{type: "any"}` |
+| `tool_calls[{id,function}]` | ← | `content[{type:"tool_use"}]` |
+| `finish_reason: "tool_calls"` | ← | `stop_reason: "tool_use"` |
+
+### GenAI / SCI Portal (커스텀 변환 + Tool Call 에뮬레이션)
+
+**기본 메시지 변환:**
 
 | OpenAI 형식 | → | SCI Portal 형식 |
 |-------------|---|-----------------|
@@ -282,6 +349,15 @@ data: [DONE]
 | `temperature` | → | `parameters.temperature` |
 | `max_tokens` | → | `parameters.max_output_tokens` |
 | `Authorization: Bearer` | → | `X-Client-Key` + `X-Client-Secret` |
+
+**★ Tool Call 에뮬레이션** (SCI Portal은 네이티브 Tool Calling 미지원):
+
+| OpenAI 형식 | → | 에뮬레이션 방식 |
+|-------------|---|---------|
+| `tools` 배열 | → | 시스템 프롬프트에 도구 정의 텍스트 삽입 |
+| `tool_choice` | → | 프롬프트 지시문 (`"none"`=미삽입, `"required"`=강제 사용) |
+| `tool` role 메시지 | → | `[Tool Result for {name}]` 텍스트로 변환 |
+| AI 응답 `` ```tool_call``` `` | ← | 파싱하여 `tool_calls` 형식으로 변환 |
 
 ## OpenCode 연동
 
@@ -304,8 +380,11 @@ data: [DONE]
 | 문서 | 설명 |
 |------|------|
 | [SRS v1.0.052 v2](docs/specs/api-specs/SRS_v1.0.052_openai-compatible-provider_v2.md) | 소프트웨어 요구사항 명세 (FastAPI 아키텍처) |
-| [FSD v1.0.052](docs/specs/requirements/FSD_v1.0.052_openai-compatible-proxy.md) | 기능 설계 문서 |
+| [FSD v1.0.052](docs/specs/requirements/FSD_v1.0.052_openai-compatible-proxy.md) | 기능 설계 — 프록시 서버 기본 구축 |
+| [FSD v1.0.053](docs/specs/requirements/FSD_v1.0.053_openai-compatible-proxy-toolcall.md) | 기능 설계 — Tool Call 기능 추가 |
+| [FSD v1.0.054 v2](docs/specs/requirements/FSD_v1.0.054_genai-provider-toolcall_v2.md) | 기능 설계 — GenAI Tool Call 에뮬레이션 |
 | [REP v1.0.052](docs/specs/reports/REP_v1.0.052_litellm-proxy-review.md) | LiteLLM 검토 보고서 (불필요 판정) |
+| [REP v1.0.054](docs/specs/reports/REP_v1.0.054_toolcall-implementation.md) | Tool Call 구현 보고서 |
 
 ## 라이선스
 

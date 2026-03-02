@@ -527,3 +527,11 @@ FSD_v1.0.052_openai-compatible-proxy.md 에는 tool_call 기능이 빠져있어.
 ---
 
 @beautifulMention@beautifulMention 동일하게 응답에 대한 로그를 출력하도록 해줘
+
+---
+
+genai_provider.py 에 endpoint url 구조가 올바르게 반영되어 있지 않습니다. 해당 오류를 반영한 FSD v1.0.055 문서를 작성해줘
+- gen-ai-chat-code01.py, genai_assistant.py, llm_config.py 등을 꼼꼼히 검토한다.
+- gen-ai api의 request header, request body, response body 의 구조를 꼼꼼히 하고, genai_provider.py 에 올바른 endpoint url 구조를 반영하도록 수정한다. 
+- README-gen-ai-chat-code.md 의 API 사양을 참고한다.
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.055 버전의 문서를 작성한다.

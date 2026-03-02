@@ -3,9 +3,13 @@ GenAI Provider - Samsung SCI Portal (gpt-oss-120B-medium) 형식 변환
 FSD v1.0.052 §4.4.3 / REQ-052-005
 FSD v1.0.053 §4.4.3 / REQ-053-008
 FSD v1.0.054 / REQ-054-001~009 — Tool Call 프록시 레벨 에뮬레이션
+FSD v1.0.055 / REQ-055-001~007 — Endpoint URL 구조 수정
 
 ★ SCI Portal 커스텀 REST API 형식으로 변환
-★ 인증: X-Client-Key / X-Client-Secret 헤더
+★ 인증: X-Lego-Client-Id / X-Lego-Client-Secret 헤더 (REQ-055-002)
+★ Endpoint: {ENDPOINT_URL}/openapi/chat/v1/messages (REQ-055-001)
+★ Request Body: modelIds, contents, llmConfig, isStream, systemPrompt (REQ-055-003)
+★ Response: event_status(CHUNK/DONE), content (REQ-055-004, REQ-055-005)
 ★ 모델: gpt-oss-120B-medium (120B 파라미터, Medium 등급)
 ★ Tool Call: 프롬프트 기반 에뮬레이션 (기존 genai_assistant.py 방식 이식)
   - tools → 시스템 프롬프트에 도구 정의 텍스트 삽입 (REQ-054-001)
@@ -47,11 +51,12 @@ class GenAIProvider(BaseProvider):
     """
     Samsung SCI Portal - 커스텀 REST API 형식 변환 + Tool Call 에뮬레이션
 
-    변환 로직:
-    - model → model_id
-    - messages[{role, content}] → prompt[{role, text}]
-    - temperature/max_tokens → parameters 객체
-    - 인증: X-Client-Key / X-Client-Secret 헤더
+    변환 로직 (FSD v1.0.055 수정):
+    - model → modelIds (배열)
+    - messages[{role, content}] → contents (문자열 배열) + systemPrompt (최상위 키)
+    - temperature/max_tokens → llmConfig 객체 (max_new_tokens, seed, top_k, top_p, temperature, repetition_penalty)
+    - 인증: X-Lego-Client-Id / X-Lego-Client-Secret 헤더
+    - Endpoint: {ENDPOINT_URL}/openapi/chat/v1/messages
     - ★ tools → 시스템 프롬프트 삽입 (REQ-054-001)
     - ★ 응답 → tool_call 패턴 파싱 (REQ-054-002)
     - ★ tool role → 텍스트 변환 (REQ-054-003)
@@ -65,13 +70,14 @@ class GenAIProvider(BaseProvider):
             "ENDPOINT_URL",
             "https://scisportaldev.samsungif.net/rest/genAi",
         )
+        # REQ-055-002: 올바른 인증 헤더 키 사용
         client_key = os.getenv("YOUR_CLIENT_KEY", "API_CLIENT_APP")
         client_secret = os.getenv("YOUR_CLIENT_SECRET", "")
 
         self.client = httpx.AsyncClient(
             headers={
-                "X-Client-Key": client_key,
-                "X-Client-Secret": client_secret,
+                "X-Lego-Client-Id": client_key,        # REQ-055-002
+                "X-Lego-Client-Secret": client_secret,  # REQ-055-002
                 "Content-Type": "application/json",
             },
             timeout=120.0,
@@ -142,19 +148,26 @@ class GenAIProvider(BaseProvider):
 
         return "\n".join(lines)
 
-    # ── Step 2: 요청 변환 (REQ-054-001, REQ-054-003) ──
+    # ── Step 2: 요청 변환 (REQ-055-003, REQ-054-001, REQ-054-003) ──
 
     def _transform_request(self, request: ChatCompletionRequest) -> dict:
         """
-        OpenAI 형식 → SCI Portal 형식 변환.
-        tools는 시스템 프롬프트에, tool role은 텍스트로 변환.
+        OpenAI 형식 → GenAI API (SCI Portal) 형식 변환.
+        FSD v1.0.055: genai_assistant.py와 동일한 API 형식 사용.
+
+        변환 규칙:
+        - messages → contents (문자열 배열) + systemPrompt (최상위 키)
+        - model → modelIds (배열)
+        - temperature/max_tokens → llmConfig 객체
+        - tools → systemPrompt에 도구 정의 삽입
         """
-        prompt = []
+        contents = []
+        system_prompt = ""
 
         for m in request.messages:
             if m.role == "system":
-                # system 메시지는 별도 처리 (SCI Portal은 prompt에 포함 가능)
-                prompt.append({"role": "system", "text": m.content or ""})
+                # system 메시지는 systemPrompt 최상위 키로 분리 (REQ-055-003)
+                system_prompt += (m.content or "")
 
             elif m.role == "assistant" and m.tool_calls:
                 # ★ assistant + tool_calls → 텍스트 변환 (REQ-054-008)
@@ -165,53 +178,51 @@ class GenAIProvider(BaseProvider):
                     tool_text_parts.append(
                         f"[Tool Call] {tc.function.name}({tc.function.arguments})"
                     )
-                prompt.append({
-                    "role": "assistant",
-                    "text": "\n".join(tool_text_parts),
-                })
+                contents.append(f"[Assistant Context]\n{chr(10).join(tool_text_parts)}")
 
             elif m.role == "tool":
-                # ★ tool role → user 텍스트 변환 (REQ-054-003)
+                # ★ tool role → 텍스트 변환 (REQ-054-003)
                 tool_name = ""
-                # tool_call_id로부터 tool name 추측 (가능한 경우)
+                # tool_call_id로부터 tool name 추적
                 if m.tool_call_id:
-                    # 이전 assistant 메시지에서 해당 tool_call_id의 name 찾기
                     for prev in request.messages:
                         if prev.role == "assistant" and prev.tool_calls:
                             for tc in prev.tool_calls:
                                 if tc.id == m.tool_call_id:
                                     tool_name = tc.function.name
                                     break
-                prompt.append({
-                    "role": "user",
-                    "text": f"[Tool Result{' for ' + tool_name if tool_name else ''}]\n{m.content or ''}",
-                })
+                contents.append(
+                    f"[Tool Result{' for ' + tool_name if tool_name else ''}]\n{m.content or ''}"
+                )
 
             else:
-                # 일반 user/assistant 메시지
-                prompt.append({"role": m.role, "text": m.content or ""})
+                # user/assistant → 문자열로 변환 (genai_assistant.py 방식)
+                if m.role == "user":
+                    contents.append(f"[User Context]\n{m.content or ''}")
+                else:
+                    contents.append(f"[Assistant Context]\n{m.content or ''}")
 
         # ★ tools → 시스템 프롬프트에 도구 정의 삽입 (REQ-054-001)
         tools_prompt = self._build_tools_prompt(request)
-
-        # 기존 system 메시지가 있으면 도구 정의를 추가, 없으면 새로 생성
         if tools_prompt:
-            system_found = False
-            for p in prompt:
-                if p["role"] == "system":
-                    p["text"] += tools_prompt
-                    system_found = True
-                    break
-            if not system_found:
-                prompt.insert(0, {"role": "system", "text": tools_prompt.strip()})
+            system_prompt += tools_prompt
+
+        # REQ-055-003, REQ-055-007: llmConfig 구성 (llm_config.py 기본값 기반)
+        llm_config = {
+            "max_new_tokens": request.max_tokens or 10240,
+            "seed": None,
+            "top_k": 14,
+            "top_p": 0.94,
+            "temperature": request.temperature if request.temperature is not None else 0.4,
+            "repetition_penalty": 1.04,
+        }
 
         return {
-            "model_id": request.model,
-            "prompt": prompt,
-            "parameters": {
-                "temperature": request.temperature if request.temperature is not None else 0.7,
-                "max_output_tokens": request.max_tokens or 4096,
-            },
+            "modelIds": [request.model],       # REQ-055-003: 배열 형식
+            "contents": contents,               # REQ-055-003: 문자열 배열
+            "llmConfig": llm_config,            # REQ-055-003: LLM 설정 객체
+            "isStream": False,                  # 프록시에서는 논스트리밍으로 수신 후 변환
+            "systemPrompt": system_prompt,      # REQ-055-003: 최상위 키
         }
 
     # ── Step 3: 응답 파싱 (REQ-054-002) ──
@@ -258,25 +269,29 @@ class GenAIProvider(BaseProvider):
         cleaned = TOOL_CALL_PATTERN.sub("", text).strip()
         return cleaned if cleaned else None
 
-    # ── Step 5: chat() (REQ-054-002, REQ-054-006, REQ-054-007, REQ-054-009) ──
+    # ── Step 5: chat() (REQ-055-004, REQ-054-002, REQ-054-006, REQ-054-007, REQ-054-009) ──
 
     async def chat(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         """
         SCI Portal API 호출 → OpenAI 형식 응답 변환.
+        REQ-055-001: 올바른 endpoint URL 사용
+        REQ-055-004: 올바른 response 파싱
         tool_call 패턴 파싱 포함 (429 재시도 포함).
         """
         payload = self._transform_request(request)
-        logger.info(f"GenAI chat request: model={request.model}")
+        # REQ-055-001: 올바른 endpoint URL 구성
+        api_url = f"{self.base_url}/openapi/chat/v1/messages"
+        logger.info(f"GenAI chat request: model={request.model}, url={api_url}")
         logger.info(f"GenAI chat payload: {truncate_for_log(payload, 500)}")
 
         resp = await self._retry_on_429(
-            lambda: self.client.post(self.base_url, json=payload)
+            lambda: self.client.post(api_url, json=payload)  # REQ-055-001
         )
         data = resp.json()
         logger.info(f"GenAI chat response: {truncate_for_log(data, 500)}")
 
-        # SCI Portal 응답 → 텍스트 추출
-        content = data.get("response", data.get("text", data.get("result", str(data))))
+        # REQ-055-004: SCI Portal 응답 → 텍스트 추출 (논스트리밍: content 키 사용)
+        content = data.get("content", "")
         usage_data = data.get("usage", {})
 
         # ★ tool_call 패턴 파싱 (REQ-054-002)
@@ -310,7 +325,7 @@ class GenAIProvider(BaseProvider):
             ),
         )
 
-    # ── Step 6: stream() (REQ-054-005, REQ-054-009) ──
+    # ── Step 6: stream() (REQ-055-005, REQ-054-005, REQ-054-009) ──
 
     async def stream(self, request: ChatCompletionRequest) -> AsyncIterator[str]:
         """

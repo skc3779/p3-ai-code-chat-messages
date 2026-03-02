@@ -284,13 +284,13 @@ SCI Portal의 스트리밍 응답은 tool_call 패턴이 여러 청크에 걸쳐
 | 요청 형식 | `{"model_id", "prompt": [{"role","text"}], "parameters": {"temperature","max_output_tokens"}}` |
 | 응답 형식 | `{"response": "텍스트...", "usage": {...}}` |
 
-> **참고:** `genai_assistant.py`(직접 호출)와 `genai_provider.py`(프록시)의 SCI Portal API 호출 형식에 차이가 있습니다:
+> **⚠️ FSD v1.0.055에서 수정됨:** 아래 차이점들은 [FSD v1.0.055](./FSD_v1.0.055_genai-provider-endpoint-fix.md)에서 `genai_assistant.py`와 동일한 형식으로 통일되었습니다.
 >
-> | 항목 | genai_assistant.py | genai_provider.py |
-> |------|-------------------|-------------------|
-> | 엔드포인트 | `{url}/openapi/chat/v1/messages` | `{ENDPOINT_URL}` (직접 POST) |
-> | 인증 헤더 | `X-Lego-Client-Id` / `X-Lego-Client-Secret` | `X-Client-Key` / `X-Client-Secret` |
-> | 요청 키 | `modelIds`, `contents`, `llmConfig`, `systemPrompt` | `model_id`, `prompt`, `parameters` |
+> | 항목 | genai_assistant.py | genai_provider.py (v1.0.054) | genai_provider.py (v1.0.055 수정 후) |
+> |------|-------------------|-------------------|------------------------------------|
+> | 엔드포인트 | `{url}/openapi/chat/v1/messages` | `{ENDPOINT_URL}` (직접 POST) | `{ENDPOINT_URL}/openapi/chat/v1/messages` ✅ |
+> | 인증 헤더 | `X-Lego-Client-Id` / `X-Lego-Client-Secret` | `X-Client-Key` / `X-Client-Secret` | `X-Lego-Client-Id` / `X-Lego-Client-Secret` ✅ |
+> | 요청 키 | `modelIds`, `contents`, `llmConfig`, `systemPrompt` | `model_id`, `prompt`, `parameters` | `modelIds`, `contents`, `llmConfig`, `systemPrompt` ✅ |
 
 ### 3.4 변경 파일 목록
 
