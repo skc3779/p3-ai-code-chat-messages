@@ -205,6 +205,220 @@ class TestContextProcessor(unittest.TestCase):
         self.assertEqual(processed, 1)
         self.assertEqual(saved, 1)
 
+    def test_auto_save_untagged_code_block(self):
+        """언어 태그 없는 ``` 코드 블록 처리 테스트"""
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+        )
+
+        response = (
+            "```filename:doc.md\n"
+            "# Title\n"
+            "\n"
+            "```\n"
+            "plain code\n"
+            "```\n"
+            "\n"
+            "End.\n"
+            "```"
+        )
+        saved = processor._auto_save_files(response)
+
+        self.assertEqual(len(saved), 1)
+        content = (self.temp_dir / "doc.md").read_text(encoding="utf-8")
+        self.assertIn("plain code", content)
+        self.assertIn("End.", content)
+
+    def test_auto_save_multiple_untagged_code_blocks(self):
+        """다중 언어 태그 없는 코드 블록 처리 테스트"""
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+        )
+
+        response = (
+            "```filename:multi.md\n"
+            "# Title\n"
+            "\n"
+            "```\n"
+            "code block 1\n"
+            "```\n"
+            "\n"
+            "middle text\n"
+            "\n"
+            "```\n"
+            "code block 2\n"
+            "```\n"
+            "\n"
+            "End.\n"
+            "```"
+        )
+        saved = processor._auto_save_files(response)
+
+        self.assertEqual(len(saved), 1)
+        content = (self.temp_dir / "multi.md").read_text(encoding="utf-8")
+        self.assertIn("code block 1", content)
+        self.assertIn("code block 2", content)
+        self.assertIn("middle text", content)
+        self.assertIn("End.", content)
+
+    def test_auto_save_mixed_tagged_untagged_blocks(self):
+        """언어 태그 있는/없는 코드 블록이 혼합된 마크다운 테스트"""
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+        )
+
+        response = (
+            "```filename:mixed.md\n"
+            "## 상세 설계서\n"
+            "\n"
+            "### SQL Section\n"
+            "\n"
+            "```sql\n"
+            "SELECT * FROM table;\n"
+            "```\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### Tree Section\n"
+            "\n"
+            "```\n"
+            "root\n"
+            "├── child1\n"
+            "└── child2\n"
+            "```\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### Final Section\n"
+            "\n"
+            "* Item 1\n"
+            "* Item 2\n"
+            "\n"
+            "```"
+        )
+        saved = processor._auto_save_files(response)
+
+        self.assertEqual(len(saved), 1)
+        content = (self.temp_dir / "mixed.md").read_text(encoding="utf-8")
+        self.assertIn("```sql", content)
+        self.assertIn("SELECT * FROM table;", content)
+        self.assertIn("root", content)
+        self.assertIn("├── child1", content)
+        self.assertIn("### Final Section", content)
+        self.assertIn("* Item 1", content)
+
+    def test_auto_save_complex_markdown_full(self):
+        """사용자 예시: 복잡한 마크다운 (SQL + tree + 테이블) 전체 저장 테스트"""
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+        )
+
+        response = (
+            "```filename:md_excel2/IF_XXXX.md\n"
+            "\n"
+            "## 📂 IF_XXXX: 상세 설계서\n"
+            "\n"
+            "### 1. 실행 정책\n"
+            "\n"
+            "* **트랜잭션**: `None`\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### 2. 이력\n"
+            "\n"
+            "| 버전 | 날짜 |\n"
+            "| --- | --- |\n"
+            "| v1.0.001 | 2026-01-19 |\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### 3. SQL\n"
+            "\n"
+            "```sql\n"
+            "SELECT p.prompt_id\n"
+            "FROM IF_PROMPT_CONFIG p\n"
+            "WHERE p.if_id = 'IF_XXXX';\n"
+            "\n"
+            "```\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### 4. 프로세스 흐름\n"
+            "\n"
+            "```tree\n"
+            "root: IF_XXXX_PROCESS\n"
+            "├── [Step 1] Pre-Processing\n"
+            "└── [Step 2] Finalization\n"
+            "\n"
+            "```\n"
+            "\n"
+            "---\n"
+            "\n"
+            "### 5. 가용 명령어\n"
+            "\n"
+            "* **API Endpoint**: `https://api.example.com`\n"
+            "\n"
+            "```"
+        )
+        saved = processor._auto_save_files(response)
+
+        self.assertEqual(len(saved), 1)
+        content = (self.temp_dir / "md_excel2" / "IF_XXXX.md").read_text(encoding="utf-8")
+        # 모든 섹션이 포함되어 있어야 함
+        self.assertIn("### 1. 실행 정책", content)
+        self.assertIn("### 2. 이력", content)
+        self.assertIn("```sql", content)
+        self.assertIn("SELECT p.prompt_id", content)
+        self.assertIn("```tree", content)
+        self.assertIn("root: IF_XXXX_PROCESS", content)
+        self.assertIn("### 5. 가용 명령어", content)
+        self.assertIn("api.example.com", content)
+
+    def test_auto_save_multi_file_with_untagged_blocks(self):
+        """다중 파일 블록에서 언어 태그 없는 코드 블록 처리"""
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+        )
+
+        response = (
+            "답변입니다.\n"
+            "\n"
+            "```filename:file_a.md\n"
+            "# File A\n"
+            "\n"
+            "```\n"
+            "plain code\n"
+            "```\n"
+            "\n"
+            "End A.\n"
+            "```\n"
+            "\n"
+            "```filename:file_b.md\n"
+            "# File B\n"
+            "\n"
+            "```python\n"
+            "print('hello')\n"
+            "```\n"
+            "\n"
+            "End B.\n"
+            "```"
+        )
+        saved = processor._auto_save_files(response)
+
+        self.assertEqual(len(saved), 2)
+        content_a = (self.temp_dir / "file_a.md").read_text(encoding="utf-8")
+        content_b = (self.temp_dir / "file_b.md").read_text(encoding="utf-8")
+        self.assertIn("plain code", content_a)
+        self.assertIn("End A.", content_a)
+        self.assertIn("print('hello')", content_b)
+        self.assertIn("End B.", content_b)
+
 
 if __name__ == '__main__':
     unittest.main()
+

@@ -668,3 +668,108 @@ Gen AI 의 경우에는 AI 모델의 API로 전송 전에 Request Header, Reques
 - specs/requirements 폴더에 FSD로 시작하는 v1.0.062 버전의 문서를 작성한다.
 
 ---
+
+
+ContextProcessor 의 _auto_save_files 메소드가 파일 저장이 아래와 같은 다중 markdown의 경우 일부만 저정되는 오류 발생
+- gen-ai-chat-code01.py, genai_assistant.py 를 꼼꼼히 검토한다.
+- context_processor.py 를 꼼꼼히 검토한다.
+- _auto_save_files 메소드에 대한 복잡한 응답 컨텍스트에 대한 처리 로직을 테스트 한다. 아래 예시 참고
+
+예시)
+
+
+```filename:md_excel2/IF_XXXX.md
+
+## 📂 IF_XXXX: AI 인터페이스 상세 설계서
+
+### 1. 트랜잭션 및 실행 정책
+
+* **트랜잭션(Transaction)**: `None` (비연속적 외부 API 호출 및 로컬 쉘 실행 특성 반영)
+* **실행 모드**: 비동기(Asynchronous) 우선 처리
+* **보안 수준**: Level 2 (실행 전 화이트리스트 검증 필수)
+
+---
+
+### 2. 공통 전처리 및 이력
+
+| 버전 | 날짜 | 변경 내용 | 상세 사유 |
+| --- | --- | --- | --- |
+| v1.0.001 | 2026-01-19 | Claude API 마이그레이션 | 레거시 모델 단종에 따른 교체 |
+| v1.0.002 | 2026-01-19 | 시스템 프롬프트 개선 | 할루시네이션 방지 및 토큰 최적화 |
+| v1.0.003 | 2026-01-19 | CodeExecutor 추가 | `/run` 명령어 처리 로직 구현 |
+| v1.0.004 | 2026-01-19 | TerminalExecutor 추가 | `/shell` 명령어 및 권한 제어 리팩토링 |
+
+---
+
+### 3. 단계별 상세 (Data & Logic)
+
+#### 3.1. 컨텍스트 추출 (SQL)
+
+사용자의 요청과 시스템의 현재 상태(파일 트리, 환경 변수 등)를 결합하기 위한 쿼리입니다.
+
+```sql
+/* 단계: 세션별 활성화된 실행 환경 및 프롬프트 로드 */
+SELECT 
+    p.prompt_id,
+    p.template_content,
+    e.working_directory,
+    e.allowed_commands
+FROM IF_PROMPT_CONFIG p
+JOIN USER_SESSION_ENV e ON p.target_system = e.system_id
+WHERE p.if_id = 'IF_XXXX' 
+  AND p.status = 'ACTIVE'
+  AND e.user_token = :user_token;
+
+```
+
+---
+
+### 4. 프로세스 흐름 (Tree Structure)
+
+프로세스의 진입부터 종료까지의 논리적 계층 구조입니다.
+
+```tree
+root: IF_XXXX_PROCESS (인터페이스 실행)
+│
+├── [Step 1] Pre-Processing (전처리)
+│   ├── Auth: 사용자 권한 및 API Key 유효성 검증
+│   └── Context: DB 내 시스템 프롬프트 및 사용자 환경 설정 로드
+│
+├── [Step 2] AI Interaction (Claude API 호출)
+│   ├── Payload: 사용자 입력 + 시스템 프롬프트 결합
+│   └── Response: AI 응답 데이터 수신 (JSON/Markdown)
+│
+├── [Step 3] Command Parsing (명령어 분류 및 트리거)
+│   │
+│   ├── 📂 Case A: 단순 텍스트 응답 (General Response)
+│   │   └── Action: 결과 메시지 포맷팅 및 UI 반환
+│   │
+│   ├── 📂 Case B: 코드 실행 요청 (/run)
+│   │   ├── Executor: CodeExecutor 호출
+│   │   ├── Sandboxing: 격리된 환경에서 코드 컴파일/실행
+│   │   └── Result: 표준 출력(stdout) 및 에러(stderr) 캡처
+│   │
+│   └── 📂 Case C: 터미널 명령 요청 (/shell)
+│       ├── Security: 화이트리스트 기반 명령어 필터링
+│       ├── Executor: TerminalExecutor 호출
+│       └── Log: 실행 로그 생성 및 감사 시스템 전송
+│
+└── [Step 4] Finalization (후처리)
+    ├── Success: 최종 결과물 통합 및 사용자 전달
+    └── Error: 단계별 에러 스택 기반 예외 처리 및 롤백 가이드 제공
+
+```
+
+---
+
+### 5. 가용 명령어 및 규격
+
+* **CodeExecutor**: Python, Node.js 환경 지원 (파일 생성 및 휘발성 실행)
+* **TerminalExecutor**: `ls`, `cat`, `grep`, `mkdir` 등 읽기/기초 관리 위주 허용
+* **API Endpoint**: `https://api.anthropic.com/v1/messages` (v1.0.001 기준)
+
+```
+
+
+
+위와 같은 경우 첫번째 markdown만 저장되고 두번째 markdown은 저장되지 않음. 

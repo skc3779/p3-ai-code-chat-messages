@@ -126,6 +126,11 @@ class ContextProcessor:
         """
         AI 응답에서 ```filename: 블록을 추출하여 자동 저장
         (확인 프롬프트 없이 자동 덮어쓰기)
+
+        중첩 코드 블록 처리:
+        - 언어 태그가 있는 ```lang → 내부 코드 블록 시작
+        - 언어 태그가 없는 ``` → 내부 블록이 열려있으면 종료,
+          아닌 경우 다음 줄 존재 여부로 내부 블록 시작 vs 파일 블록 종료 판별
         """
         saved_files: List[str] = []
         lines = response.splitlines()
@@ -134,9 +139,9 @@ class ContextProcessor:
         current_path = ""
         current_content: List[str] = []
         delimiter = "```"
-        nested_block_depth = 0
+        in_nested_block = False
 
-        for line in lines:
+        for idx, line in enumerate(lines):
             stripped = line.strip()
 
             if not collecting:
@@ -146,35 +151,61 @@ class ContextProcessor:
                     current_path = match.group(2).strip()
                     collecting = True
                     current_content = []
-                    nested_block_depth = 0
+                    in_nested_block = False
                     continue
 
             if collecting:
-                # 중첩 코드 블록 시작
+                # 1) 언어 태그가 있는 코드 블록 시작 (```python, ```sql 등)
                 if stripped.startswith(delimiter) and len(stripped) > len(delimiter):
-                    nested_block_depth += 1
-                # 코드 블록 종료 후보
-                elif stripped == delimiter:
-                    if nested_block_depth > 0:
-                        nested_block_depth -= 1
-                    else:
-                        # 파일 저장 (자동 덮어쓰기)
-                        file_path = self.file_manager.workspace_dir / current_path
-                        file_content = "\n".join(current_content).strip()
+                    in_nested_block = True
+                    current_content.append(line)
+                    continue
 
-                        # 상위 디렉토리 자동 생성
-                        file_path.parent.mkdir(parents=True, exist_ok=True)
-
-                        if self.file_manager.write_file(file_path, file_content):
-                            saved_files.append(current_path)
-                            print(f"✅ 파일 저장됨: {current_path}")
-                        else:
-                            print(f"❌ 파일 저장 실패: {current_path}")
-
-                        collecting = False
-                        current_path = ""
-                        current_content = []
+                # 2) 정확히 delimiter만 있는 줄
+                if stripped == delimiter:
+                    # 2-a) 내부 블록이 열려있으면 → 내부 블록 종료
+                    if in_nested_block:
+                        in_nested_block = False
+                        current_content.append(line)
                         continue
+
+                    # 2-b) 내부 블록이 닫혀있는 상태에서 ``` 발견
+                    #      → 다음 줄을 확인하여 내부 코드 블록 시작인지 판별
+                    next_idx = idx + 1
+                    if next_idx < len(lines):
+                        next_stripped = lines[next_idx].strip()
+                        # 다음 줄이 비어있지 않고, ``` 또는 ```filename:이 아니면
+                        # 이것은 언어 태그 없는 내부 코드 블록 시작
+                        is_next_delimiter = next_stripped == delimiter
+                        is_next_filename = re.match(
+                            r"^`{3,}filename:.+$", next_stripped
+                        )
+                        if (
+                            next_stripped
+                            and not is_next_delimiter
+                            and not is_next_filename
+                        ):
+                            in_nested_block = True
+                            current_content.append(line)
+                            continue
+
+                    # 2-c) 파일 블록 종료 → 저장
+                    file_path = self.file_manager.workspace_dir / current_path
+                    file_content = "\n".join(current_content).strip()
+
+                    # 상위 디렉토리 자동 생성
+                    file_path.parent.mkdir(parents=True, exist_ok=True)
+
+                    if self.file_manager.write_file(file_path, file_content):
+                        saved_files.append(current_path)
+                        print(f"✅ 파일 저장됨: {current_path}")
+                    else:
+                        print(f"❌ 파일 저장 실패: {current_path}")
+
+                    collecting = False
+                    current_path = ""
+                    current_content = []
+                    continue
 
                 current_content.append(line)
 
