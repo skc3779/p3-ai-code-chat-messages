@@ -2,15 +2,18 @@
 GenAI Provider - Samsung SCI Portal (gpt-oss-120B-medium) 형식 변환
 FSD v1.0.052 §4.4.3 / REQ-052-005
 FSD v1.0.053 §4.4.3 / REQ-053-008
-FSD v1.0.054 / REQ-054-001~007 — Tool Call 프록시 레벨 에뮬레이션
+FSD v1.0.054 / REQ-054-001~009 — Tool Call 프록시 레벨 에뮬레이션
 
 ★ SCI Portal 커스텀 REST API 형식으로 변환
 ★ 인증: X-Client-Key / X-Client-Secret 헤더
 ★ 모델: gpt-oss-120B-medium (120B 파라미터, Medium 등급)
 ★ Tool Call: 프롬프트 기반 에뮬레이션 (기존 genai_assistant.py 방식 이식)
-  - tools → 시스템 프롬프트에 도구 정의 텍스트 삽입
-  - 응답에서 ```tool_call``` 패턴 파싱 → OpenAI tool_calls 변환
-  - tool role 메시지 → 텍스트로 변환하여 프롬프트에 삽입
+  - tools → 시스템 프롬프트에 도구 정의 텍스트 삽입 (REQ-054-001)
+  - 응답에서 ```tool_call``` 패턴 파싱 → OpenAI tool_calls 변환 (REQ-054-002)
+  - tool role 메시지 → 텍스트로 변환하여 프롬프트에 삽입 (REQ-054-003)
+  - tool_choice 처리 (REQ-054-004)
+  - assistant tool_calls → 텍스트 변환 (REQ-054-008)
+  - 혼합 응답 분리 (REQ-054-009)
 """
 
 import os
@@ -52,6 +55,9 @@ class GenAIProvider(BaseProvider):
     - ★ tools → 시스템 프롬프트 삽입 (REQ-054-001)
     - ★ 응답 → tool_call 패턴 파싱 (REQ-054-002)
     - ★ tool role → 텍스트 변환 (REQ-054-003)
+    - ★ tool_choice 처리 (REQ-054-004)
+    - ★ assistant tool_calls → 텍스트 변환 (REQ-054-008)
+    - ★ 혼합 응답(텍스트+tool_call) 분리 (REQ-054-009)
     """
 
     def __init__(self):
@@ -151,7 +157,7 @@ class GenAIProvider(BaseProvider):
                 prompt.append({"role": "system", "text": m.content or ""})
 
             elif m.role == "assistant" and m.tool_calls:
-                # ★ assistant + tool_calls → 텍스트 변환 (REQ-054-003)
+                # ★ assistant + tool_calls → 텍스트 변환 (REQ-054-008)
                 tool_text_parts = []
                 if m.content:
                     tool_text_parts.append(m.content)
@@ -248,11 +254,11 @@ class GenAIProvider(BaseProvider):
         return tool_calls if tool_calls else None
 
     def _extract_non_tool_content(self, text: str) -> str | None:
-        """tool_call 블록을 제거한 나머지 텍스트를 반환 (텍스트 + tool_calls 혼합 시)"""
+        """tool_call 블록을 제거한 나머지 텍스트를 반환 (REQ-054-009: 혼합 응답 분리)"""
         cleaned = TOOL_CALL_PATTERN.sub("", text).strip()
         return cleaned if cleaned else None
 
-    # ── Step 4: chat() (REQ-054-002, REQ-054-006, REQ-054-007) ──
+    # ── Step 5: chat() (REQ-054-002, REQ-054-006, REQ-054-007, REQ-054-009) ──
 
     async def chat(self, request: ChatCompletionRequest) -> ChatCompletionResponse:
         """
@@ -304,7 +310,7 @@ class GenAIProvider(BaseProvider):
             ),
         )
 
-    # ── Step 5: stream() (REQ-054-005) ──
+    # ── Step 6: stream() (REQ-054-005, REQ-054-009) ──
 
     async def stream(self, request: ChatCompletionRequest) -> AsyncIterator[str]:
         """
@@ -317,10 +323,18 @@ class GenAIProvider(BaseProvider):
             msg = result.choices[0].message
             finish_reason = result.choices[0].finish_reason
 
+            # ★ 첫 번째 청크: role 전송 (OpenAI SSE 표준)
+            role_chunk = {
+                "choices": [{
+                    "delta": {"role": "assistant"},
+                    "index": 0
+                }]
+            }
+            yield f"data: {json.dumps(role_chunk)}\n\n"
+
             if msg.tool_calls:
                 # ★ tool_calls → OpenAI SSE 델타 형식으로 변환
                 for i, tc in enumerate(msg.tool_calls):
-                    # 첫 번째 청크: id, type, function.name, arguments 시작
                     chunk = {
                         "choices": [{
                             "delta": {
@@ -339,6 +353,16 @@ class GenAIProvider(BaseProvider):
                     }
                     logger.info(f"GenAI stream: tool_call[{i}] name={tc.function.name}")
                     yield f"data: {json.dumps(chunk)}\n\n"
+
+                # ★ REQ-054-009: tool_calls와 content가 동시에 있는 혼합 응답 처리
+                if msg.content:
+                    content_chunk = {
+                        "choices": [{
+                            "delta": {"content": msg.content},
+                            "index": 0
+                        }]
+                    }
+                    yield f"data: {json.dumps(content_chunk, ensure_ascii=False)}\n\n"
 
                 # finish_reason 청크
                 done_chunk = {
