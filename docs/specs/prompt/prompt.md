@@ -550,3 +550,107 @@ Gen AI 모델의 경우는 genai_provider.py 에서 contents 필드가 문자열
 - proxy_server.py 와 genai_provider.py 를 꼼꼼히 검토한다.
 - contents 배열에 문자열이 아닌 객체가 들어가는 경우 문자열로 변환 후 등록 등록되도록 처리한다.
 - 완료시 specs/requirements 폴더에 BUG로 시작하는 v1.0.057 버전의 문서를 작성한다.
+
+---
+
+gen-ai 의 경우 입력 context 에 `password`, `secret` 등의 민감 단어가 들어가면 `The content was blocked by the filter` 오류가 발생한다. 이를 방지하기 위해 입력 context 에 민감 단어가 들어가지 않도록 사전에 단어를 치환하는 기능을 추가한다.
+- gen-ai-chat-code01.py, genai_assistant.py 등을 꼼꼼히 검토한다.
+- 민감 사전을 관리 한다.
+  - password -> p1assw1ord
+  - PASSWORD -> P1ASSW1ORD
+  - secret -> s1ecr1et
+  - SECRET -> S1ECR1ET
+  - api_key -> a1pi_k1ey
+  - apikey -> a1pike1y
+  - token -> t1oken
+  - credential -> c1red1ent1al
+  - CREDENTIAL -> C1RED1ENT1AL
+
+  > 대소문자를 그대로 유지하면서 치환하는 것이 중요함.
+
+- 흐름 구조
+  1. 입력 context 에 민감 단어가 있는지 확인한다. 
+    - 대소문자 구분 없이 검사, 
+  2. 민감 단어가 있으면 치환한다.
+    - 단어는 대소문자 유지하면서 치환
+    - 예: Password -> P1assw1ord
+  3. 치환된 context 를 gen-ai 에 전달한다.
+  4. 응답을 받는다.
+  5. 치환된 context 를 원래대로 복원한다.
+  6. 복원된 context 를 응답한다.
+  
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.058 버전의 문서를 작성한다.
+- 민감 단어가 있으면 `The content was blocked by the filter`
+```json
+{
+  "content": "The content was blocked by the filter.",
+  "filterBlockReason": {
+    "ko": "Credential",
+    "en": "Credential",
+    "policyId": "62",
+    "message": "The content was blocked by the filter.",
+    "resultCode": "FR-400",
+    "filterLogId": "26367154"
+  },
+  "status": "FILTER_INVALID",
+  "eventStatus": "DONE"
+  ...
+}
+```
+
+
+
+
+---
+
+context 에 민감 단어가 들어가면 `The content was blocked by the filter` 오류가 발생하면 아래의 응답구조 중 filterBlockReason 에 정보도 함께 표 형태로 보여 주도록 하는 기능 개선을 위한 FSD 문서를 작성해줘.
+- specs/requirements 폴더에 FSD로 시작하는 v1.0.057 버전의 문서를 작성한다.
+```json
+{
+  "userId": "80ff2c2e-2a03-4c48-859f-fc2e78c83e99",
+  "modelType": "GPT-OSS",
+  "content": "### 소프트웨어의 역사\n\n소프트웨어의 역사는 컴퓨터의 발전과 함께 시작되었습니...",
+  "reasoningContent": null,
+  "processingContent": [],
+  "contentReferences": [
+    {
+      "plugin": "RAG",
+      "answer": "",
+      "references": [
+        {
+          "title": "소프트웨어의 역사",
+          "content": "빌 게이츠와 폴 ...",
+          "link": ""
+        }
+      ],
+      "augmented_standalone_queries": "소프트웨어 역사에 대해 알려주세요."
+    }
+  ],
+  "truncated": false,
+  "finishReason": null,
+  "filterBlockReason": {
+    "ko": null,
+    "en": null,
+    "policyId": null,
+    "message": null,
+    "resultCode": "FR-201",
+    "filterLogId": null
+  },
+  "status": "SUCCESS",
+  "responseCode": "R20000",
+  "plugins": [
+    "LLM"
+  ],
+  "orchestratorType": null,
+  "parentMessageCreatedAt": "2026-01-17T14:30:42.108192+09:00",
+  "references": [],
+  "actions": [],
+  "eventStatus": "CHUNK",
+  "eventData": ""
+}
+```
+
+context 에 민감단어가 들어가면 민감단어 사전짐 기능에 의해 치환하고, 다시 응답 시 반대로 치환해서 응답해 주는 기능으로 더욱 개선이 되도록 문서를 보강해줘.
+
+---
+

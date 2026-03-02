@@ -5,6 +5,7 @@ FSD v1.0.053 §4.4.3 / REQ-053-008
 FSD v1.0.054 / REQ-054-001~009 — Tool Call 프록시 레벨 에뮬레이션
 FSD v1.0.055 / REQ-055-001~007 — Endpoint URL 구조 수정
 BUG v1.0.057 — content 필드 문자열 변환 (str | list 안전 처리)
+FSD v1.0.058 / REQ-058-001~006 — 민감 단어 필터링 (password, secret 등 치환/복원)
 
 ★ SCI Portal 커스텀 REST API 형식으로 변환
 ★ 인증: X-Lego-Client-Id / X-Lego-Client-Secret 헤더 (REQ-055-002)
@@ -19,6 +20,7 @@ BUG v1.0.057 — content 필드 문자열 변환 (str | list 안전 처리)
   - tool_choice 처리 (REQ-054-004)
   - assistant tool_calls → 텍스트 변환 (REQ-054-008)
   - 혼합 응답 분리 (REQ-054-009)
+★ 민감 단어 필터링 (REQ-058-001~006): password, secret 등 치환/복원
 """
 
 import os
@@ -27,6 +29,8 @@ import json
 import time
 import logging
 import httpx
+import sys
+from pathlib import Path
 from typing import AsyncIterator
 
 from providers.base import BaseProvider, ProviderError, truncate_for_log
@@ -41,6 +45,13 @@ from models import (
 )
 
 logger = logging.getLogger("ai-proxy")
+
+# src/ 패키지 경로 추가 (SensitiveWordFilter 사용을 위해)
+_project_root = Path(__file__).resolve().parent.parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from src.sensitive_filter import SensitiveWordFilter
 
 # tool_call 파싱 패턴 (genai_assistant.py의 tool_code 패턴과 유사)
 TOOL_CALL_PATTERN = re.compile(
@@ -64,6 +75,7 @@ class GenAIProvider(BaseProvider):
     - ★ tool_choice 처리 (REQ-054-004)
     - ★ assistant tool_calls → 텍스트 변환 (REQ-054-008)
     - ★ 혼합 응답(텍스트+tool_call) 분리 (REQ-054-009)
+    - ★ 민감 단어 필터링 (REQ-058-001~006)
     """
 
     def __init__(self):
@@ -83,6 +95,9 @@ class GenAIProvider(BaseProvider):
             },
             timeout=120.0,
         )
+
+        # REQ-058-001: 민감 단어 필터 초기화
+        self.sensitive_filter = SensitiveWordFilter()
 
     # ── Step 1: tools → 시스템 프롬프트 텍스트 (REQ-054-001) ──
 
@@ -280,6 +295,13 @@ class GenAIProvider(BaseProvider):
         tool_call 패턴 파싱 포함 (429 재시도 포함).
         """
         payload = self._transform_request(request)
+
+        # REQ-058-002: 민감 단어 치환 (GenAI 전송 전)
+        if "contents" in payload:
+            payload["contents"] = self.sensitive_filter.mask_contents(payload["contents"])
+        if "systemPrompt" in payload and payload["systemPrompt"]:
+            payload["systemPrompt"] = self.sensitive_filter.mask_system_prompt(payload["systemPrompt"])
+
         # REQ-055-001: 올바른 endpoint URL 구성
         api_url = f"{self.base_url}/openapi/chat/v1/messages"
         logger.info(f"GenAI chat request: model={request.model}, url={api_url}")
@@ -293,6 +315,11 @@ class GenAIProvider(BaseProvider):
 
         # REQ-055-004: SCI Portal 응답 → 텍스트 추출 (논스트리밍: content 키 사용)
         content = data.get("content", "")
+
+        # REQ-058-005: 응답에서 치환된 단어 복원
+        if content:
+            content = self.sensitive_filter.unmask(content)
+
         usage_data = data.get("usage", {})
 
         # ★ tool_call 패턴 파싱 (REQ-054-002)

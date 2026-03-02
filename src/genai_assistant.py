@@ -23,6 +23,7 @@ from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
+from .sensitive_filter import SensitiveWordFilter
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -49,6 +50,9 @@ class GenAICodeAssistant:
         self.history_manager = HistoryManager(self.file_manager.workspace_dir)
         self.template_manager = TemplateManager(self.file_manager.workspace_dir)
         self.response_parser = ResponseParser(self.file_manager)
+
+        # REQ-058-001: 민감 단어 필터 초기화
+        self.sensitive_filter = SensitiveWordFilter()
 
         # LLM 언어 설정 (기본값 없음)
         self.llm_config = LLMConfigProvider()
@@ -228,14 +232,16 @@ class GenAICodeAssistant:
         contents = self.conversation_history.copy()
         contents.append(full_message)
 
-        # print(f"### 요청 메세지 히스토리  : {contents}")
+        # REQ-058-002: 민감 단어 치환 (GenAI 전송 전)
+        masked_contents = self.sensitive_filter.mask_contents(contents)
+        masked_system_prompt = self.sensitive_filter.mask_system_prompt(self.system_prompt)
 
         body = {
             "modelIds": [self.model_id],
-            "contents": contents,
+            "contents": masked_contents,
             "llmConfig": self.get_llm_config(),
             "isStream": streaming,
-            "systemPrompt": self.system_prompt
+            "systemPrompt": masked_system_prompt
         }
 
         api_url = f"{self.endpoint_url}/openapi/chat/v1/messages"
@@ -247,6 +253,9 @@ class GenAICodeAssistant:
             else:
                 response_text = self._chat_non_streaming(api_url, body, user_message, full_message)
             
+            # REQ-058-005: 응답에서 치환된 단어 복원
+            response_text = self.sensitive_filter.unmask(response_text)
+
             # 도구 호출 처리
             tool_results = self.process_tool_calls(response_text)
             if tool_results:

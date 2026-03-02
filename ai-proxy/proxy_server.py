@@ -80,6 +80,7 @@ async def chat_completions(
       - claude/... → Anthropic Claude
       - genai/...  → Samsung SCI Portal
     """
+    logger.info(f"/v1/chat/completions authorization: {authorization}")
     verify_auth(authorization)
 
     # 모델 라우팅 (REQ-052-002)
