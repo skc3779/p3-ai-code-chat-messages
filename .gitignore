@@ -82,4 +82,9 @@ __pycache__/
 ### logs ###
 logs/
 
+### Build ###
+target/
+build_output/build/
+build_output/spec/
+
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,pycharm+iml

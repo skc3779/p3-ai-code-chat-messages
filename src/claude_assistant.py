@@ -23,6 +23,7 @@ from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
+from .spinner import WaitSpinner
 
 
 class ClaudeCodeAssistant:
@@ -218,12 +219,18 @@ def main():
             body=body, streaming=True, model_id=self.model_id
         )
 
+        
+        # REQ-066-003: 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
         )
 
         if response.status_code != 200:
+            spinner.stop() # 에러 발생 시 스피너 즉시 종료
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
             # REQ-064-005: 에러 Response 로그 저장
             self.api_logger.log_response(
@@ -239,11 +246,15 @@ def main():
         current_message_content = []
         tool_use_block = None
         tool_json_accumulated = ""
-        
-        print("\n🤖 AI: ", end="", flush=True)
+        is_first_chunk = True
 
         try:
             for event in client.events():
+                if is_first_chunk:
+                    spinner.stop()
+                    print("\n🤖 AI: ", end="", flush=True)
+                    is_first_chunk = False
+                    
                 if event.data:
                     try:
                         data = json.loads(event.data)
@@ -294,11 +305,13 @@ def main():
                 requests.exceptions.ConnectionError, 
                 requests.exceptions.ReadTimeout) as e:
             # 스트림 중단 예외 처리
+            spinner.stop()
             print(f"\n\n[⚠️ 스트리밍 중단됨: {str(e)}]")
             error_msg = "\n[⚠️ 네트워크 오류로 인해 응답이 중단되었습니다.]"
             current_message_content.append({"type": "text", "text": error_msg})
         except Exception as e:
             # 기타 예외
+            spinner.stop()
             print(f"\n\n[❌ 스트리밍 오류: {str(e)}]")
             error_msg = f"\n[❌ 오류 발생: {str(e)}]"
             current_message_content.append({"type": "text", "text": error_msg})
@@ -385,10 +398,16 @@ def main():
             body=body, streaming=False, model_id=self.model_id
         )
 
+        # REQ-066-003: 논스트리밍 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
         )
+
+        spinner.stop() # 응답 완료(또는 에러) 시 스피너 종료
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")

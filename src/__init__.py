@@ -21,6 +21,7 @@ from src.command_registry import CommandRegistry
 from src.context_processor import ContextProcessor
 from src.sensitive_filter import SensitiveWordFilter
 from src.api_logger import ApiLogger
+from src.spinner import WaitSpinner
 
 __all__ = [
     'FileManager',
@@ -44,4 +45,5 @@ __all__ = [
     'ContextProcessor',
     'SensitiveWordFilter',
     'ApiLogger',
+    'WaitSpinner',
 ]

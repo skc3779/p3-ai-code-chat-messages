@@ -185,3 +185,6 @@ python gen-ai-chat-code.py
 # Gemini 어시스턴트
 python gemini-ai-chat-code.py
 ```
+
+## 10. 대화창에 진행사항 출력시 한글로 출력
+- OpenChat Agent 대화창에 한글로 출력한다.

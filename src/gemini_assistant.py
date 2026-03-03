@@ -22,6 +22,7 @@ from .api_logger import ApiLogger
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
+from .spinner import WaitSpinner
 from .response_parser import ResponseParser
 
 
@@ -189,12 +190,17 @@ def calculate_sum(a, b):
             body=body, streaming=True, model_id=self.model_id
         )
 
+        # REQ-066-004: 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
         )
         
         if response.status_code != 200:
+            spinner.stop() # 에러 발생 시 스피너 즉시 종료
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
             # REQ-064-006: 에러 Response 로그 저장
             self.api_logger.log_response(
@@ -206,11 +212,15 @@ def calculate_sum(a, b):
         
         client = sseclient.SSEClient(response)
         result_message = ""
-        
-        print("\n🤖 AI: ", end="", flush=True)
-        
+        is_first_chunk = True
+
         try:
             for event in client.events():
+                if is_first_chunk:
+                    spinner.stop() # 첫 응답 시작 시 스피너 종료
+                    print(f"\n🤖 AI: ", end="", flush=True)
+                    is_first_chunk = False
+                    
                 if event.data:
                     try:
                         data = json.loads(event.data)
@@ -229,6 +239,7 @@ def calculate_sum(a, b):
         except (requests.exceptions.ChunkedEncodingError,
                 requests.exceptions.ConnectionError,
                 requests.exceptions.ReadTimeout) as e:
+            spinner.stop()
             print(f"\n\n[⚠️ 스트리밍 중단됨: {str(e)}]")
         
         print("\n")
@@ -261,10 +272,16 @@ def calculate_sum(a, b):
             body=body, streaming=False, model_id=self.model_id
         )
 
+        # REQ-066-004: 논스트리밍 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
         )
+        
+        spinner.stop() # 응답 완료 시 스피너 종료
         
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")

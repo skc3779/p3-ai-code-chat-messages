@@ -25,9 +25,21 @@ from src import (
 
 
 def load_environment():
-    """프로젝트 루트에 있는 .env 파일을 읽어 os.environ에 값을 채워 넣는다."""
-    env_path = Path(__file__).resolve().parent / ".env"
-    load_dotenv(dotenv_path=env_path, override=True)
+    """실행 파일 위치 또는 스크립트 위치를 기반으로 .env 파일을 읽어 os.environ에 반영합니다."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        # PyInstaller로 빌드된 경우, 실행 파일(.exe)이 있는 폴더에서 .env를 찾음
+        base_path = Path(sys.executable).parent
+    else:
+        # 일반 파이썬 스크립트로 실행되는 경우, 현재 파일의 부모 폴더에서 찾음
+        base_path = Path(__file__).resolve().parent
+
+    env_path = base_path / ".env"
+    
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        print(f"⚠️ 경고: {env_path} 파일을 찾을 수 없습니다. 기본 설정으로 동작합니다.")
 
 
 def _supports_color() -> bool:

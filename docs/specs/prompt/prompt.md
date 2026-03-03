@@ -1013,3 +1013,15 @@ gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 각각 빌�
 - 각각 빌드 스크립트를 작성한다.
 - 그외 필요사항이 있다면 추가한다.
 - specs/requirements 폴더에 FSD v1.0.065 문서로 작성한다.
+
+
+---
+
+gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 각각 cli_input.py 를 통한 질문 입력 이후 명령 요청시 (응답 대기 중일 때) 현재 답변 진행중임을 알리는 UI를 위한 FSD 문서를 작성해줘.
+- 응답 대기 중일 때 답변 진행중임을 알리는 UI를 구현한다.
+- specs/requirements 폴더에 FSD v1.0.066 문서로 작성한다.
+
+---
+
+gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 의 banner에 있는 버전 정보를 .env 파일에 있는 AI_VERSION 변수를 사용하도록 변경한다.
+- specs/requirements 폴더에 FSD v1.0.067 문서로 작성한다.

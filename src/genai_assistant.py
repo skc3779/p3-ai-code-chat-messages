@@ -26,6 +26,7 @@ from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
 from .sensitive_filter import SensitiveWordFilter
+from .spinner import WaitSpinner
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -286,12 +287,17 @@ class GenAICodeAssistant:
             body=body, streaming=True, model_id=self.model_id
         )
 
+        # REQ-066-005: 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
         )
 
         if response.status_code != 200:
+            spinner.stop() # 에러 발생 시 즉시 종료
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
             # REQ-062-004: 에러 Response 로그 저장
             self.api_logger.log_response(
@@ -304,10 +310,14 @@ class GenAICodeAssistant:
         client = sseclient.SSEClient(response)
         result_message = ""
         chunk_count = 0
-
-        print("\n🤖 AI: ", end="", flush=True)
+        is_first_chunk = True
 
         for event in client.events():
+            if is_first_chunk:
+                spinner.stop() # 첫 응답 시작 시 스피너 종료
+                print("\n🤖 AI: ", end="", flush=True)
+                is_first_chunk = False
+                
             if event.data:
                 try:
                     data = json.loads(event.data)
@@ -350,10 +360,16 @@ class GenAICodeAssistant:
             body=body, streaming=False, model_id=self.model_id
         )
 
+        # REQ-066-005: 논스트리밍 대기 스피너 시작
+        spinner = WaitSpinner()
+        spinner.start()
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
         )
+
+        spinner.stop() # 응답 완료 시 종료
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
