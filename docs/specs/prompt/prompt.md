@@ -770,6 +770,229 @@ root: IF_XXXX_PROCESS (인터페이스 실행)
 
 ```
 
-
-
 위와 같은 경우 첫번째 markdown만 저장되고 두번째 markdown은 저장되지 않음. 
+
+
+```
+
+## 너무 어려움 사용하지 안키로 함.
+
+wezterm-gui.exe 를 이용한 CLI 환경의 입력창에서  prompt_toolkit 툴킷을 이용해 복사한 텍스트를 붙여넣기 하는경우 붙여넣기가 되지 않는 현상이 발생합니다.  
+
+- gemini-ai-chat-code.py, genai_assistant.py, claude-ai-chat-code.py, src/cli_input.py 및 관련 소스코드들을 꼼꼼히 검토한다.  
+  ```python
+  user_input = cli_handler.get_input("> ")
+  ```
+- WezTerm lua Reference : https://wezterm.org/config/lua/general.html
+- wezterm-gui.exe 의 설정 <사용자홈>/.wezterm.lua 정보   
+  ```lua
+  local wezterm = require 'wezterm'
+
+  -- ─────────────────────────────────────────────
+  --  플랫폼 감지
+  -- ─────────────────────────────────────────────
+  local is_windows = wezterm.target_triple:find("windows") ~= nil
+
+  -- ─────────────────────────────────────────────
+  --  폰트 설정
+  -- ─────────────────────────────────────────────
+  local font_family  = "JetBrains Mono"
+  local cjk_family   = "Noto Sans CJK KR"
+  local emoji_family = "Segoe UI Emoji"
+  local font_size    = 11.0
+  local line_height  = 1.00
+
+  -- ─────────────────────────────────────────────
+  --  기본 셸
+  --  [FIX] "-Command Clear-Host" 제거 → $PROFILE에서 처리
+  --        불필요한 비정상 종료 코드 발생 원인 제거
+  -- ─────────────────────────────────────────────
+  -- local powershell_prog = { "pwsh", "-NoLogo" }
+  local powershell_prog = {
+    "pwsh", "-NoLogo", "-NoExit",
+    "-Command", "try { Clear-Host } catch {}",
+  }
+
+  -- ─────────────────────────────────────────────
+  --  색상 팔레트
+  -- ─────────────────────────────────────────────
+  local colors = {
+    foreground    = "#E6E1CF",
+    background    = "#121212",
+    cursor_bg     = "#F8F8F0",
+    cursor_border = "#F8F8F0",
+    cursor_fg     = "#121212",
+    selection_bg  = "#2f2f2f",
+    selection_fg  = "#E6E1CF",
+    ansi    = { "#121212","#ff6c6b","#98be65","#da8548","#51afef","#c678dd","#46D9FF","#dfdfdf" },
+    brights = { "#7c7c7c","#ff6c6b","#98be65","#da8548","#51afef","#c678dd","#46D9FF","#ffffff" },
+  }
+
+  -- ─────────────────────────────────────────────
+  --  런처 메뉴 (Windows 전용)
+  -- ─────────────────────────────────────────────
+  local launch_menu = {}
+
+  if is_windows then
+    table.insert(launch_menu, {
+      label = "PowerShell (pwsh)",
+      args  = powershell_prog,
+    })
+    table.insert(launch_menu, {
+      label = "Command Prompt (cmd.exe)",
+      args  = { "cmd.exe" },
+    })
+  end
+
+  -- ─────────────────────────────────────────────
+  --  Leader 키 (CTRL+A, 800ms)
+  -- ─────────────────────────────────────────────
+  local leader = { key = "a", mods = "CTRL", timeout_milliseconds = 800 }
+
+  -- ─────────────────────────────────────────────
+  --  키 바인딩
+  -- ─────────────────────────────────────────────
+  local keys = {
+    { key = "t", mods = "LEADER",
+      action = wezterm.action.SpawnTab "CurrentPaneDomain" },
+    { key = "w", mods = "LEADER",
+      action = wezterm.action.CloseCurrentTab { confirm = true } },
+
+    { key = "|", mods = "LEADER",
+      action = wezterm.action.SplitHorizontal { domain = "CurrentPaneDomain" } },
+    { key = "-", mods = "LEADER",
+      action = wezterm.action.SplitVertical   { domain = "CurrentPaneDomain" } },
+
+    { key = "h", mods = "LEADER", action = wezterm.action.ActivatePaneDirection "Left"  },
+    { key = "l", mods = "LEADER", action = wezterm.action.ActivatePaneDirection "Right" },
+    { key = "k", mods = "LEADER", action = wezterm.action.ActivatePaneDirection "Up"    },
+    { key = "j", mods = "LEADER", action = wezterm.action.ActivatePaneDirection "Down"  },
+
+    { key = "z", mods = "LEADER", action = wezterm.action.TogglePaneZoomState },
+
+    { key = "C", mods = "CTRL|SHIFT", action = wezterm.action.CopyTo    "Clipboard" },
+    { key = "V", mods = "CTRL|SHIFT", action = wezterm.action.PasteFrom "Clipboard" },
+
+    { key = "/", mods = "LEADER",
+      action = wezterm.action.Search { CaseInSensitiveString = "" } },
+
+    { key = "+", mods = "CTRL", action = wezterm.action.IncreaseFontSize },
+    { key = "-", mods = "CTRL", action = wezterm.action.DecreaseFontSize },
+    { key = "0", mods = "CTRL", action = wezterm.action.ResetFontSize    },
+
+    { key = "Tab", mods = "CTRL",       action = wezterm.action.ActivateTabRelative(1)  },
+    { key = "Tab", mods = "CTRL|SHIFT", action = wezterm.action.ActivateTabRelative(-1) },
+
+    { key = "p", mods = "LEADER",
+      action = wezterm.action.SendKey { key = "p", mods = "CTRL" } },
+  }
+
+  -- ─────────────────────────────────────────────
+  --  마우스 바인딩
+  -- ─────────────────────────────────────────────
+  local mouse_bindings = {
+    {
+      event  = { Down = { streak = 1, button = "Left" } },
+      mods   = "CTRL",
+      action = wezterm.action.OpenLinkAtMouseCursor,
+    },
+  }
+
+  -- ─────────────────────────────────────────────
+  --  오른쪽 상태바
+  -- ─────────────────────────────────────────────
+  wezterm.on("update-right-status", function(window, _pane)
+    window:set_right_status(wezterm.format {
+      { Foreground = { Color = "#888888" } },
+      { Text = wezterm.strftime(" %Y-%m-%d %H:%M") },
+      { Text = "   " },
+      { Text = wezterm.hostname() },
+      { Text = " " },
+    })
+  end)
+
+  -- ─────────────────────────────────────────────
+  --  메인 Config
+  -- ─────────────────────────────────────────────
+  local config = {
+
+    -- ── 폰트 ───────────────────────────────────────────
+    font        = wezterm.font_with_fallback { font_family, cjk_family, emoji_family },
+    font_size   = font_size,
+    line_height = line_height,
+
+    -- ── 셸 / 런처 ──────────────────────────────────────
+    default_prog = is_windows and powershell_prog or nil,
+    launch_menu  = launch_menu,
+
+    -- ── 색상 ───────────────────────────────────────────
+    colors = colors,
+
+    -- ── 탭 바 ──────────────────────────────────────────
+    use_fancy_tab_bar            = true,
+    enable_tab_bar               = true,
+    hide_tab_bar_if_only_one_tab = false,
+
+    -- ── 창 ─────────────────────────────────────────────
+    window_padding            = { left = 8, right = 8, top = 6, bottom = 6 },
+    window_decorations        = "RESIZE",
+    window_background_opacity = 1.0,
+    window_close_confirmation = "AlwaysPrompt",
+
+    -- ── 프로세스 종료 동작 ──────────────────────────────
+    -- [FIX] "CloseOnCleanExit"(기본값)에서 "Close"로 변경
+    --       Windows에서 pwsh는 종료 시 비정상 exit code를 반환하는 경우가 많아
+    --       exit code 무관하게 pane을 조용히 닫는 "Close"가 적합
+    exit_behavior = "Close",
+
+    -- ── Windows 11 렌더링 최적화 ────────────────────────
+    front_end               = "WebGpu",
+    webgpu_power_preference = "HighPerformance",
+    max_fps                 = 60,
+
+    -- ── 터미널 동작 ─────────────────────────────────────
+    term                  = "wezterm",
+    enable_kitty_keyboard = true,
+
+    adjust_window_size_when_changing_font_size = false,
+    allow_square_glyphs_to_overflow_width      = "WhenFollowedBySpace",
+    unicode_version           = 15,
+    warn_about_missing_glyphs = false,
+
+    -- ── 마우스 ─────────────────────────────────────────
+    mouse_bindings                = mouse_bindings,
+    hide_mouse_cursor_when_typing = false,
+
+    -- ── 키 바인딩 ───────────────────────────────────────
+    leader = leader,
+    keys   = keys,
+
+    -- ── 선택 / 커서 ─────────────────────────────────────
+    selection_word_boundary = " \t\n\"'()[]{}<>:;,.?！？，。；：",
+    default_cursor_style    = "SteadyBar",
+
+    -- ── 스크롤백 ────────────────────────────────────────
+    scrollback_lines  = 30000,
+    enable_scroll_bar = false,
+
+    -- ── 기타 ───────────────────────────────────────────
+    audible_bell       = "Disabled",
+    hyperlink_rules    = wezterm.default_hyperlink_rules(),
+    show_update_window = true,
+  }
+
+  return config  
+  ```
+
+---
+
+
+token_manager.py 에 대해 아래 조건으로 개선하기 위한 FSD 문서를 작성해줘.
+- MIN_MESSAGES_TO_KEEP 를 MAX_MESSAGES_TO_KEEP 로 변경한다.
+- MAX_MESSAGES_TO_KEEP 의 값을 .env 파일에서 설정할 수 있도록 변경한다. 기본값은 10으로 한다.
+- MAX_TOKENS_CLAUDE, MAX_TOKENS_GENAI, MAX_TOKENS_GEMINI 의 값을 .env 파일에서 설정할 수 있도록 변경한다. 기본값은 150000, 96000, 786000 으로 한다.
+- MAX_MESSAGES_TO_KEEP 이상 이거나 토큰수가 MAX_TOKENS_CLAUDE 의 75%를 초과하면 오래된 메시지를 제거한다.
+- 초과하면 그와 관련된 메세지를 출력한다. 
+- specs/requirements 폴더에 FSD v1.0.063 문서로 작성한다.
+
+

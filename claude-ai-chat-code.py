@@ -134,6 +134,9 @@ def main():
     # 환경변수 로드
     load_environment()
 
+    # TokenManager 설정값 반영
+    TokenManager.reload_from_env()
+
     # Claude API 설정값 (환경변수에서 로드)
     ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
     CLAUDE_MODEL_ID = os.getenv("CLAUDE_MODEL_ID", "claude-sonnet-4-5")
@@ -187,7 +190,6 @@ def main():
     )
 
     print_banner()
-    print_menu()
     print(f"\n📂 현재 작업 디렉토리: {workspace}")
     print(f"🔄 현재 모드: {'스트리밍' if streaming_mode else '논스트리밍'}")
 

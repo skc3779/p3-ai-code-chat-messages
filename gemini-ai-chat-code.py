@@ -76,7 +76,7 @@ def print_banner():
 {C}║{R}        {Y}{BD} ╚═════╝ ╚══════╝╚═╝  ╚═══╝     ╚═╝  ╚═╝╚═╝{R}                           {C}║{R}
 {C}║{R}                                                                              {C}║{R}
 {C}║{R}         {B}{BD}>> GEN AI CODE CHAT <<!{R}                                              {C}║{R}
-{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  v1.0.051{R}                           {C}║{R}
+{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  v1.0.065{R}                           {C}║{R}
 {C}║{R}                                                                              {C}║{R}
 {C}╚══════════════════════════════════════════════════════════════════════════════╝{R}
 """
@@ -131,6 +131,9 @@ def main():
     # 환경변수 로드
     load_environment()
 
+    # TokenManager 설정값 반영
+    TokenManager.reload_from_env()
+
     # Gemini API 설정값 (환경변수에서 로드)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-3.0-flash")
@@ -167,7 +170,6 @@ def main():
 
     # 메뉴 출력
     print_banner()
-    print_menu()
     print(f"\n📂 작업 디렉토리: {workspace}")
     print(f"🤖 모델: {GEMINI_MODEL_ID}")
 
