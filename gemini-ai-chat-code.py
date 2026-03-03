@@ -85,7 +85,7 @@ def print_banner():
     # "🤖  AI-Powered Code Assistant  ·  " 길이에 맞춰 나머지 공백 계산
     base_text_len = 34 + len(version_str) # 🤖 이모지 포함 눈에 보이는 대략적인 길이
     target_len = 73 
-    padding = " " * max(0, target_len - base_text_len)
+    padding = " " * max(0, target_len - base_text_len - 4)
 
     banner = f"""
 {C}╔══════════════════════════════════════════════════════════════════════════════╗{R}
