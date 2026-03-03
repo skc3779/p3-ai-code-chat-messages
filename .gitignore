@@ -79,4 +79,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+### logs ###
+logs/
+
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,pycharm+iml

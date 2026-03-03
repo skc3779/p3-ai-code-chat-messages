@@ -996,3 +996,20 @@ token_manager.py 에 대해 아래 조건으로 개선하기 위한 FSD 문서�
 - specs/requirements 폴더에 FSD v1.0.063 문서로 작성한다.
 
 
+---
+
+gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 각각 빌드를 통해 exe 파일 만들기 위한 FSD 문서를 작성해줘.
+- pyinstaller 를 사용하여 빌드한다.
+- --noconsole 옵션을 사용하여 콘솔창이 뜨지 않도록 한다.
+- --onefile 옵션을 사용하여 하나의 파일로 빌드한다.
+- --icon 옵션을 사용하여 아이콘을 지정한다.
+- --name 옵션을 사용하여 파일명을 지정한다.
+- --distpath 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- --workpath 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- --specpath 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- --clean 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- --upx-dir 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- --key 옵션을 사용하여 빌드된 파일을 저장할 경로를 지정한다.
+- 각각 빌드 스크립트를 작성한다.
+- 그외 필요사항이 있다면 추가한다.
+- specs/requirements 폴더에 FSD v1.0.065 문서로 작성한다.

@@ -18,6 +18,7 @@ from .terminal_executor import TerminalExecutor
 from .git_manager import GitManager
 from .package_manager import PackageManager
 from .token_manager import TokenManager
+from .api_logger import ApiLogger
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
@@ -40,6 +41,9 @@ class GeminiCodeAssistant:
         self.headers = {
             "Content-Type": "application/json"
         }
+        
+        # API 로거 초기화 (Provider 명시)
+        self.api_logger = ApiLogger("gemini", workspace_dir)
         self.conversation_history: List[Dict] = []
         
         # 공용 모듈 초기화 (Claude/GenAI와 동일)
@@ -174,9 +178,17 @@ def calculate_sum(a, b):
 
     def _chat_streaming(self, user_message: str) -> str:
         """스트리밍 모드 채팅 (SSE)"""
+        import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:streamGenerateContent?alt=sse&key={self.api_key}"
         body = self._build_request_body(user_message)
         
+        # REQ-064-006: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=True, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
@@ -184,6 +196,12 @@ def calculate_sum(a, b):
         
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-064-006: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=True, assembled_content=response.text,
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
         
         client = sseclient.SSEClient(response)
@@ -215,6 +233,14 @@ def calculate_sum(a, b):
         
         print("\n")
         
+        # REQ-064-006: 스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=True, assembled_content=result_message,
+            chunk_count=1, # 단위 측정 불가하므로 임의 1 할당 또는 패킷 카운트 대체
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
+
         # 히스토리에 추가
         self.conversation_history.append({"role": "user", "content": user_message})
         if result_message:
@@ -224,9 +250,17 @@ def calculate_sum(a, b):
 
     def _chat_non_streaming(self, user_message: str) -> str:
         """논스트리밍 모드 채팅"""
+        import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:generateContent?key={self.api_key}"
         body = self._build_request_body(user_message)
         
+        # REQ-064-006: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=False, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
@@ -234,6 +268,12 @@ def calculate_sum(a, b):
         
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-064-006: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=False, response_body={"error": response.text},
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
         
         result = response.json()
@@ -249,6 +289,13 @@ def calculate_sum(a, b):
         
         print(f"\n🤖 AI: {content}\n")
         
+        # REQ-064-006: 논스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=False, response_body=result,
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
+
         # 히스토리에 추가
         self.conversation_history.append({"role": "user", "content": user_message})
         if content:

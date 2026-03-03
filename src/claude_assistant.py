@@ -18,8 +18,8 @@ from .git_manager import GitManager
 from .package_manager import PackageManager
 from .tool_definitions import FILESYSTEM_TOOLS
 from .token_manager import TokenManager
+from .api_logger import ApiLogger
 from .api_retry import APIRetry
-from .history_manager import HistoryManager
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
@@ -31,11 +31,15 @@ class ClaudeCodeAssistant:
     def __init__(self, api_key: str, model_id: str = "claude-sonnet-4-5",
                  workspace_dir: str = ".", endpoint_url: str = "https://api.anthropic.com"):
         self.endpoint_url = endpoint_url
+        self.api_key = api_key # Store api_key for headers
         self.headers = {
-            "x-api-key": api_key,
+            "x-api-key": self.api_key,
             "anthropic-version": "2023-06-01",
-            "Content-Type": "application/json"
+            "content-type": "application/json"
         }
+        
+        # API 로거 초기화 (Provider 명시)
+        self.api_logger = ApiLogger("claude", workspace_dir)
         self.model_id = model_id
         self.conversation_history: List[Dict] = []
 
@@ -205,6 +209,15 @@ def main():
 
     def _chat_streaming(self, api_url: str, body: Dict, user_message: str) -> str:
         """스트리밍 모드 채팅 (Tool Use 지원)"""
+        import time as _time
+        
+        # REQ-064-005: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=True, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body, stream=True
@@ -212,6 +225,12 @@ def main():
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-064-005: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=True, assembled_content=response.text,
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
 
         client = sseclient.SSEClient(response)
@@ -289,6 +308,14 @@ def main():
         # 텍스트 합치기 (단순 문자열 반환용)
         full_text = "".join([c['text'] for c in current_message_content if c['type'] == 'text'])
         
+        # REQ-064-005: 스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=True, assembled_content=full_text,
+            chunk_count=len(current_message_content), # 대략적인 패킷 카운트
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
+
         # 히스토리 업데이트 (User)
         self.conversation_history.append({"role": "user", "content": user_message})
         
@@ -349,6 +376,15 @@ def main():
 
     def _chat_non_streaming(self, api_url: str, body: Dict, original_message: str) -> str:
         """논스트리밍 모드 채팅 (Tool Use 지원)"""
+        import time as _time
+        
+        # REQ-064-005: Request 로그 저장
+        _start = _time.time()
+        log_id = self.api_logger.log_request(
+            api_url=api_url, headers=self.headers,
+            body=body, streaming=False, model_id=self.model_id
+        )
+
         # 재시도 로직 적용
         response = APIRetry.retry_request(
             requests.post, api_url, headers=self.headers, json=body
@@ -356,6 +392,12 @@ def main():
 
         if response.status_code != 200:
             print(f"\n❌ API Error: {response.status_code} - {response.text}")
+            # REQ-064-005: 에러 Response 로그 저장
+            self.api_logger.log_response(
+                log_id=log_id, status_code=response.status_code,
+                streaming=False, response_body={"error": response.text},
+                elapsed_ms=int((_time.time() - _start) * 1000)
+            )
             return ""
 
         result = response.json()
@@ -371,6 +413,13 @@ def main():
             elif block.get('type') == 'tool_use':
                 print(f"\n🔨 도구 호출: {block.get('name')}")
         
+        # REQ-064-005: 논스트리밍 Response 로그 저장
+        self.api_logger.log_response(
+            log_id=log_id, status_code=response.status_code,
+            streaming=False, response_body=result,
+            elapsed_ms=int((_time.time() - _start) * 1000)
+        )
+
         # 히스토리 추가
         if original_message: # 후속 호출 시에는 비어있을 수 있음
             self.conversation_history.append({"role": "user", "content": original_message})

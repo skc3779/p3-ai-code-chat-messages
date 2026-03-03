@@ -177,11 +177,11 @@ python -m unittest tests.test_gemini_tool_use 2>&1 | Select-String -Pattern "^te
 
 ```powershell
 # Claude 어시스턴트
-python claude-ai-chat-code01.py
+python claude-ai-chat-code.py
 
 # GenAI 어시스턴트
-python gen-ai-chat-code01.py
+python gen-ai-chat-code.py
 
 # Gemini 어시스턴트
-python gemini-ai-chat-code01.py
+python gemini-ai-chat-code.py
 ```

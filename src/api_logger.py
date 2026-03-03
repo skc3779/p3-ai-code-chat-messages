@@ -1,15 +1,15 @@
 """
-GenAIApiLogger - GenAI API 요청/응답 JSON 파일 로깅 모듈
+ApiLogger - API 요청/응답 JSON 파일 로깅 공통 모듈
 
-FSD v1.0.062 / REQ-062-001~008
+FSD v1.0.064 / REQ-064-001~006
 
-GenAI (SCI Portal) API 호출 시 Request Header, Body와 Response를
+각 모델(Claude, Gemini, GenAI) API 호출 시 Request Header, Body와 Response를
 JSON 파일로 저장하여 디버깅 및 장애 분석에 활용한다.
 
-- logs/gen-ai/ 폴더에 JSON 파일 생성
-- 파일명: gen-ai-{UUID}-request-{YYYYMMDDHHMMSS}.json
-          gen-ai-{UUID}-response-{YYYYMMDDHHMMSS}.json
-- .env의 GEN_AI_LOG_ENABLED 플래그로 켜기/끄기 제어
+- logs/{provider}/ 폴더에 JSON 파일 생성
+- 파일명: {provider}-{UUID}-request-{YYYYMMDDHHMMSS}.json
+          {provider}-{UUID}-response-{YYYYMMDDHHMMSS}.json
+- .env의 {PROVIDER}_AI_LOG_ENABLED 플래그로 켜기/끄기 제어 (단, GenAI는 GEN_AI_LOG_ENABLED)
 """
 
 import os
@@ -21,42 +21,50 @@ from pathlib import Path
 from typing import Dict, Optional
 
 
-class GenAIApiLogger:
+class ApiLogger:
     """
-    GenAI API 요청/응답을 JSON 파일로 로깅하는 모듈.
+    API 요청/응답을 JSON 파일로 로깅하는 공통 모듈.
 
     사용법:
-        logger = GenAIApiLogger(workspace_dir=".")
+        logger = ApiLogger("claude", workspace_dir=".")
         log_id = logger.log_request(api_url, headers, body, streaming, model_id)
         logger.log_response(log_id, status_code, streaming, ...)
     """
 
-    LOG_DIR = "logs/gen-ai"
-
-    def __init__(self, workspace_dir: str = "."):
+    def __init__(self, provider: str, workspace_dir: str = "."):
         """
-        REQ-062-001: API 로거 초기화.
+        REQ-064-001: API 로거 초기화.
 
         Args:
+            provider: 제공자 이름 ("claude", "gemini", "gen-ai")
             workspace_dir: 프로젝트 루트 디렉토리 (logs 폴더의 기준 경로)
         """
+        self.provider = provider
         self.workspace_dir = Path(workspace_dir)
         self.enabled = self._check_enabled()
-        self.log_dir = self.workspace_dir / self.LOG_DIR
+        self.log_dir = self.workspace_dir / f"logs/{self.provider}"
 
         # REQ-062-002, NREQ-062-003: 로그 폴더 자동 생성
         if self.enabled:
             self.log_dir.mkdir(parents=True, exist_ok=True)
 
-    @staticmethod
-    def _check_enabled() -> bool:
+    def _check_enabled(self) -> bool:
         """
-        REQ-062-006: 환경변수 GEN_AI_LOG_ENABLED를 확인하여 로깅 활성화 여부 반환.
+        REQ-064-002: 환경변수를 확인하여 로깅 활성화 여부 반환.
 
+        - gen-ai -> GEN_AI_LOG_ENABLED
+        - claude -> CLAUDE_AI_LOG_ENABLED
+        - gemini -> GEMINI_AI_LOG_ENABLED
+        
         지원 값: true, 1, yes (대소문자 무관)
         기본값: false (미설정 시)
         """
-        value = os.getenv("GEN_AI_LOG_ENABLED", "false")
+        if self.provider == "gen-ai":
+            env_key = "GEN_AI_LOG_ENABLED"
+        else:
+            env_key = f"{self.provider.replace('-', '_').upper()}_AI_LOG_ENABLED"
+            
+        value = os.getenv(env_key, "false")
         return value.lower() in ("true", "1", "yes")
 
     @staticmethod
@@ -111,9 +119,9 @@ class GenAIApiLogger:
                     streaming: bool, model_id: str,
                     log_id: str = None) -> str:
         """
-        REQ-062-003: Request 로그를 JSON 파일로 저장.
+        REQ-062-003 / REQ-064-005,006: Request 로그를 JSON 파일로 저장.
 
-        파일명: gen-ai-{UUID}-request-{YYYYMMDDHHMMSS}.json
+        파일명: {provider}-{UUID}-request-{YYYYMMDDHHMMSS}.json
 
         Args:
             api_url: API 엔드포인트 URL
@@ -133,7 +141,7 @@ class GenAIApiLogger:
             return log_id
 
         ts = self._get_file_timestamp()
-        filename = f"gen-ai-{log_id}-request-{ts}.json"
+        filename = f"{self.provider}-{log_id}-request-{ts}.json"
 
         data = {
             "log_type": "request",
@@ -156,9 +164,9 @@ class GenAIApiLogger:
                      chunk_count: int = 0,
                      elapsed_ms: int = 0) -> Optional[str]:
         """
-        REQ-062-004: Response 로그를 JSON 파일로 저장.
+        REQ-062-004 / REQ-064-005,006: Response 로그를 JSON 파일로 저장.
 
-        파일명: gen-ai-{UUID}-response-{YYYYMMDDHHMMSS}.json
+        파일명: {provider}-{UUID}-response-{YYYYMMDDHHMMSS}.json
 
         Args:
             log_id: 요청과 동일한 고유 ID
@@ -176,7 +184,7 @@ class GenAIApiLogger:
             return None
 
         ts = self._get_file_timestamp()
-        filename = f"gen-ai-{log_id}-response-{ts}.json"
+        filename = f"{self.provider}-{log_id}-response-{ts}.json"
 
         data = {
             "log_type": "response",

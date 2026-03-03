@@ -22,7 +22,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from src.genai_api_logger import GenAIApiLogger
+from src.api_logger import ApiLogger
 
 
 class TestGenAIApiLogger(unittest.TestCase):
@@ -39,7 +39,7 @@ class TestGenAIApiLogger(unittest.TestCase):
     def _make_logger(self, enabled: str = "true"):
         """테스트용 로거 생성 (환경변수 mock)"""
         with patch.dict(os.environ, {"GEN_AI_LOG_ENABLED": enabled}):
-            return GenAIApiLogger(workspace_dir=self.test_dir)
+            return ApiLogger(provider="gen-ai", workspace_dir=self.test_dir)
 
     def _sample_headers(self):
         return {
@@ -134,7 +134,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             # GEN_AI_LOG_ENABLED가 없으므로 기본값 false
             if "GEN_AI_LOG_ENABLED" in os.environ:
                 del os.environ["GEN_AI_LOG_ENABLED"]
-            logger = GenAIApiLogger(workspace_dir=self.test_dir)
+            logger = ApiLogger(provider="gen-ai", workspace_dir=self.test_dir)
             self.assertFalse(logger.enabled)
 
     # ── TC-062-005: Request-Response UUID 동일 ──
@@ -355,7 +355,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             "Content-Type": "application/json",
             "Authorization-Secret": "another_secret"
         }
-        masked = GenAIApiLogger._mask_headers(headers)
+        masked = ApiLogger._mask_headers(headers)
 
         self.assertEqual(masked["X-Lego-Client-Id"], "APP")
         self.assertEqual(masked["X-Lego-Client-Secret"], "***MASKED***")

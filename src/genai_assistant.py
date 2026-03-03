@@ -20,12 +20,12 @@ from .git_manager import GitManager
 from .package_manager import PackageManager
 from .llm_config import LLMConfigProvider
 from .token_manager import TokenManager
+from .api_logger import ApiLogger
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
 from .response_parser import ResponseParser
 from .sensitive_filter import SensitiveWordFilter
-from .genai_api_logger import GenAIApiLogger
 
 class GenAICodeAssistant:
     """GenAI API 코딩 어시스턴트 (커스텀 API)"""
@@ -56,8 +56,8 @@ class GenAICodeAssistant:
         # REQ-058-001: 민감 단어 필터 초기화
         self.sensitive_filter = SensitiveWordFilter()
 
-        # REQ-062-001: API 로거 초기화
-        self.api_logger = GenAIApiLogger(workspace_dir)
+        # REQ-064-001: API 로거 초기화
+        self.api_logger = ApiLogger("gen-ai", workspace_dir)
 
         # LLM 언어 설정 (기본값 없음)
         self.llm_config = LLMConfigProvider()
