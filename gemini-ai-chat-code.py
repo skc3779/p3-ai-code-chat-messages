@@ -65,7 +65,7 @@ def _supports_color() -> bool:
 
 
 def print_banner():
-    """ANSI Art 배너 출력 - >> GEN AI CODE CHAT <<"""
+    """ANSI Art 배너 출력 - >> GEMINI AI CODE CHAT <<"""
     use_color = _supports_color()
 
     # ANSI 컬러 정의
@@ -76,6 +76,16 @@ def print_banner():
     B  = '\033[94m' if use_color else ''   # Blue
     BD = '\033[1m'  if use_color else ''   # Bold
     R  = '\033[0m'  if use_color else ''   # Reset
+    
+    # REQ-067-002: 버전 정보를 환경변수에서 로드 (기본값 v1.0.040)
+    version = os.getenv("AI_VERSION", "v1.0.040")
+    version_str = f"v{version}" if not str(version).startswith("v") else str(version)
+    
+    # 우측 테두리 정렬을 위한 패딩 계산 (기존 "v1.0.065" 기준 폭 고려)
+    # "🤖  AI-Powered Code Assistant  ·  " 길이에 맞춰 나머지 공백 계산
+    base_text_len = 34 + len(version_str) # 🤖 이모지 포함 눈에 보이는 대략적인 길이
+    target_len = 73 
+    padding = " " * max(0, target_len - base_text_len)
 
     banner = f"""
 {C}╔══════════════════════════════════════════════════════════════════════════════╗{R}
@@ -88,7 +98,7 @@ def print_banner():
 {C}║{R}        {Y}{BD} ╚═════╝ ╚══════╝╚═╝  ╚═══╝     ╚═╝  ╚═╝╚═╝{R}                           {C}║{R}
 {C}║{R}                                                                              {C}║{R}
 {C}║{R}         {B}{BD}>> GEMINI AI CODE CHAT <<!{R}                                           {C}║{R}
-{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  v1.0.065{R}                           {C}║{R}
+{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  {version_str}{R}{padding}{C}║{R}
 {C}║{R}                                                                              {C}║{R}
 {C}╚══════════════════════════════════════════════════════════════════════════════╝{R}
 """
