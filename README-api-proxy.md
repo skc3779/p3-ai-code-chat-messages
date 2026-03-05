@@ -39,13 +39,17 @@ AI Proxy Server는 Python FastAPI 기반의 로컬 프록시 서버로, 3개 AI 
 ai-proxy/
 ├── proxy_server.py              ← FastAPI 메인 서버 + uvicorn 실행
 ├── models.py                    ← Pydantic 요청/응답/에러/Tool Call 스키마
+│                                   (content: str | list 유연 타입 지원)
 ├── router.py                    ← 모델명 접두사 기반 Provider 라우팅
 ├── providers/
 │   ├── __init__.py              ← Provider 클래스 일괄 export
 │   ├── base.py                  ← Provider 추상 클래스 + 공통 유틸
+│   │                               (truncate_for_log, _retry_on_429)
 │   ├── gemini_provider.py       ← Gemini (패스스루 + Tool Call 정규화)
+│   │                               (_normalize_stream_chunk)
 │   ├── claude_provider.py       ← Claude (Tool Use ↔ OpenAI Tool Call 변환)
 │   └── genai_provider.py        ← GenAI SCI Portal (Tool Call 에뮬레이션)
+│                                   (민감 단어 필터링, 429 재시도)
 ├── test_toolcall.py             ← Tool Call 통합 테스트 스크립트
 ├── .env                         ← API 키 (Git 미추적)
 ├── .env.example                 ← .env 템플릿 (Git 추적)
@@ -237,6 +241,8 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 }
 ```
 
+> **참고:** `content` 필드는 문자열뿐만 아니라 `[{"type": "text", "text": "..."}]` 형태의 content parts 배열도 지원합니다 (멀티모달 호환).
+
 ### Response (텍스트)
 
 ```json
@@ -344,11 +350,11 @@ data: [DONE]
 
 | OpenAI 형식 | → | SCI Portal 형식 |
 |-------------|---|-----------------|
-| `model` | → | `model_id` |
-| `messages[{role, content}]` | → | `prompt[{role, text}]` |
-| `temperature` | → | `parameters.temperature` |
-| `max_tokens` | → | `parameters.max_output_tokens` |
-| `Authorization: Bearer` | → | `X-Client-Key` + `X-Client-Secret` |
+| `model` | → | `modelIds` (배열) |
+| `messages[{role, content}]` | → | `contents` (문자열 배열) + `systemPrompt` |
+| `temperature` | → | `llmConfig.temperature` |
+| `max_tokens` | → | `llmConfig.max_new_tokens` |
+| `Authorization: Bearer` | → | `X-Lego-Client-Id` + `X-Lego-Client-Secret` |
 
 **★ Tool Call 에뮬레이션** (SCI Portal은 네이티브 Tool Calling 미지원):
 
@@ -358,6 +364,8 @@ data: [DONE]
 | `tool_choice` | → | 프롬프트 지시문 (`"none"`=미삽입, `"required"`=강제 사용) |
 | `tool` role 메시지 | → | `[Tool Result for {name}]` 텍스트로 변환 |
 | AI 응답 `` ```tool_call``` `` | ← | 파싱하여 `tool_calls` 형식으로 변환 |
+
+**★ 민감 단어 필터링**: GenAI Provider 요청 시 `password`, `secret`, `token` 등의 민감 키워드를 자동으로 치환하여 SCI Portal 보안 필터 차단을 방지하고, 응답 수신 후 원래 단어로 복원합니다.
 
 ## OpenCode 연동
 
@@ -383,6 +391,9 @@ data: [DONE]
 | [FSD v1.0.052](docs/specs/requirements/FSD_v1.0.052_openai-compatible-proxy.md) | 기능 설계 — 프록시 서버 기본 구축 |
 | [FSD v1.0.053](docs/specs/requirements/FSD_v1.0.053_openai-compatible-proxy-toolcall.md) | 기능 설계 — Tool Call 기능 추가 |
 | [FSD v1.0.054 v2](docs/specs/requirements/FSD_v1.0.054_genai-provider-toolcall_v2.md) | 기능 설계 — GenAI Tool Call 에뮬레이션 |
+| [FSD v1.0.055](docs/specs/requirements/FSD_v1.0.055_genai-provider-endpoint-fix.md) | 기능 설계 — GenAI Endpoint URL 수정 |
+| [FSD v1.0.058](docs/specs/requirements/FSD_v1.0.058_sensitive-word-filter.md) | 기능 설계 — 민감 단어 필터링 |
+| [BUG v1.0.057](docs/specs/requirements/BUG_v1.0.057_genai-content-string-validation.md) | 버그 수정 — content 타입 유연성 개선 |
 | [REP v1.0.052](docs/specs/reports/REP_v1.0.052_litellm-proxy-review.md) | LiteLLM 검토 보고서 (불필요 판정) |
 | [REP v1.0.054](docs/specs/reports/REP_v1.0.054_toolcall-implementation.md) | Tool Call 구현 보고서 |
 

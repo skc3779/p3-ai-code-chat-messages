@@ -1025,3 +1025,64 @@ gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 각각 cli_i
 
 gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 의 banner에 있는 버전 정보를 .env 파일에 있는 AI_VERSION 변수를 사용하도록 변경한다.
 - specs/requirements 폴더에 FSD v1.0.067 문서로 작성한다.
+
+---
+
+
+/context <파일패턴> 도 /auto_context <파일패턴> 처럼 파일명 패턴을 지원하도록 FSD 문서를 작성해줘.
+- specs/requirements 폴더에 FSD v1.0.068 문서로 작성한다.
+- 예시)
+```python
+  elif command == '/context':
+      if not args:
+          print("❌ 형식: /context <파일패턴> [질문]")
+          print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
+          print("예: /context src/*.py")
+          print("예: /context src/*.py 이 코드를 리팩토링해줘")
+          print("예: /context [src/*.py, docs/*.md] README 작성해줘")
+          continue
+```
+
+---
+
+
+docs/requirements 폴더의 버전에 대한 RELEASE 문서를 작성해줘
+- docs/specs/releases 폴더에 RELEASE 별로 각각의 버전의 릴리즈 노트를 작성한다  
+- RELEASE 문서는 docs/requirements 폴더의 FSD, BUG 문서중 RELEASE가 미작성된 문서들을 기반으로 작성한다. 
+- RELEASE 문서의 내용은 핵심적인 내용을 담아 너무 길지 않게 작성한다.
+
+---
+
+프로젝트의 전체 구조를 정밀하고 상세하게 분석한 후 아래 README 파일들에 변경 및 개선된 내용을 업데이트 해줘
+
+- README-api-proxy.md 
+- README-claude-ai-chat-code.md 
+- README-gemini-ai-chat-code.md 
+- README-gen-ai-chat-code.md
+
+---
+
+`/context <파일패턴>` 명령어시 아래의 파일패턴에 맞게 파일을 읽는지 확인하는 테스트 FSD 문서를 작성해줘.
+- FSD_v1.0.068_context-multi-pattern.md 를 참고합니다.
+- `/auto_context <파일패턴>` 도 `/context <파일패턴>`와 동일하게 동작해야 합니다.
+- 다음과 같은 다양한 파일패턴을 사용한 테스트 시나리오를 작성합니다.
+| # | 입력 | 기대 결과 |
+|---|------|----------|
+| 1 | `/context` | 도움말 + 3가지 예시 출력 |
+| 2 | `/context src/*.py` | 패턴 `['src/*.py']` 매칭 후 멀티라인 입력 진입 |
+| 3 | `/context src/*.py 이 코드 분석해줘` | 패턴 `['src/*.py']`, 질문 `이 코드 분석해줘`로 AI 호출 |
+| 4 | `/context [src/*.py, docs/*.md]` | 패턴 `['src/*.py', 'docs/*.md']` 매칭 후 멀티라인 입력 진입 |
+| 5 | `/context [src/*.py, docs/*.md] README 작성해줘` | 패턴 2개 매칭, 질문 `README 작성해줘`로 AI 호출 |
+| 6 | `/context [src/*.py` | `❌ 닫는 대괄호 ']'가 없습니다.` 오류 출력 |
+| 7 | `/context src/**/*.py` | 패턴 src 밑과 하위 폴더의 모든 py 파일을 읽는고, 멀티라인 입력 진입 |
+| 8 | `/context src/**/*.py 이 코드 분석해줘` | 패턴 src 밑과 하위 폴더의 모든 py 파일을 읽고, 질문 `이 코드 분석해줘`로 AI 호출 |
+| 9 | `/context src/**/gen*.py 이 코드 분석해줘` | 패턴 src 밑과 하위 폴더의 gen으로 시작하는 모든 py 파일을 읽고, 질문 `이 코드 분석해줘`로 AI 호출 |
+| 10 | `/context [src/*_[0-9].py, logs/log_d{4}-\d{2}-\d{2}\.log, images/*\.(jpg|png|jpeg)]` | 다양한 파일명 패턴 인식 매칭 후 멀티라인 입력 진입  |
+
+---
+
+`/context <파일패턴>` 과  `/auto_context <파일패턴>` 의 `<파일패턴>` 에 의한 파일인식 로직은 같아도 고유의 기능은 유지되도록 FSD 문서가 반영되어 있는지 검토 바랍니다.
+- `/context <파일패턴>` : 파일 컨텍스트 포함 질문
+- `/auto_context <파일패턴>` : 파일 단위로 컨텍스트를 자동 분할하여 반복 질의
+- FSD_v1.0.068_context-multi-pattern.md 기능 개선 시 각각의 명령어가 고유기능을 유지하고 있는지 검토하고 반영해줘.
+- 검토 반영 중 문제점이 있으면 사전에 질문 바랍니다.
