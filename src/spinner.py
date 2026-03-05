@@ -24,7 +24,7 @@ class WaitSpinner:
             time.sleep(0.3)
             
         # 스피너가 종료되면 해당 라인을 지움
-        sys.stdout.write('\r' + ' ' * (len(self.message) + 2) + '\r')
+        sys.stdout.write('\r' + ' ' * (len(self.message) + 10) + '\r')
         sys.stdout.flush()
 
     def start(self):

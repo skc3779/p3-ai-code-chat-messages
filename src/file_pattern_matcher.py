@@ -3,10 +3,12 @@ FilePatternMatcher - 파일 패턴 매칭 유틸리티 모듈
 
 다양한 경로 형식(절대경로, 상대경로, ./접두어, 파일명)을 지원하는
 파일 패턴 매칭 기능을 제공합니다.
+
+v1.0.068: ** 재귀 글로빙 지원 추가
 """
 
 import fnmatch
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import List
 
 
@@ -58,6 +60,36 @@ class FilePatternMatcher:
         
         return normalized
     
+    def _match_recursive(self, rel_path: str, pattern: str) -> bool:
+        """
+        ** 패턴을 포함한 재귀 글로빙 매칭
+        
+        PurePosixPath.match()를 사용하여 ** 패턴을 지원합니다.
+        ** 는 0개 이상의 디렉토리를 매칭합니다.
+        
+        Python 3.12의 PurePosixPath.match()는 **를 "최소 1개 디렉토리"로
+        해석하므로, **를 제거한 직하위 패턴도 fnmatch로 추가 매칭합니다.
+        예: src/**/*.py → src/deep/file.py (PurePosixPath) + src/file.py (fnmatch)
+        
+        Args:
+            rel_path: 워크스페이스 기준 상대 경로 (슬래시 정규화 완료)
+            pattern: ** 를 포함한 글로브 패턴
+            
+        Returns:
+            매칭 여부
+        """
+        # 1. PurePosixPath.match()로 하위 디렉토리 재귀 매칭
+        if PurePosixPath(rel_path).match(pattern):
+            return True
+        
+        # 2. ** 를 제거한 직하위 패턴으로 fnmatch 폴백
+        #    src/**/*.py → src/*.py, src/**/gen*.py → src/gen*.py
+        flat_pattern = pattern.replace('**/', '').replace('/**', '')
+        if fnmatch.fnmatch(rel_path, flat_pattern):
+            return True
+        
+        return False
+    
     def match(self, filepath: Path, pattern: str) -> bool:
         """
         파일 경로가 패턴과 일치하는지 확인합니다.
@@ -68,6 +100,7 @@ class FilePatternMatcher:
         - ./ 접두어 경로 (./src/file.py)
         - 절대 경로 (c:/workspace/src/file.py)
         - 와일드카드 (*.py, src/*.py)
+        - ** 재귀 글로빙 (src/**/*.py)
         
         Args:
             filepath: 검사할 파일 경로
@@ -85,6 +118,10 @@ class FilePatternMatcher:
             rel_path = str(filepath).replace('\\', '/')
         
         filename = filepath.name
+        
+        # ** 패턴이 포함된 경우: 재귀 글로빙 사용
+        if '**' in normalized_pattern:
+            return self._match_recursive(rel_path, normalized_pattern)
         
         # 1. 상대 경로와 매칭
         if fnmatch.fnmatch(rel_path, normalized_pattern):
@@ -122,3 +159,4 @@ class FilePatternMatcher:
                     matched_files.append(f)
         
         return matched_files
+
