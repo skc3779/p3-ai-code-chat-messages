@@ -13,19 +13,17 @@ from typing import List, Tuple
 class ContextProcessor:
     """파일 단위 자동 반복 처리기"""
     
-    def fix_unbalance_backticks(self, text: str) -> str:
+    def normalize_backtick_blocks(self, text: str) -> str:
         """
-        텍스트에서 닫히지 않은 백틱을 수정
-        
-        Args:
-            text: 수정할 텍스트
-            
-        Returns:
-            수정된 텍스트
+        AI 응답의 ``` 블록을 정렬한다.
+
+        1. ``` 블록이 줄 시작에 오도록 정규화:
+           ``` 앞에 \n이 없는 경우(문자열 시작 제외) \n을 삽입
+        2. 언밸런스 ``` 보정:
+           ``` 개수가 홀수면 닫히지 않은 블록이므로 \n``` 를 말미에 추가
         """
-        
-        backtick_count = text.count("```")
-        if backtick_count % 2 != 0:
+        text = re.sub(r'(?<=[^\n])(```)', r'\n\1', text)
+        if text.count("```") % 2 != 0:
             if not text.endswith("\n"):
                 text += "\n"
             text += "```"
@@ -87,7 +85,7 @@ class ContextProcessor:
 
                 # 4. 응답에서 파일 추출 및 자동 저장
                 if response:
-                    saved = self._auto_save_files(self.fix_unbalance_backticks(response))
+                    saved = self._auto_save_files(self.normalize_backtick_blocks(response))
                     saved_count += len(saved)
 
                     if not saved:
@@ -131,6 +129,9 @@ class ContextProcessor:
         - 언어 태그가 있는 ```lang → 내부 코드 블록 시작
         - 언어 태그가 없는 ``` → 내부 블록이 열려있으면 종료,
           아닌 경우 다음 줄 존재 여부로 내부 블록 시작 vs 파일 블록 종료 판별
+
+        전처리:
+        - ``` 앞에 \n이 없으면(문자열 시작 제외) 자동으로 \n을 삽입
         """
         saved_files: List[str] = []
         lines = response.splitlines()

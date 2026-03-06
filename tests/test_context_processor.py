@@ -418,6 +418,94 @@ class TestContextProcessor(unittest.TestCase):
         self.assertIn("print('hello')", content_b)
         self.assertIn("End B.", content_b)
 
+    # ──────────────────────────────────────────────────────────────────────
+    # ``` 앞에 \n 없는 경우 자동 삽입 테스트
+    # ──────────────────────────────────────────────────────────────────────
+
+    def test_process_single_file_no_newline_before_backtick(self):
+        """단일 파일 처리: ```filename: 앞과 닫는 ``` 앞에 \n 없는 경우"""
+        self.mock_assistant.chat.return_value = (
+            "번역 결과입니다."
+            "```filename:output/file1.md\n"
+            "번역된 내용"
+            "```"
+        )
+        # 실제 전달 문자열: "번역 결과입니다.```filename:output/file1.md\n번역된 내용```"
+
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+            streaming=False
+        )
+
+        matched_files = [self.temp_dir / "file1.md"]
+        processed, saved = processor.process_files(matched_files, "번역해줘")
+
+        self.assertEqual(processed, 1)
+        self.assertEqual(saved, 1)
+        self.assertTrue((self.temp_dir / "output" / "file1.md").exists())
+        self.assertEqual(
+            (self.temp_dir / "output" / "file1.md").read_text(encoding="utf-8"),
+            "번역된 내용"
+        )
+
+    def test_process_multiple_files_no_newline_before_backtick(self):
+        """여러 파일 순차 처리: 닫는 ``` 앞에 \n 없는 경우"""
+        self.mock_assistant.chat.side_effect = [
+            "```filename:output/file1.md\n번역1```",
+            "```filename:output/file2.md\n번역2```",
+        ]
+
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+            streaming=False
+        )
+
+        matched_files = [
+            self.temp_dir / "file1.md",
+            self.temp_dir / "file2.md",
+        ]
+        processed, saved = processor.process_files(matched_files, "번역해줘")
+
+        self.assertEqual(processed, 2)
+        self.assertEqual(saved, 2)
+        self.assertEqual(
+            (self.temp_dir / "output" / "file1.md").read_text(encoding="utf-8"),
+            "번역1"
+        )
+        self.assertEqual(
+            (self.temp_dir / "output" / "file2.md").read_text(encoding="utf-8"),
+            "번역2"
+        )
+
+    def test_multiple_output_files_no_newline_before_backtick(self):
+        """1개 입력 → 다중 출력: 닫는 ``` 앞에 \n 없는 경우"""
+        self.mock_assistant.chat.return_value = (
+            "```filename:src/service.java\nclass Service {}```\n"
+            "```filename:src/interface.java\ninterface IService {}```"
+        )
+
+        processor = ContextProcessor(
+            assistant=self.mock_assistant,
+            file_manager=self.file_manager,
+            streaming=False
+        )
+
+        matched_files = [self.temp_dir / "file1.md"]
+        processed, saved = processor.process_files(matched_files, "코드 생성해줘")
+
+        self.assertEqual(processed, 1)
+        self.assertEqual(saved, 2)
+        self.assertEqual(
+            (self.temp_dir / "src" / "service.java").read_text(encoding="utf-8"),
+            "class Service {}"
+        )
+        self.assertEqual(
+            (self.temp_dir / "src" / "interface.java").read_text(encoding="utf-8"),
+            "interface IService {}"
+        )
+
 
 if __name__ == '__main__':
     unittest.main()
