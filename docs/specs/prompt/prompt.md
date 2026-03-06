@@ -1118,3 +1118,9 @@ print_menu() 와 command_registry.py 의 명령 설명을 사용자가 이해하
 - `/shell --help or -h`로 명령하는 경우 linux 와 windows (powershell or CMD) 에 맞게 사용 할 수 있는 명령어을 제공한다.
 - 명령어와 명령 실행 결과를 conversation_history에 보관한다.
 - 완료 후 specs/requirements 폴더에 FSD v1.0.075 문서로 작성한다.
+
+---
+
+구현 내용을 릴리즈 노트로 정리해줘
+- docs\specs\requirements 폴더의 신규 FSD 문서에 대해 정리 후 docs/releases 폴더에 RELEASE로 시작하는 버전의 문서를 작성한다.  
+- RELEASE 문서의 내용이 너무 길지 않게 작성해줘  

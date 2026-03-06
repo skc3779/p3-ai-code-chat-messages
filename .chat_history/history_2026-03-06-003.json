@@ -1,0 +1,80 @@
+{
+  "version": "1.0",
+  "type": "gemini",
+  "created_at": "2026-03-06T22:55:13.762245",
+  "model_id": "gemini-3-pro-preview",
+  "messages": [
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell dir]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\n Volume in drive C has no label.\n Volume Serial Number is 8623-0F51\n\n Directory of C:\\03_sources\\skc3779_srcs\\p3-ai-code-chat-messages\n\n2026-03-06  오후 09:10    <DIR>          .\n2026-03-01  오후 04:00    <DIR>          ..\n2026-02-06  오후 10:33    <DIR>          .agent\n2026-03-06  오후 10:26    <DIR>          .chat_history\n2026-02-25  오후 11:58             2,333 .cli_history\n2026-03-06  오후 09:10             1,135 .env\n2026-03-06  오후 09:11             1,030 .env.example\n2026-03-06  오후 08:23    <DIR>          .github\n2026-03-04  오전 12:00             1,677 .gitignore\n2026-03-02  오전 12:04    <DIR>          .idea\n2026-01-25  오후 10:39    <DIR>          .system-prompts\n2026-03-01  오후 11:53    <DIR>          ai-proxy\n2026-03-03  오후 11:25    <DIR>          build_output\n2026-03-03  오후 11:20    <DIR>          build_scripts\n2026-01-25  오후 08:18             1,757 calculator.py\n2026-03-06  오후 10:46            35,836 claude-ai-chat-code.py\n2026-03-01  오후 04:51    <DIR>          docs\n2026-03-06  오후 10:46            29,035 gemini-ai-chat-code.py\n2026-03-06  오후 10:46            37,163 gen-ai-chat-code.py\n2026-03-03  오후 11:48    <DIR>          logs\n2026-03-01  오후 07:57             1,337 opencode.json\n2026-02-04  오후 08:30             3,301 project_context.md\n2026-03-05  오후 09:45            14,413 README-api-proxy.md\n2026-03-05  오후 09:47             9,739 README-claude-ai-chat-code.md\n2026-03-05  오후 09:48            10,225 README-gemini-ai-chat-code.md\n2026-03-05  오후 09:48            12,274 README-gen-ai-chat-code.md\n2026-02-06  오후 10:43             8,543 README.md\n2026-02-25  오후 11:32               916 requirements.txt\n2026-03-03  오후 11:43    <DIR>          src\n2026-03-05  오후 10:26    <DIR>          tests\n2026-03-06  오후 10:29    <DIR>          __pycache__\n              16 File(s)        170,714 bytes\n              15 Dir(s)  501,187,473,408 bytes free\n"
+    },
+    {
+      "role": "user",
+      "content": "cd src"
+    },
+    {
+      "role": "model",
+      "content": "[쉘 명령 실행: /shell cd src && dir]"
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell cd src]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\n"
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell pwd]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 실패]\n오류: \nstderr: 'pwd' is not recognized as an internal or external command,\noperable program or batch file."
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell dir]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\n Volume in drive C has no label.\n Volume Serial Number is 8623-0F51\n\n Directory of C:\\03_sources\\skc3779_srcs\\p3-ai-code-chat-messages\n\n2026-03-06  오후 09:10    <DIR>          .\n2026-03-01  오후 04:00    <DIR>          ..\n2026-02-06  오후 10:33    <DIR>          .agent\n2026-03-06  오후 10:26    <DIR>          .chat_history\n2026-02-25  오후 11:58             2,333 .cli_history\n2026-03-06  오후 09:10             1,135 .env\n2026-03-06  오후 09:11             1,030 .env.example\n2026-03-06  오후 08:23    <DIR>          .github\n2026-03-04  오전 12:00             1,677 .gitignore\n2026-03-02  오전 12:04    <DIR>          .idea\n2026-01-25  오후 10:39    <DIR>          .system-prompts\n2026-03-01  오후 11:53    <DIR>          ai-proxy\n2026-03-03  오후 11:25    <DIR>          build_output\n2026-03-03  오후 11:20    <DIR>          build_scripts\n2026-01-25  오후 08:18             1,757 calculator.py\n2026-03-06  오후 10:46            35,836 claude-ai-chat-code.py\n2026-03-01  오후 04:51    <DIR>          docs\n2026-03-06  오후 10:46            29,035 gemini-ai-chat-code.py\n2026-03-06  오후 10:46            37,163 gen-ai-chat-code.py\n2026-03-03  오후 11:48    <DIR>          logs\n2026-03-01  오후 07:57             1,337 opencode.json\n2026-02-04  오후 08:30             3,301 project_context.md\n2026-03-05  오후 09:45            14,413 README-api-proxy.md\n2026-03-05  오후 09:47             9,739 README-claude-ai-chat-code.md\n2026-03-05  오후 09:48            10,225 README-gemini-ai-chat-code.md\n2026-03-05  오후 09:48            12,274 README-gen-ai-chat-code.md\n2026-02-06  오후 10:43             8,543 README.md\n2026-02-25  오후 11:32               916 requirements.txt\n2026-03-03  오후 11:43    <DIR>          src\n2026-03-05  오후 10:26    <DIR>          tests\n2026-03-06  오후 10:29    <DIR>          __pycache__\n              16 File(s)        170,714 bytes\n              15 Dir(s)  501,174,829,056 bytes free\n"
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell cd src]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\n"
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell pwd]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 실패]\n오류: \nstderr: 'pwd' is not recognized as an internal or external command,\noperable program or batch file."
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell dir]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\n Volume in drive C has no label.\n Volume Serial Number is 8623-0F51\n\n Directory of C:\\03_sources\\skc3779_srcs\\p3-ai-code-chat-messages\n\n2026-03-06  오후 09:10    <DIR>          .\n2026-03-01  오후 04:00    <DIR>          ..\n2026-02-06  오후 10:33    <DIR>          .agent\n2026-03-06  오후 10:26    <DIR>          .chat_history\n2026-02-25  오후 11:58             2,333 .cli_history\n2026-03-06  오후 09:10             1,135 .env\n2026-03-06  오후 09:11             1,030 .env.example\n2026-03-06  오후 08:23    <DIR>          .github\n2026-03-04  오전 12:00             1,677 .gitignore\n2026-03-02  오전 12:04    <DIR>          .idea\n2026-01-25  오후 10:39    <DIR>          .system-prompts\n2026-03-01  오후 11:53    <DIR>          ai-proxy\n2026-03-03  오후 11:25    <DIR>          build_output\n2026-03-03  오후 11:20    <DIR>          build_scripts\n2026-01-25  오후 08:18             1,757 calculator.py\n2026-03-06  오후 10:46            35,836 claude-ai-chat-code.py\n2026-03-01  오후 04:51    <DIR>          docs\n2026-03-06  오후 10:46            29,035 gemini-ai-chat-code.py\n2026-03-06  오후 10:46            37,163 gen-ai-chat-code.py\n2026-03-03  오후 11:48    <DIR>          logs\n2026-03-01  오후 07:57             1,337 opencode.json\n2026-02-04  오후 08:30             3,301 project_context.md\n2026-03-05  오후 09:45            14,413 README-api-proxy.md\n2026-03-05  오후 09:47             9,739 README-claude-ai-chat-code.md\n2026-03-05  오후 09:48            10,225 README-gemini-ai-chat-code.md\n2026-03-05  오후 09:48            12,274 README-gen-ai-chat-code.md\n2026-02-06  오후 10:43             8,543 README.md\n2026-02-25  오후 11:32               916 requirements.txt\n2026-03-03  오후 11:43    <DIR>          src\n2026-03-05  오후 10:26    <DIR>          tests\n2026-03-06  오후 10:29    <DIR>          __pycache__\n              16 File(s)        170,714 bytes\n              15 Dir(s)  501,174,255,616 bytes free\n"
+    },
+    {
+      "role": "user",
+      "content": "[쉘 명령 실행: /shell whoami]"
+    },
+    {
+      "role": "assistant",
+      "content": "[실행 성공 (returncode=0)]\nkangchun-region\\kangchun\n"
+    }
+  ]
+}

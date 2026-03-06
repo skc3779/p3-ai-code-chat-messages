@@ -84,7 +84,6 @@ logs/
 
 ### Build ###
 target/
-build_output/build/
-build_output/spec/
+build_output/
 
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,pycharm+iml
