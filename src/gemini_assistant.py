@@ -49,7 +49,7 @@ class GeminiCodeAssistant:
         
         # 공용 모듈 초기화 (Claude/GenAI와 동일)
         self.file_manager = FileManager(workspace_dir)
-        self.context_builder = ContextBuilder(self.file_manager)
+        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GEMINI)
         self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)
@@ -328,7 +328,7 @@ def calculate_sum(a, b):
             return False
 
         self.file_manager = FileManager(str(new_path))
-        self.context_builder = ContextBuilder(self.file_manager)
+        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GEMINI)
         self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
         self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
         self.git_manager = GitManager(self.file_manager.workspace_dir)

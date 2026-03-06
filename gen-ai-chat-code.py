@@ -22,6 +22,9 @@ from src import (
     CLIInputHandler,
     DiffViewer,
 )
+from src.command_registry import print_menu
+
+_MENU_TITLE = "GenAI Code Assistant - AI 코딩 어시스턴트"
 
 
 def load_environment():
@@ -104,52 +107,6 @@ def print_banner():
     print(banner)
 
 
-def print_menu():
-    """메뉴 출력"""
-    print("\n" + "=" * 80)
-    print("🤖 GenAI Code Assistant - AI 코딩 어시스턴트")
-    print("=" * 80)
-    print("명령어:")
-    print("  /files [ext]          - 프로젝트 파일 목록 (예: /files .py .js)")
-    print("  /tree                 - 프로젝트 구조 보기")
-    print("  /read <pattern>       - 파일 읽기 (예: /read src/*.py)")
-    print("  /context <pattern>    - 컨텍스트 포함하여 질문 (예: /context src/*.py)")
-    print("  /auto_context         - 파일 단위 자동 반복 처리 (예: /auto_context [original/*.md])")
-    print("  /save                 - AI 응답에서 파일 추출 및 저장")
-    print("  /workspace [path]     - 작업 디렉토리 변경")
-    print("  /stream               - 스트리밍 모드 활성화 (기본값)")
-    print("  /nostream             - 논스트리밍 모드 활성화")
-    print("  /history              - 대화 히스토리 보기")
-    print("  /clear                - 대화 히스토리 초기화")
-    print("  /save_history [name]  - 대화 히스토리 파일로 저장")
-    print("  /load_history <name>  - 저장된 히스토리 로드")
-    print("  /list_history         - 저장된 히스토리 목록")
-    print("  /run [lang]           - 마지막 응답의 코드 실행 (python/js/bash)")
-    print("  /diff                 - 마지막 응답의 코드 변경사항 Diff 표시")
-    print("  /apply                - Diff 내용을 실제 파일에 적용")
-    print("  /multiline            - 멀티라인 입력 모드 (종료: /end)")
-    print("  /tokens               - 토큰 사용량 확인")
-    print("  /shell <cmd>          - 쉘 명령어 실행 (안전 모드)")
-    print("  /shell! <cmd>         - 쉘 명령어 실행 (위험 명령 허용)")
-    print("  /llm_config <lang>    - 언어별 LLM 파라미터 설정 (예: /llm_config Java)")
-    print("  /template <name>      - 시스템 프롬프트 템플릿 변경")
-    print("  /template_list        - 사용 가능한 템플릿 목록")
-    print("  /template_reset       - 기본 시스템 프롬프트로 복귀")
-    print("  /watch <pattern>      - 파일 변경 감시 시작 (예: /watch *.py)")
-    print("  /unwatch <pattern>    - 파일 변경 감시 중지")
-    print("  /watch_list           - 감시 중인 패턴 목록")
-    print("  /help                 - 도움말 보기")
-    print("  /quit                 - 종료")
-    print("=" * 80)
-    print("\n💡 사용 예시:")
-    print("  - '/context *.py 이 프로젝트에 README.md를 작성해줘'")
-    print("  - '/context src/ 테스트 코드를 작성해줘'")
-    print("  - '새로운 API 엔드포인트 /users를 추가해줘'")
-    print("\n✨ AI 자동 기능:")
-    print("  - 파일 시스템 조작 (읽기/쓰기/목록)")
-    print("  - Git 버전 관리 (상태/diff/커밋)")
-    print("  - 패키지 의존성 분석 (pip/npm)")
-    print("=" * 80)
 
 
 def main():
@@ -240,7 +197,7 @@ def main():
                     break
 
                 elif command == '/help':
-                    print_menu()
+                    print_menu(_MENU_TITLE)
 
                 elif command == '/stream':
                     streaming_mode = True
@@ -253,17 +210,73 @@ def main():
                     print("✅ 논스트리밍 모드로 변경되었습니다.")
 
                 elif command == '/history':
-                    if assistant.conversation_history:
-                        print("\n📜 대화 히스토리:")
-                        for i, msg in enumerate(assistant.conversation_history, 1):
-                            role = "👤" if i % 2 == 1 else "🤖"
-                            if len(msg) > 120:
-                                preview = msg[:120].replace('\n', ' ')
+                    if not args:
+                        if assistant.conversation_history:
+                            print("\n📜 대화 히스토리:")
+                            for i, msg in enumerate(assistant.conversation_history, 1):
+                                role = "👤" if i % 2 == 1 else "🤖"
+                                if len(msg) > 120:
+                                    preview = msg[:120].replace('\n', ' ')
+                                else:
+                                    preview = msg
+                                print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
+                        else:
+                            print("📭 대화 히스토리가 비어있습니다.")
+                    elif args.startswith('--remove') or args.startswith('-r'):
+                        parts = args.split()
+                        if len(parts) < 2:
+                            print("❌ 삭제할 개수는 1 이상의 정수여야 합니다. 예: /history --remove 5")
+                        else:
+                            try:
+                                n = int(parts[1])
+                            except ValueError:
+                                n = None
+                            if n is None or n <= 0:
+                                print("❌ 삭제할 개수는 1 이상의 정수여야 합니다. 예: /history --remove 5")
                             else:
-                                preview = msg
-                            print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
+                                total = len(assistant.conversation_history)
+                                if total == 0:
+                                    print("📭 대화 히스토리가 비어있습니다.")
+                                elif n > total:
+                                    print(f"❌ history 목록수({total})보다 숫자({n})가 더 많아 삭제가 불가능합니다.")
+                                else:
+                                    del assistant.conversation_history[:n]
+                                    remaining = len(assistant.conversation_history)
+                                    print(f"✅ 히스토리 {n}개를 삭제했습니다. (남은 항목: {remaining}개)")
+                    elif args.startswith('--delete') or args.startswith('-d'):
+                        parts = args.split()
+                        if len(parts) < 2:
+                            print("❌ 인덱스는 1 이상의 정수여야 합니다. 예: /history --delete 3")
+                        else:
+                            try:
+                                idx = int(parts[1])
+                            except ValueError:
+                                idx = None
+                            if idx is None:
+                                print("❌ 인덱스는 1 이상의 정수여야 합니다. 예: /history --delete 3")
+                            else:
+                                total = len(assistant.conversation_history)
+                                if total == 0:
+                                    print("📭 대화 히스토리가 비어있습니다.")
+                                elif idx < 1 or idx > total:
+                                    print(f"❌ 유효하지 않은 인덱스입니다. (1 ~ {total} 범위)")
+                                else:
+                                    del assistant.conversation_history[idx - 1]
+                                    remaining = len(assistant.conversation_history)
+                                    print(f"✅ 히스토리 {idx}번 항목을 삭제했습니다. (남은 항목: {remaining}개)")
+                                    if assistant.conversation_history:
+                                        print("\n📜 대화 히스토리:")
+                                        for i, msg in enumerate(assistant.conversation_history, 1):
+                                            role = "👤" if i % 2 == 1 else "🤖"
+                                            if len(msg) > 120:
+                                                preview = msg[:120].replace('\n', ' ')
+                                            else:
+                                                preview = msg
+                                            print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
+                                    else:
+                                        print("📭 대화 히스토리가 비어있습니다.")
                     else:
-                        print("📭 대화 히스토리가 비어있습니다.")
+                        print("❌ 알 수 없는 /history 옵션입니다. 예: /history --remove 5")
 
                 elif command == '/clear':
                     assistant.conversation_history.clear()
@@ -340,18 +353,34 @@ def main():
 
                 elif command == '/read':
                     if not args:
-                        print("❌ 파일 패턴을 지정하세요. 예: /read src/*.py")
+                        print("❌ 파일 패턴을 지정하세요.")
+                        print("예: /read src/*.py")
+                        print("예: /read [src/*.py, docs/*.md]")
                         continue
 
-                    pattern_matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
-                    patterns = args.split()
-                    all_files = assistant.file_manager.list_files()
-                    matched_files = pattern_matcher.filter_files(all_files, patterns)
+                    # 패턴 파싱: [p1, p2] 또는 공백 구분 단일/다중 패턴
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            file_patterns = [p.strip() for p in args[1:end_idx].split(',') if p.strip()]
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        file_patterns = args.split()
 
-                    if matched_files:
-                        context = assistant.context_builder.build_files_context(matched_files)
-                        assistant.conversation_history.append(f"[File Context]\n{context}")
+                    # ContextBuilder를 통해 파일 컨텍스트 구성 (트리 제외)
+                    context = assistant.context_builder.build_context(
+                        include_tree=False,
+                        file_patterns=file_patterns
+                    )
+
+                    if context.strip():
                         print(context)
+                        assistant.conversation_history.append({
+                            "role": "user",
+                            "content": f"[파일 읽음: {args}]\n{context}"
+                        })
                     else:
                         print(f"❌ 패턴 '{args}'에 해당하는 파일이 없습니다.")
 
@@ -544,24 +573,26 @@ def main():
                         print("⚠️ 입력이 비어있습니다.")
 
                 elif command == '/shell' or command == '/shell!':
+                    if args in ('--help', '-h'):
+                        print(assistant.terminal_executor.shell_help())
+                        continue
                     if not args:
                         print("❌ 실행할 명령어를 입력하세요.")
-                        print("💡 예시: /shell pip list")
-                        print(f"📝 허용 명령어: {assistant.terminal_executor.get_allowed_commands()}")
+                        print("💡 도움말: /shell --help")
                         continue
-                    
+
                     allow_unsafe = command == '/shell!'
-                    
+
                     if allow_unsafe:
                         print("⚠️  위험 모드: 모든 명령어가 허용됩니다.")
                         confirm = input("▶️  정말 실행하시겠습니까? (y/N): ").strip().lower()
                         if confirm != 'y':
                             print("⏭️  취소됨")
                             continue
-                    
+
                     print(f"\n💻 명령어 실행: {args}")
                     result = assistant.terminal_executor.execute(args, allow_unsafe=allow_unsafe)
-                    
+
                     if result.get('success'):
                         print(f"\n✅ 실행 성공 (return code: {result.get('returncode', 0)})")
                         if result.get('stdout'):
@@ -578,6 +609,18 @@ def main():
                         if result.get('stderr'):
                             print(f"\n🔴 오류 출력:")
                             print(result['stderr'])
+
+                    user_content = f"[쉘 명령 실행: {command} {args}]"
+                    if result.get('success'):
+                        assistant_content = f"[실행 성공 (returncode={result.get('returncode', 0)})]\n{result.get('stdout', '')}"
+                    else:
+                        assistant_content = (
+                            f"[실행 실패]\n"
+                            f"오류: {result.get('error', '')}\n"
+                            f"stderr: {result.get('stderr', '')}"
+                        ).strip()
+                    assistant.conversation_history.append(f"user: {user_content}")
+                    assistant.conversation_history.append(f"assistant: {assistant_content}")
                 elif command == '/llm_config':
                     lang = args.strip().lower()
                     if not lang:

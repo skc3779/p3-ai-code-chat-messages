@@ -1086,3 +1086,35 @@ docs/requirements 폴더의 버전에 대한 RELEASE 문서를 작성해줘
 - `/auto_context <파일패턴>` : 파일 단위로 컨텍스트를 자동 분할하여 반복 질의
 - FSD_v1.0.068_context-multi-pattern.md 기능 개선 시 각각의 명령어가 고유기능을 유지하고 있는지 검토하고 반영해줘.
 - 검토 반영 중 문제점이 있으면 사전에 질문 바랍니다.
+- 
+----
+
+`/read` 명령어도 context_builder.py 의 파일 패턴으로 읽어 화면에 출력하고 conversation_history에 파일읽음으로 보관되도록 기능개선 FSD 문서를 작성해줘.
+- build_file_tree 는 제외한다.
+- specs/requirements 폴더에 FSD v1.0.071 문서로 작성한다.
+
+---
+
+context_builder.py 의 max_context_size 제한을 token_manager.py의 MAX_TOKENS_xxxx 제한으로 변경 해주고 max_context_size 은 삭제하는 FSD 문서를 작성해줘.
+- context_builder.py 외에서도 context 크기 관련 별도의 로직이 있는지 검토하고 동일하게 token_manager.py 을 사용한다.
+- specs/requirements 폴더에 FSD v1.0.072 문서로 작성한다.
+
+---
+
+src/history_manager.py 기능 중 /history 조회 시 전체 목록중 과거에서 현재순으로 목록의 일부를 삭제하는 기능으로 필요없는 tokens 사용의 낭비를 줄일 수 있는 기능의 FSD 문서를 작성해줘.
+-`/history --remote(or -r) [숫자]` 명령으로 ASC 순으로 숫자만큼 삭제한다 만일 목록 수보다 숫자의 크기가 클경우 `history 목록수({개수})보다 숫자({개수})가 더 많아 삭제가 불가능합니다.` 오류 메세지를 제공한다.   
+- specs/requirements 폴더에 FSD v1.0.073 문서로 작성한다.
+
+---
+
+print_menu() 와 command_registry.py 의 명령 설명을 사용자가 이해하기 쉽게 작성하고 예제도 포함해줘.
+- 1번 gemini-ai-chat-code.py, genai_assistant.py, claude-ai-chat-code.py에 각각 사용중인 print_menu()의 중복을 제거한다.
+- command_registry.py 와 1번의 명령과 설명이 이중으로 관리되지 않도록 한다.  
+- 완료 후 specs/requirements 폴더에 FSD v1.0.074 문서로 작성한다.
+
+---
+
+`/shell <cmd>`, `/shell! <cmd>` 명령어를 정상 작동하는지 검토하고 아래의 요구사항을 개선해주는 FSD 문서를 작성해줘.
+- `/shell --help or -h`로 명령하는 경우 linux 와 windows (powershell or CMD) 에 맞게 사용 할 수 있는 명령어을 제공한다.
+- 명령어와 명령 실행 결과를 conversation_history에 보관한다.
+- 완료 후 specs/requirements 폴더에 FSD v1.0.075 문서로 작성한다.

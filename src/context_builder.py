@@ -7,15 +7,16 @@ from pathlib import Path
 from typing import List, Optional
 
 from .file_manager import FileManager
+from .token_manager import TokenManager
 from .tree_builder import TreeBuilder
 
 
 class ContextBuilder:
     """AI에게 전달할 컨텍스트 구성"""
 
-    def __init__(self, file_manager: FileManager):
+    def __init__(self, file_manager: FileManager, max_tokens: int = None):
         self.file_manager = file_manager
-        self.max_context_size = 100000  # 최대 컨텍스트 크기 (문자 수)
+        self.max_tokens = max_tokens if max_tokens is not None else TokenManager.DEFAULT_MAX_TOKENS
 
     def build_file_tree2(self, max_depth: int = 11) -> str:
         """파일 트리 구조 생성 (레거시)"""
@@ -61,6 +62,7 @@ class ContextBuilder:
         """선택된 파일들의 내용을 컨텍스트로 구성"""
         context_parts = []
         total_size = 0
+        max_chars = int(self.max_tokens * TokenManager.CHARS_PER_TOKEN)
 
         for filepath in filepaths:
             content = self.file_manager.read_file(filepath)
@@ -75,8 +77,12 @@ class ContextBuilder:
             file_context += content
             file_context += f"\n```\n"
 
-            if total_size + len(file_context) > self.max_context_size:
-                context_parts.append("\n⚠️  컨텍스트 크기 제한으로 일부 파일이 생략되었습니다.\n")
+            if total_size + len(file_context) > max_chars:
+                context_parts.append("\n⚠️ 컨텍스트 크기 제한으로 일부 파일이 생략되었습니다.")
+                context_parts.append(
+                    f"=> total:{total_size} + context:{len(file_context)} "
+                    f"> max_chars:{max_chars} ({self.max_tokens:,} tokens)\n"
+                )
                 break
 
             context_parts.append(file_context)
