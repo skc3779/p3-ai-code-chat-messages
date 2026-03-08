@@ -1124,3 +1124,26 @@ print_menu() 와 command_registry.py 의 명령 설명을 사용자가 이해하
 구현 내용을 릴리즈 노트로 정리해줘
 - docs\specs\requirements 폴더의 신규 FSD 문서에 대해 정리 후 docs/releases 폴더에 RELEASE로 시작하는 버전의 문서를 작성한다.  
 - RELEASE 문서의 내용이 너무 길지 않게 작성해줘  
+
+
+---
+
+`/auto_context`로 파일 단위 자동 분할 반복 질의 기능중 `processor.process_files(matched_files, question)`에 의해 매칭된 파일을 1개씩 순차 처리 중 `4. 응답에서 파일 추출 및 자동 저장` 부분에서 응답에 대한 저장이 실패하는 경우 아래 조건에 맞게 다시 반복이 되어 정상 처리가 이루어지도록 기능 개선된 FSD 문서를 작성해줘.
+
+- 매칭된 파일에 대한 응답 저장 실패시 3번까지 반복하여 모델의 응답에 대한 오류를 최소화 한다.
+- gen-ai-chat-code.py, claude-ai-chat-code.py, gemini-ai-chat-code.py 의 `/auto_context` 기능에 대해 검토해줘.
+- context_processor.py 의 _save_response_files 함수에 대해 검토해줘.
+- specs/requirements 폴더에 FSD v1.0.076 문서로 작성한다.
+
+
+## process_files 호출 영역 
+```python
+    # 자동 처리 실행
+    from src.context_processor import ContextProcessor
+    processor = ContextProcessor(
+        assistant=assistant,
+        file_manager=assistant.file_manager,
+        streaming=streaming
+    )
+    processor.process_files(matched_files, question)
+```

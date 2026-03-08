@@ -5,6 +5,7 @@ Context 파일 자동 처리기
 AI에 전달하고, 응답에 포함된 파일을 자동 저장하는 프로세서.
 """
 
+import os
 import re
 from pathlib import Path
 from typing import List, Tuple
@@ -39,6 +40,8 @@ class ContextProcessor:
         self.assistant = assistant
         self.file_manager = file_manager
         self.streaming = streaming
+        # FR-076-005: 환경변수로 최대 재시도 횟수 설정 (기본값: 3)
+        self.max_retries = max(1, int(os.getenv("AUTO_CONTEXT_MAX_RETRIES", "3")))
 
     def process_files(
         self,
@@ -46,7 +49,7 @@ class ContextProcessor:
         question: str,
     ) -> Tuple[int, int]:
         """
-        매칭된 파일을 1개씩 순차 처리
+        매칭된 파일을 1개씩 순차 처리 (저장 실패 시 최대 max_retries회 재시도)
 
         Args:
             matched_files: 처리할 파일 목록
@@ -58,6 +61,7 @@ class ContextProcessor:
         total = len(matched_files)
         processed_count = 0
         saved_count = 0
+        failed_files: List[str] = []  # FR-076-003: 실패 파일 목록
 
         for idx, filepath in enumerate(matched_files, 1):
             try:
@@ -69,27 +73,56 @@ class ContextProcessor:
                 content = self.file_manager.read_file(filepath)
                 if content is None:
                     print(f"❌ 파일 읽기 실패: {rel_path}")
+                    failed_files.append(str(rel_path))
                     continue
 
                 # 2. 프롬프트 조합
                 prompt = self._build_prompt(question, rel_path, content)
 
-                # 3. AI에 전송
-                print("🤖 AI 처리 중...")
-                response = self.assistant.chat(
-                    prompt,
-                    streaming=self.streaming,
-                    include_context=False
-                )
+                # 3~4. AI 전송 + 응답 저장 (재시도 포함)
+                saved = []
+                for attempt in range(1, self.max_retries + 1):
+                    # 3. AI에 전송
+                    if attempt == 1:
+                        print("🤖 AI 처리 중...")
+                    else:
+                        print(f"🔄 재시도 [{attempt}/{self.max_retries}] AI 재전송 중...")
+
+                    response = self.assistant.chat(
+                        prompt,
+                        streaming=self.streaming,
+                        include_context=False
+                    )
+
+                    # FR-076-007: 응답이 비어있는 경우
+                    if not response:
+                        print(f"⚠️  AI 응답이 비어있습니다. (시도 {attempt}/{self.max_retries})")
+                        if attempt < self.max_retries:
+                            continue
+                        else:
+                            break
+
+                    # 4. 응답에서 파일 추출 및 자동 저장
+                    saved = self._auto_save_files(
+                        self.normalize_backtick_blocks(response)
+                    )
+
+                    # FR-076-006: 저장 성공 판정
+                    if saved:
+                        saved_count += len(saved)
+                        break  # 성공 → 다음 파일로
+                    else:
+                        print(f"⚠️  응답에 저장할 파일 블록이 없습니다. (시도 {attempt}/{self.max_retries})")
+                        if attempt < self.max_retries:
+                            continue  # 재시도
+                        # 마지막 시도도 실패
+
+                # 재시도 모두 실패한 경우
+                if not saved:
+                    print(f"❌ {self.max_retries}회 시도 후에도 저장 실패: {rel_path}")
+                    failed_files.append(str(rel_path))
+
                 processed_count += 1
-
-                # 4. 응답에서 파일 추출 및 자동 저장
-                if response:
-                    saved = self._auto_save_files(self.normalize_backtick_blocks(response))
-                    saved_count += len(saved)
-
-                    if not saved:
-                        print("⚠️  응답에 저장할 파일 블록이 없습니다.")
 
             except KeyboardInterrupt:
                 print(f"\n\n⚠️  사용자 중단 (Ctrl+C)")
@@ -107,6 +140,13 @@ class ContextProcessor:
         # 5. 전체 요약
         print(f"\n{'='*60}")
         print(f"✅ 자동 처리 완료: {processed_count}개 파일 처리, {saved_count}개 파일 저장")
+
+        # FR-076-004: 실패 파일 요약
+        if failed_files:
+            print(f"\n❌ 저장 실패 파일 ({len(failed_files)}개):")
+            for ff in failed_files:
+                print(f"   - {ff}")
+
         print(f"{'='*60}")
 
         return processed_count, saved_count

@@ -16,7 +16,6 @@ sys.path.insert(0, str(project_root))
 from src.context_processor import ContextProcessor
 from src.file_manager import FileManager
 
-
 class TestContextProcessor(unittest.TestCase):
 
     def setUp(self):
