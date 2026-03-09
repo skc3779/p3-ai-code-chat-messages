@@ -149,7 +149,7 @@ class GeminiProvider(BaseProvider):
             lambda: self.client.post("/chat/completions", json=payload)
         )
         data = resp.json()
-        logger.info(f"Gemini chat response: {truncate_for_log(data, 500)}")
+        logger.info(f"Gemini chat response: {truncate_for_log(data)}")
         return self._parse_response(data, request.model)
 
     async def stream(self, request: ChatCompletionRequest) -> AsyncIterator[str]:

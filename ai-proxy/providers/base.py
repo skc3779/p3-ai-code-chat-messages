@@ -20,25 +20,32 @@ MAX_RETRIES = 3
 RETRY_BASE_DELAY = 2.0  # 초 (지수 백오프: 2s, 4s, 8s)
 
 # 로그 출력 기본 최대 길이
-DEFAULT_LOG_MAX_LEN = 300
+DEFAULT_LOG_MAX_LEN = 100000
 
 
-def truncate_for_log(data, max_len: int = DEFAULT_LOG_MAX_LEN) -> str:
+def truncate_for_log(data, max_len: int = DEFAULT_LOG_MAX_LEN, indent: int = 2) -> str:
     """
-    로그 출력용 문자열 변환 + 잘라내기.
+    로그 출력용 문자열 변환 + Pretty Printing + 잘라내기.
 
-    - dict/list → JSON 문자열로 변환
+    - dict/list → 들여쓰기가 적용된 JSON 문자열로 변환
     - 문자열이 max_len보다 짧으면 전체 반환
     - 길면 max_len까지만 반환 + '...(truncated)' 접미사
     """
-    if isinstance(data, (dict, list)):
-        text = json.dumps(data, ensure_ascii=False)
-    else:
-        text = str(data)
+    try:
+        if isinstance(data, (dict, list)):
+            # indent를 추가하여 계층 구조를 시각화하고, 
+            # 한글 깨짐 방지(ensure_ascii=False) 및 키 정렬(sort_keys) 적용
+            text = json.dumps(data, ensure_ascii=False, indent=indent, sort_keys=True)
+        else:
+            text = str(data)
+    except Exception as e:
+        # 직렬화 실패 시 예외 처리
+        text = f"[Serialization Error: {e}] {str(data)}"
 
     if len(text) <= max_len:
-        return text
-    return text[:max_len] + "...(truncated)"
+        return text.rstrip() + "\n"
+    
+    return text[:max_len].rstrip() + "...(truncated)\n"
 
 
 class ProviderError(Exception):
