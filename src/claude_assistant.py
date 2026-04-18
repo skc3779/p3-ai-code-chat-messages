@@ -111,6 +111,9 @@ def main():
 - 파일 내용을 확인할 때는 추측하지 말고 `read_file` 도구를 사용하여 정확한 내용을 파악하세요.
 - 프로젝트 구조를 파악할 때는 `list_files`나 `list_directory_tree`를 사용하세요.
 
+[실행 환경]
+""" + _get_os_shell_hint() + """
+
 이제 사용자의 요청에 대해 최고의 전문성을 발휘하여 응답해 주세요."""
         
         self.system_prompt = self.default_system_prompt

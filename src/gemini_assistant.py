@@ -111,10 +111,11 @@ def calculate_sum(a, b):
 - 기술 문서는 Markdown 형식으로 깔끔하게 정리합니다.
 - 이모지(Emoji) 사용은 최소화하고, 전문적인 어조를 유지합니다.
 
-이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
-
 [실행 환경]
-""" + _get_os_shell_hint()
+""" + _get_os_shell_hint() + """
+
+이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
+"""
 
         self.system_prompt = self.default_system_prompt
 

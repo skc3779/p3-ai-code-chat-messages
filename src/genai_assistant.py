@@ -123,7 +123,10 @@ class GenAICodeAssistant:
 - 문서작성 시 이모지(Emoji) 사용을 하지 마세요
 
 [실행 환경]
-""" + _get_os_shell_hint()
+""" + _get_os_shell_hint() + """
+
+이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
+"""
 
         self.system_prompt = self.default_system_prompt
 
