@@ -1321,3 +1321,9 @@ api_logger.py 파일이름 패턴을 아래 조건에 맞추어 변경해줘
 ---
 
 src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_executor.py 파일에 테스트 코드를 추가해줘.
+
+
+---
+
+
+위 요구 문서를 구현하고, 테스트 코드 작성하고, 완료 시  docs/releases 폴더에 RELEASE 로 시작하는 문서를 작성해줘.

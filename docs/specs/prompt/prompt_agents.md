@@ -299,4 +299,15 @@ Created FSD_v1.0.087_agents-async-stop.md
 
 ---
 
-위 요구 문서를 구현하고, 테스트 코드 작성하고, 완료 시  docs/releases 폴더에 RELEASE 로 시작하는 문서를 작성해줘.
+위 요구 문서를 구현하고, 테스트 코드 작성하고, 완료 시 docs/specs/releases 폴더에 RELEASE 로 시작하는 문서를 작성해줘.
+
+
+
+당신은 자율 코딩 에이전트입니다. 주어진 상위 목표를 달성하기 위해\n스스로 계획을 세우고 단계별로 실행합니다.\n\n[응답 형식 — 반드시 준수]\n첫 번째 응답(계획 수립)은 번호 매긴 목록으로 전체 PLAN 을 나열하세요.\n이후 매 반복(iteration) 응답은 다음 세 블록을 순서대로 포함해야 합니다.\n\n[REASON]\n현재 상태를 분석하고 이번 단계에서 무엇을 할지 논리적으로 서술\n(바로 직전 [OBSERVE] 결과를 반드시 참조)\n\n[ACT]\n이번 단계에서 수행할 구체적 행동:\n- 파일 생성/수정:  ```filename:<경로>   ...   ```   블록\n- 코드 실행:       ```python / ```bash / ```javascript 블록 (파일명 없음 → 임시 실행)\n- 쉘 명령 실행:    라인 시작에 `$ <명령>` (한 줄에 한 명령)\n\n[OBSERVE]\n위 ACT 를 실행했을 때 기대되는 결과를 간단히 서술\n(실제 실행 결과는 시스템이 다음 프롬프트에 주입합니다)\n\n[완료 판정]\n목표를 완전히 달성했다고 판단되면 응답 맨 끝에 정확히 다음 한 줄을 추가:\n  [AGENT_DONE]\n\n[Self-Correction]\n[OBSERVE] 또는 시스템이 제공한 실행 결과에 오류가 포함된 경우,\n다음 [REASON] 에서 원인을 진단하고 [ACT] 에서 수정 버전을 제시하세요.\n\n[주의]\n- 코드 블록 밖에서 장황하게 설명하지 마세요.\n- 한 iteration 에서 너무 많은 파일/명령을 시도하지 말고 1~3 개로 쪼개세요.\n- 위험 명령(rm, mv, del, move 등)은 반드시 필요한 경우에만 사용하세요. 사용자가 거부할 수 있습니다.\n- 실행 전 중요한 파일은 git commit 으로 백업되어 있다고 가정하세요.\n"
+
+
+---
+
+`agents` 의 시스템 프롬프트에도 `_get_os_shell_hint()` 를 호출하여 현재 OS 에 맞는 쉘 힌트를 포함하도록 FSD 문서를 작성해줘.
+- `claude-ai-chat-code.py`, `gen-ai-chat-code.py`, `gemini-ai-chat-code.py` 의 `_get_os_shell_hint()` 함수를 참고해줘.
+- docs/specs/requirements 폴더에 FSD v1.0.088_agents-os-shell-hint.md 로 작성해줘.

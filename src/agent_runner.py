@@ -9,13 +9,16 @@ Provider 에 독립적으로 설계되었으며, `assistant.chat(prompt, streami
 """
 
 import os
+import platform
 import re
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .agent_input_listener import AgentInputListener
 from .code_executor import CodeExecutor
+from .os_utils import get_os_shell_hint
 
 
 class AgentStopReason(Enum):
@@ -105,6 +108,9 @@ class AgentRunner:
             self.file_manager.workspace_dir, timeout=self.code_timeout
         )
 
+        # 비동기 stop 리스너 (FSD v1.0.087)
+        self._input_listener = AgentInputListener()
+
     # ─── 진입점 ──────────────────────────────────────────────
     def run(
         self,
@@ -182,6 +188,12 @@ class AgentRunner:
             except Exception:
                 pass
 
+        # 비동기 stop 리스너 시작 (TTY 가 아니면 자동 비활성)
+        self._input_listener.clear_stop()
+        self._input_listener.start()
+        if self._input_listener.enabled:
+            print("💡 루프 중 's' 키로 안전하게 중단할 수 있습니다 (Ctrl+C 도 여전히 유효).")
+
         try:
             # ── Step 0. PLAN (신규 세션만) ──────────────────
             if resume_session is None:
@@ -195,6 +207,11 @@ class AgentRunner:
             completed = False
 
             for i in range(start_iteration, self.max_iterations + 1):
+                # ── 체크포인트 1: iteration 시작 전 ──
+                if self._check_async_stop(session):
+                    completed = True
+                    break
+
                 self._print_header(session, i)
 
                 prompt = self._build_iteration_prompt(session, feedback)
@@ -202,6 +219,11 @@ class AgentRunner:
                 feedback = None
 
                 response = self._call_model(session, prompt)
+
+                # ── 체크포인트 2: 모델 호출 후 ──
+                if self._check_async_stop(session):
+                    completed = True
+                    break
 
                 reason, act, observe_hint = self._parse_blocks(response)
                 self._print_block("🧠", f" Reason #{i}", reason or "(없음)")
@@ -238,10 +260,16 @@ class AgentRunner:
                     completed = True
                     break
 
+                # ── 체크포인트 3: 액션 실행 후 ──
+                if self._check_async_stop(session):
+                    completed = True
+                    break
+
                 self._compact_history_if_needed(session)
 
-                # 사용자 턴 사이 프롬프트
-                choice, fb = self._ask_continue()
+                # 사용자 턴 사이 프롬프트 (동기 input — 리스너 일시 정지)
+                with self._input_listener.paused():
+                    choice, fb = self._ask_continue()
                 if choice == 's':
                     session.stop_reason = AgentStopReason.USER_STOP
                     completed = True
@@ -256,15 +284,27 @@ class AgentRunner:
         except KeyboardInterrupt:
             session.stop_reason = AgentStopReason.USER_STOP
             print("\n\n⚠️  사용자 중단 (Ctrl+C)")
+            if self._input_listener.enabled:
+                print("💡 다음부터는 's' 키로도 안전하게 중단할 수 있습니다.")
             self._auto_save(session)
         except Exception as e:
             session.stop_reason = AgentStopReason.FATAL_ERROR
             print(f"\n❌ 에이전트 오류: {e}")
+        finally:
+            self._input_listener.stop()
 
         self._auto_save(session)
         self._append_summary_to_main_history(session)
         self._print_final_summary(session)
         return session
+
+    def _check_async_stop(self, session: AgentSession) -> bool:
+        """비동기 stop 이 요청되었는지 확인하고, 요청이면 세션에 표시한다."""
+        if not self._input_listener.is_stop_requested():
+            return False
+        session.stop_reason = AgentStopReason.USER_STOP
+        print("\n\n⚠️  사용자 중단 (비동기 stop — 's' 키).")
+        return True
 
     def _auto_save(self, session: "AgentSession") -> None:
         try:
@@ -277,6 +317,7 @@ class AgentRunner:
 
     # ─── 프롬프트 구성 ───────────────────────────────────────
     def _build_system_prompt(self) -> str:
+        shell_lang = "powershell" if platform.system() == "Windows" else "bash"
         return (
             "당신은 자율 코딩 에이전트입니다. 주어진 상위 목표를 달성하기 위해\n"
             "스스로 계획을 세우고 단계별로 실행합니다.\n\n"
@@ -289,7 +330,7 @@ class AgentRunner:
             "[ACT]\n"
             "이번 단계에서 수행할 구체적 행동:\n"
             "- 파일 생성/수정:  ```filename:<경로>   ...   ```   블록\n"
-            "- 코드 실행:       ```python / ```bash / ```javascript 블록 (파일명 없음 → 임시 실행)\n"
+            f"- 코드 실행:       ```python / ```{shell_lang} / ```javascript 블록 (파일명 없음 → 임시 실행)\n"
             "- 쉘 명령 실행:    라인 시작에 `$ <명령>` (한 줄에 한 명령)\n\n"
             "[OBSERVE]\n"
             "위 ACT 를 실행했을 때 기대되는 결과를 간단히 서술\n"
@@ -304,7 +345,9 @@ class AgentRunner:
             "- 코드 블록 밖에서 장황하게 설명하지 마세요.\n"
             "- 한 iteration 에서 너무 많은 파일/명령을 시도하지 말고 1~3 개로 쪼개세요.\n"
             "- 위험 명령(rm, mv, del, move 등)은 반드시 필요한 경우에만 사용하세요. 사용자가 거부할 수 있습니다.\n"
-            "- 실행 전 중요한 파일은 git commit 으로 백업되어 있다고 가정하세요.\n"
+            "- 실행 전 중요한 파일은 git commit 으로 백업되어 있다고 가정하세요.\n\n"
+            "[실행 환경]\n"
+            + get_os_shell_hint()
         )
 
     def _build_initial_prompt(self, goal: str, file_context: str = "") -> str:
@@ -513,7 +556,8 @@ class AgentRunner:
             "▶ 실행하시겠습니까? [y]es / [N]o / [A]lways (세션 내 자동 승인) : "
         )
         try:
-            ans = input(prompt).strip().lower()
+            with self._input_listener.paused():
+                ans = input(prompt).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return False
         if ans == 'a':

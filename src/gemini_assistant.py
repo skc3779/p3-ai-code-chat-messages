@@ -4,29 +4,14 @@ GeminiCodeAssistant - Google Gemini API 코딩 어시스턴트 모듈
 """
 
 import json
-import platform
 import re
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-
-def _get_os_shell_hint() -> str:
-    if platform.system() == 'Windows':
-        return (
-            "현재 실행 환경: Windows OS.\n"
-            "쉘 스크립트 작성 시 반드시 PowerShell 구문을 사용하고 "
-            "코드 블록 언어 태그를 `powershell` 또는 `ps1`로 지정하세요. "
-            "`bash`, `sh` 코드 블록은 이 환경에서 실행되지 않습니다."
-        )
-    return (
-        f"현재 실행 환경: {platform.system()} OS.\n"
-        "쉘 스크립트 작성 시 bash 구문을 사용하고 "
-        "코드 블록 언어 태그를 `bash` 또는 `sh`로 지정하세요."
-    )
-
 import requests
 import sseclient
 
+from .os_utils import get_os_shell_hint as _get_os_shell_hint
 from .file_manager import FileManager
 from .context_builder import ContextBuilder
 from .code_executor import CodeExecutor

@@ -6,7 +6,13 @@
       "Bash(python -c \"import ast; ast.parse\\(open\\('src/command_registry.py', encoding='utf-8'\\).read\\(\\)\\); print\\('command_registry.py OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('src/__init__.py', encoding='utf-8'\\).read\\(\\)\\); print\\('__init__.py OK'\\)\")",
       "Bash(python -c \"from src.agent_runner import AgentRunner, AgentSession, AgentStopReason, IterationRecord, ActionResult; print\\('imports OK'\\)\")",
-      "Bash(python -m pytest tests/test_agent_runner.py -v)"
+      "Bash(python -m pytest tests/test_agent_runner.py -v)",
+      "Bash(python -m pytest tests/test_agent_input_listener.py -v)",
+      "Bash(python -m pytest tests/test_agent_runner.py tests/test_agent_session_store.py tests/test_integration.py -v)",
+      "Bash(python -m pytest tests/)",
+      "Bash(git stash *)",
+      "Bash(python -m pytest tests/test_api_logger.py)",
+      "Bash(python -m pytest tests/test_os_utils_and_agent_prompt.py -v)"
     ]
   }
 }
