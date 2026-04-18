@@ -82,6 +82,9 @@ __pycache__/
 ### logs ###
 logs/
 
+### Agent sessions ###
+.agent_sessions/
+
 ### Build ###
 target/
 build_output/

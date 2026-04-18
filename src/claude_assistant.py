@@ -3,12 +3,28 @@ ClaudeCodeAssistant - Claude AI 코딩 어시스턴트 모듈
 """
 
 import json
+import platform
 import re
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 import requests
 import sseclient
+
+
+def _get_os_shell_hint() -> str:
+    if platform.system() == 'Windows':
+        return (
+            "현재 실행 환경: Windows OS.\n"
+            "쉘 스크립트 작성 시 반드시 PowerShell 구문을 사용하고 "
+            "코드 블록 언어 태그를 `powershell` 또는 `ps1`로 지정하세요. "
+            "`bash`, `sh` 코드 블록은 이 환경에서 실행되지 않습니다."
+        )
+    return (
+        f"현재 실행 환경: {platform.system()} OS.\n"
+        "쉘 스크립트 작성 시 bash 구문을 사용하고 "
+        "코드 블록 언어 태그를 `bash` 또는 `sh`로 지정하세요."
+    )
 
 from .file_manager import FileManager
 from .context_builder import ContextBuilder
@@ -116,7 +132,8 @@ def main():
         return self.template_manager.list_templates()
 
     def chat(self, user_message: str, streaming: bool = True,
-             include_context: bool = False, file_patterns: Optional[List[str]] = None) -> str:
+             include_context: bool = False, file_patterns: Optional[List[str]] = None,
+             disable_tools: bool = False) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
@@ -150,9 +167,10 @@ def main():
             "messages": messages,
             "max_tokens": 4096,
             "system": self.system_prompt,
-            "tools": FILESYSTEM_TOOLS,  # 도구 정의 추가
-            "stream": streaming
+            "stream": streaming,
         }
+        if not disable_tools:
+            body["tools"] = FILESYSTEM_TOOLS
 
         api_url = f"{self.endpoint_url}/v1/messages"
 

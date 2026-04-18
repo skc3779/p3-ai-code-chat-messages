@@ -214,12 +214,14 @@ def main():
                         if assistant.conversation_history:
                             print("\n📜 대화 히스토리:")
                             for i, msg in enumerate(assistant.conversation_history, 1):
-                                role = "👤" if i % 2 == 1 else "🤖"
-                                if len(msg) > 120:
-                                    preview = msg[:120].replace('\n', ' ')
+                                role_key = msg.get("role", "user") if isinstance(msg, dict) else ("user" if i % 2 == 1 else "model")
+                                role = "👤" if role_key == "user" else "🤖"
+                                content = msg.get("content", "") if isinstance(msg, dict) else msg
+                                if len(content) > 120:
+                                    preview = content[:120].replace('\n', ' ')
                                 else:
-                                    preview = msg
-                                print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
+                                    preview = content
+                                print(f"{role} [{i}]: {preview}{'...' if len(content) > 120 else ''}")
                         else:
                             print("📭 대화 히스토리가 비어있습니다.")
                     elif args.startswith('--remove') or args.startswith('-r'):
@@ -267,12 +269,14 @@ def main():
                                     if assistant.conversation_history:
                                         print("\n📜 대화 히스토리:")
                                         for i, msg in enumerate(assistant.conversation_history, 1):
-                                            role = "👤" if i % 2 == 1 else "🤖"
-                                            if len(msg) > 120:
-                                                preview = msg[:120].replace('\n', ' ')
+                                            role_key = msg.get("role", "user") if isinstance(msg, dict) else ("user" if i % 2 == 1 else "model")
+                                            role = "👤" if role_key == "user" else "🤖"
+                                            content = msg.get("content", "") if isinstance(msg, dict) else msg
+                                            if len(content) > 120:
+                                                preview = content[:120].replace('\n', ' ')
                                             else:
-                                                preview = msg
-                                            print(f"{role} [{i}]: {preview}{'...' if len(msg) > 120 else ''}")
+                                                preview = content
+                                            print(f"{role} [{i}]: {preview}{'...' if len(content) > 120 else ''}")
                                     else:
                                         print("📭 대화 히스토리가 비어있습니다.")
                     else:
@@ -307,10 +311,8 @@ def main():
                         print("📭 저장된 히스토리 파일이 없습니다.")
 
                 elif command == '/tokens':
-                    # GenAI는 List[str] 형식이므로 변환
-                    history_dicts = [{"role": "user", "content": c} for c in assistant.conversation_history]
                     stats = TokenManager.get_token_stats(
-                        history_dicts,
+                        assistant.conversation_history,
                         max_tokens=TokenManager.MAX_TOKENS_GENAI
                     )
                     print(f"\n📊 토큰 사용량:")
@@ -497,6 +499,17 @@ def main():
                         streaming=streaming_mode
                     )
                     processor.process_files(matched_files, question)
+
+                elif command == '/agents':
+                    from src.agents_command import handle_agents_command
+                    handle_agents_command(
+                        assistant=assistant,
+                        cli_handler=input_handler,
+                        streaming=streaming_mode,
+                        args=args,
+                        assistant_role="model",
+                    )
+                    last_response = ""
 
                 elif command == '/save':
                     if not last_response:

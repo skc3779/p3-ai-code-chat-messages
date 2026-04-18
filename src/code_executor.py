@@ -3,6 +3,7 @@ CodeExecutor - 코드 실행 환경 모듈
 """
 
 import os
+import platform
 import re
 import subprocess
 import tempfile
@@ -10,21 +11,44 @@ from pathlib import Path
 from typing import List, Dict
 
 
+def _build_shell_config() -> dict:
+    """OS에 따라 쉘 실행 설정을 반환"""
+    if platform.system() == 'Windows':
+        return {
+            'cmd': 'powershell',
+            'args': ['-NoProfile', '-NonInteractive', '-File'],
+            'ext': '.ps1',
+            'icon': '🪟',
+        }
+    return {
+        'cmd': 'bash',
+        'args': [],
+        'ext': '.sh',
+        'icon': '🖥️',
+    }
+
+
+_BASE_LANGUAGES = {
+    'python':     {'cmd': 'python', 'args': [], 'ext': '.py',  'icon': '🐍'},
+    'py':         {'cmd': 'python', 'args': [], 'ext': '.py',  'icon': '🐍'},
+    'javascript': {'cmd': 'node',   'args': [], 'ext': '.js',  'icon': '📜'},
+    'js':         {'cmd': 'node',   'args': [], 'ext': '.js',  'icon': '📜'},
+}
+
+_SHELL_LANG_KEYS = ('bash', 'sh', 'shell', 'powershell', 'ps1')
+
+
 class CodeExecutor:
     """코드 실행 환경 - 다양한 언어의 코드를 실행하고 결과를 반환"""
-    
-    SUPPORTED_LANGUAGES = {
-        'python': {'cmd': 'python', 'ext': '.py', 'icon': '🐍'},
-        'py': {'cmd': 'python', 'ext': '.py', 'icon': '🐍'},
-        'javascript': {'cmd': 'node', 'ext': '.js', 'icon': '📜'},
-        'js': {'cmd': 'node', 'ext': '.js', 'icon': '📜'},
-        'bash': {'cmd': 'bash', 'ext': '.sh', 'icon': '🖥️'},
-        'sh': {'cmd': 'bash', 'ext': '.sh', 'icon': '🖥️'},
-    }
-    
+
     def __init__(self, workspace_dir: Path, timeout: int = 30):
         self.workspace_dir = workspace_dir
         self.timeout = timeout
+        shell_cfg = _build_shell_config()
+        self.SUPPORTED_LANGUAGES = {
+            **_BASE_LANGUAGES,
+            **{key: shell_cfg for key in _SHELL_LANG_KEYS},
+        }
     
     def execute(self, code: str, language: str = 'python') -> Dict:
         """코드 실행 및 결과 반환"""
@@ -53,8 +77,9 @@ class CodeExecutor:
             return {'success': False, 'error': f'임시 파일 생성 실패: {e}'}
         
         try:
+            cmd_parts = [lang_config['cmd']] + lang_config.get('args', []) + [temp_file]
             result = subprocess.run(
-                [lang_config['cmd'], temp_file],
+                cmd_parts,
                 capture_output=True,
                 text=True,
                 timeout=self.timeout,
@@ -113,7 +138,7 @@ class CodeExecutor:
         matches2 = re.findall(pattern2, response, re.DOTALL)
         for lang, content in matches2:
             if lang.lower() not in ['filename', 'text', 'markdown', 'md', 'json', 'xml', 'html', 'css']:
-                if lang.lower() in self.SUPPORTED_LANGUAGES or lang.lower() in ['python', 'javascript', 'bash']:
+                if lang.lower() in self.SUPPORTED_LANGUAGES:
                     code_blocks.append({
                         'filepath': None,
                         'code': content.strip(),

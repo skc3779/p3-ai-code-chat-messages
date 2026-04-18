@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/agent_runner.py', encoding='utf-8'\\).read\\(\\)\\); print\\('agent_runner.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('gemini-ai-chat-code.py', encoding='utf-8'\\).read\\(\\)\\); print\\('gemini-ai-chat-code.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/command_registry.py', encoding='utf-8'\\).read\\(\\)\\); print\\('command_registry.py OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('src/__init__.py', encoding='utf-8'\\).read\\(\\)\\); print\\('__init__.py OK'\\)\")",
+      "Bash(python -c \"from src.agent_runner import AgentRunner, AgentSession, AgentStopReason, IterationRecord, ActionResult; print\\('imports OK'\\)\")",
+      "Bash(python -m pytest tests/test_agent_runner.py -v)"
+    ]
+  }
+}

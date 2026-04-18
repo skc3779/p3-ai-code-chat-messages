@@ -22,6 +22,7 @@ from src.context_processor import ContextProcessor
 from src.sensitive_filter import SensitiveWordFilter
 from src.api_logger import ApiLogger
 from src.spinner import WaitSpinner
+from src.agent_runner import AgentRunner, AgentSession, AgentStopReason
 
 __all__ = [
     'FileManager',
@@ -46,4 +47,7 @@ __all__ = [
     'SensitiveWordFilter',
     'ApiLogger',
     'WaitSpinner',
+    'AgentRunner',
+    'AgentSession',
+    'AgentStopReason',
 ]

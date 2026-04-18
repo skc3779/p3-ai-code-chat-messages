@@ -4,6 +4,7 @@ GenAICodeAssistant - GenAI API 코딩 어시스턴트 모듈
 """
 
 import json
+import platform
 import re
 import time as _time
 from typing import List, Dict, Optional
@@ -11,6 +12,21 @@ from pathlib import Path
 
 import requests
 import sseclient
+
+
+def _get_os_shell_hint() -> str:
+    if platform.system() == 'Windows':
+        return (
+            "현재 실행 환경: Windows OS.\n"
+            "쉘 스크립트 작성 시 반드시 PowerShell 구문을 사용하고 "
+            "코드 블록 언어 태그를 `powershell` 또는 `ps1`로 지정하세요. "
+            "`bash`, `sh` 코드 블록은 이 환경에서 실행되지 않습니다."
+        )
+    return (
+        f"현재 실행 환경: {platform.system()} OS.\n"
+        "쉘 스크립트 작성 시 bash 구문을 사용하고 "
+        "코드 블록 언어 태그를 `bash` 또는 `sh`로 지정하세요."
+    )
 
 from .file_manager import FileManager
 from .context_builder import ContextBuilder
@@ -40,8 +56,7 @@ class GenAICodeAssistant:
             "Content-Type": "application/json"
         }
         self.model_id = model_id
-        self.conversation_history: List[str] = []
-        self.conversation_history_dicts: List[Dict] = []  # 토큰 계산용
+        self.conversation_history: List[Dict] = []
 
         self.file_manager = FileManager(workspace_dir)
         self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GENAI)
@@ -105,8 +120,11 @@ class GenAICodeAssistant:
 - 반드시 ```filename: 형식을 사용하세요 (```python, ```javascript 등 언어 식별자 사용 금지)
 - 여러 파일은 각각 별도의 코드 블록으로 작성하세요
 - 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
-- 문서작성 시 이모지(Emoji) 사용을 하지 마세요"""
-        
+- 문서작성 시 이모지(Emoji) 사용을 하지 마세요
+
+[실행 환경]
+""" + _get_os_shell_hint()
+
         self.system_prompt = self.default_system_prompt
 
     def set_system_prompt_from_template(self, template_name: str) -> bool:
@@ -224,18 +242,13 @@ class GenAICodeAssistant:
             full_message = user_message
 
         # 토큰 관리를 위한 히스토리 자동 트리밍 (GenAI 한도 적용)
-        history_dicts = [{"content": c} for c in self.conversation_history]
-        self.conversation_history_dicts = TokenManager.auto_trim_history(
-            history_dicts,
+        self.conversation_history = TokenManager.auto_trim_history(
+            self.conversation_history,
             max_tokens=TokenManager.MAX_TOKENS_GENAI
         )
-        # 트리밍 후 실제 히스토리에 반영
-        if len(self.conversation_history_dicts) < len(self.conversation_history):
-            trimmed_count = len(self.conversation_history) - len(self.conversation_history_dicts)
-            self.conversation_history = self.conversation_history[trimmed_count:]
 
-        # API 호출 - GenAI API 형식
-        contents = self.conversation_history.copy()
+        # API 호출 - GenAI API 형식 (contents: List[str])
+        contents = [msg["content"] for msg in self.conversation_history]
         contents.append(full_message)
 
         # REQ-058-002: 민감 단어 치환 (GenAI 전송 전)
@@ -266,7 +279,7 @@ class GenAICodeAssistant:
             tool_results = self.process_tool_calls(response_text)
             if tool_results:
                 print("\n📤 도구 실행 결과가 생성되었습니다.")
-                self.conversation_history.append(f"[System Tool Results]\n{tool_results}")
+                self.conversation_history.append({"role": "user", "content": f"[System Tool Results]\n{tool_results}"})
                 # GenAI는 자동 재귀 호출 시 무한루프 위험이 있으므로 결과만 저장하고 사용자에게 알림
                 # 필요시 사용자 요청에 따라 다시 진행하기 위해 여기서는 return response_text (결과 포함 안 함)
                 # 단, history에는 포함되었으므로 다음 턴에서 반영됨.
@@ -344,9 +357,9 @@ class GenAICodeAssistant:
         )
 
         # 히스토리에 추가
-        self.conversation_history.append(f"[User Context]\n{user_message}")
+        self.conversation_history.append({"role": "user", "content": user_message})
         if result_message:
-            self.conversation_history.append(f"[Assistant Context]\n{result_message}")
+            self.conversation_history.append({"role": "model", "content": result_message})
 
         return result_message
 
@@ -394,9 +407,9 @@ class GenAICodeAssistant:
         print(f"\n🤖 AI: {content}\n")
 
         # 히스토리에 추가
-        self.conversation_history.append(original_message)
+        self.conversation_history.append({"role": "user", "content": original_message})
         if content:
-            self.conversation_history.append(content)
+            self.conversation_history.append({"role": "model", "content": content})
 
         return content
 
@@ -437,7 +450,15 @@ class GenAICodeAssistant:
         """JSON 파일에서 대화 히스토리 로드"""
         data = self.history_manager.load_history(filepath)
         if data and data.get("type") == "genai":
-            self.conversation_history = data.get("messages", [])
+            raw = data.get("messages", [])
+            # 구 List[str] 형식 → List[Dict] 마이그레이션
+            if raw and isinstance(raw[0], str):
+                self.conversation_history = [
+                    {"role": "user" if i % 2 == 0 else "model", "content": msg}
+                    for i, msg in enumerate(raw)
+                ]
+            else:
+                self.conversation_history = raw
             return True
         return False
     

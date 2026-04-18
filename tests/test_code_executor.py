@@ -6,6 +6,7 @@ import unittest
 import tempfile
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 # 프로젝트 루트를 path에 추가
 project_root = Path(__file__).parent.parent
@@ -20,6 +21,8 @@ class TestCodeExecutor(unittest.TestCase):
         """테스트 환경 설정"""
         self.temp_dir = Path(tempfile.mkdtemp())
         self.executor = CodeExecutor(self.temp_dir, timeout=10)
+
+        # print(f"support language: ${self.executor.SUPPORTED_LANGUAGES}")
     
     def tearDown(self):
         """테스트 환경 정리"""
@@ -91,6 +94,45 @@ code2
 """
         blocks = self.executor.extract_code_from_response(response)
         self.assertEqual(len(blocks), 2)
+
+    @patch('platform.system', return_value='Windows')
+    def test_shell_config_windows(self, mock_system):
+        """Windows 환경에서 쉘(bash/powershell) 설정 테스트"""
+        executor = CodeExecutor(self.temp_dir)
+        
+        self.assertIn('bash', executor.SUPPORTED_LANGUAGES)
+        lang_config = executor.SUPPORTED_LANGUAGES['bash']
+        self.assertEqual(lang_config['cmd'], 'powershell')
+        self.assertEqual(lang_config['ext'], '.ps1')
+        self.assertIn('-File', lang_config['args'])
+        
+        self.assertIn('powershell', executor.SUPPORTED_LANGUAGES)
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['powershell']['cmd'], 'powershell')
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['ps1']['cmd'], 'powershell')
+
+    @patch('platform.system', return_value='Linux')
+    def test_shell_config_linux(self, mock_system):
+        """Linux 환경에서 쉘(bash/sh) 설정 테스트"""
+        executor = CodeExecutor(self.temp_dir)
+        
+        self.assertIn('bash', executor.SUPPORTED_LANGUAGES)
+        lang_config = executor.SUPPORTED_LANGUAGES['bash']
+        self.assertEqual(lang_config['cmd'], 'bash')
+        self.assertEqual(lang_config['ext'], '.sh')
+        self.assertEqual(lang_config['args'], [])
+        
+        self.assertIn('sh', executor.SUPPORTED_LANGUAGES)
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['sh']['cmd'], 'bash')
+
+    def test_execute_shell_basic(self):
+        """현재 OS 환경에서 기본적인 쉘 명령 실행 테스트"""
+        # 간단한 메아리(echo) 명령 실행
+        code = "echo hello"
+        result = self.executor.execute(code, 'bash')
+        
+        self.assertTrue(result['success'])
+        self.assertIn('hello', result['stdout'].lower())
+        self.assertEqual(result['returncode'], 0)
 
 if __name__ == '__main__':
     unittest.main()

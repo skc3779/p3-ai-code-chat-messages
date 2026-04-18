@@ -1147,3 +1147,177 @@ print_menu() 와 command_registry.py 의 명령 설명을 사용자가 이해하
     )
     processor.process_files(matched_files, question)
 ```
+
+
+---
+
+
+gemini-ai-chat-code.py 실행시 API 호출이 정상적으로 이루어지지 않습니다. 소스코드 분석 후 BUG 문서를 작성해줘 
+- gemini-ai-chat-code.py 관련 소스코드 검토
+- src/gemini_assistant.py 관련 소스코드 검토
+- streaming 위주로 검토 한다.
+- Gemini API Reference (REST)  
+  https://docs.cloud.google.com/vertex-ai/generative-ai/docs/model-reference/inference?hl=ko 
+- specs/requirements 폴더에 BUG v1.0.081 문서로 작성한다.
+- Try Gemini 3 Pro Preview while using express mode (curl)   
+  ```http
+
+  # 요청
+
+  POST /v1/publishers/google/models/gemini-3.1-pro-preview:streamGenerateContent?key=XXXXXXXXXXXXXXXXXXXXXXXXXX HTTP/1.1
+  Host: aiplatform.googleapis.com
+  Content-Type: application/json
+  Content-Length: 146
+
+  {
+    "contents": [
+      {
+        "role": "user",
+        "parts": [
+          {
+            "text": "2차방정식 간단 설명?"
+          }
+        ]
+      }
+    ]
+  }
+
+  # 응답 
+
+  [
+      {
+          "candidates": [
+              {
+                  "content": {
+                      "role": "model",
+                      "parts": [
+                          {
+                              "text": "**2차방정식**을 가장 알기 쉽게 핵심만 요약해 드릴"
+                          }
+                      ]
+                  }
+              }
+          ],
+          "usageMetadata": {
+              "trafficType": "ON_DEMAND"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "createTime": "2026-04-17T21:14:23.265314Z",
+          "responseId": "r6LiaeKYEKai0ckP-La26Qg"
+      },
+      {
+          "candidates": [
+              {
+                  "content": {
+                      "role": "model",
+                      "parts": [
+                          {
+                              "text": "게요!\n\n### 1. 2차방정식이란?\n미지수(보통 $x$)를"
+                          }
+                      ]
+                  }
+              }
+          ],
+          "usageMetadata": {
+              "trafficType": "ON_DEMAND"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "createTime": "2026-04-17T21:14:23.265314Z",
+          "responseId": "r6LiaeKYEKai0ckP-La26Qg"
+      },
+      {
+          "candidates": [
+              {
+                  "content": {
+                      "role": "model",
+                      "parts": [
+                          {
+                              "text": " 두 번 곱한 값, 즉 **$x^2$(x의 제곱)이 포함된 방정식**을 말합니다"
+                          }
+                      ]
+                  }
+              }
+          ],
+          "usageMetadata": {
+              "trafficType": "ON_DEMAND"
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "createTime": "2026-04-17T21:14:23.265314Z",
+          "responseId": "r6LiaeKYEKai0ckP-La26Qg"
+      },
+      {
+          "candidates": [
+              {
+                  "content": {
+                      "role": "model",
+                      "parts": [
+                          {
+                              "text": "나 **근의 공식**을 써서 최대 2개의 $x$값을 찾아내는 수학입니다!",
+                              "thoughtSignature": "CicBjz1rXzX2FI4ef9nQESQJNOweY4IrkmmyA4rpbea9gbl......................."
+                          }
+                      ]
+                  },
+                  "finishReason": "STOP"
+              }
+          ],
+          "usageMetadata": {
+              "promptTokenCount": 8,
+              "candidatesTokenCount": 671,
+              "totalTokenCount": 1612,
+              "trafficType": "ON_DEMAND",
+              "promptTokensDetails": [
+                  {
+                      "modality": "TEXT",
+                      "tokenCount": 8
+                  }
+              ],
+              "candidatesTokensDetails": [
+                  {
+                      "modality": "TEXT",
+                      "tokenCount": 671
+                  }
+              ],
+              "thoughtsTokenCount": 933
+          },
+          "modelVersion": "gemini-3.1-pro-preview",
+          "createTime": "2026-04-17T21:14:23.265314Z",
+          "responseId": "r6LiaeKYEKai0ckP-La26Qg"
+      }
+  ]
+  ```
+
+---
+
+
+api_logger.py 파일이름 패턴을 아래 조건에 맞추어 변경해줘
+
+- 현재
+"""
+- logs/{provider}/ 폴더에 JSON 파일 생성
+- 파일명: {provider}-{UUID}-request-{YYYYMMDDHHMMSS}.json
+         {provider}-{UUID}-response-{YYYYMMDDHHMMSS}.json
+"""
+
+- 변경
+"""
+- logs/{provider}/ 폴더에 JSON 파일 생성
+- 파일명: {provider}-{YYYYMMDDHHMMSS}-{UUID}-request.json
+         {provider}-{YYYYMMDDHHMMSS}-{UUID}-response.json
+"""
+- `변경된` YYYYMMDDHHMMSS 는 request, response 의 값을 동일하게 한다.
+- 변경 완료 후 specs/releases 폴더에 RELEASE-v1.0.082 문서로 작성한다.
+
+---
+
+`/run`, `/agents` 실행시 `코드 실행 (bash)` bash를 실행하는데 윈도우에서는 bash가 설치되어 있지 않아서 실행되지 않는문제 가 있다. 
+이에 대한 소스코드 분석 후 개선 방안에 대한  BUG 문서를 작성해줘 
+- gemini-ai-chat-code.py, claude-ai-chat-code.py,  gen-ai-chat-code.py *cli* 실행
+- *cli* 실행되면 `코드 실행` 사전이 OS 환경을 판단하여 적절한 쉘을 선택하여 `코드 실행` 명령어가 작성 되도록 해야한다. 
+- linux 이면 bash shell
+- Windows 이면 powershell
+- docs/reqs 폴더의 BUG v1.0.084 문서로 작성한다.
+
+
+---
+
+src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_executor.py 파일에 테스트 코드를 추가해줘.

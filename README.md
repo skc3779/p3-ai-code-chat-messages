@@ -186,6 +186,9 @@ python tests/test_code_executor.py
 
 # 모듈 방식 실행
 python -m unittest tests.test_response_parser -v
+
+# 특정 클래스의 특정 메서드(단일 기능)만 실행
+python -m unittest tests.test_response_parser.TestResponseParser.test_parse_untagged_code_block -v
 ```
 > **참고**: `tests/` 폴더 내의 테스트 파일들은 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다. 모듈 방식으로 실행하려면 `tests/` 디렉토리에 `__init__.py`가 존재해야 합니다.
 

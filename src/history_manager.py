@@ -28,9 +28,9 @@ class HistoryManager:
         }
         return self._save_json(data, filepath)
     
-    def save_genai_history(self, messages: List[str], model_id: str,
+    def save_genai_history(self, messages: List[Dict], model_id: str,
                            filepath: Optional[str] = None) -> str:
-        """GenAI 형식 히스토리 저장 (String 리스트 기반)"""
+        """GenAI 형식 히스토리 저장 (Dict 리스트 기반)"""
         data = {
             "version": "1.0",
             "type": "genai",

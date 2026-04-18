@@ -120,7 +120,7 @@ def main():
     # Gemini API 설정값 (환경변수에서 로드)
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-3.0-flash")
-    GEMINI_API_ENDPOINT = os.getenv("GEMINI_API_ENDPOINT", "https://generativelanguage.googleapis.com/v1beta")
+    GEMINI_API_ENDPOINT = os.getenv("GEMINI_API_ENDPOINT", "https://aiplatform.googleapis.com/v1/publishers/google/")
 
     if not GEMINI_API_KEY:
         print("❌ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
@@ -339,6 +339,17 @@ def main():
                         streaming=streaming
                     )
                     processor.process_files(matched_files, question)
+
+                elif command == '/agents':
+                    from src.agents_command import handle_agents_command
+                    handle_agents_command(
+                        assistant=assistant,
+                        cli_handler=cli_handler,
+                        streaming=streaming,
+                        args=args,
+                        assistant_role="model",
+                    )
+                    last_response = ""
 
                 elif command == '/save':
                     if last_response:

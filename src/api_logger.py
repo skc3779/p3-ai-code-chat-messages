@@ -7,8 +7,8 @@ FSD v1.0.064 / REQ-064-001~006
 JSON 파일로 저장하여 디버깅 및 장애 분석에 활용한다.
 
 - logs/{provider}/ 폴더에 JSON 파일 생성
-- 파일명: {provider}-{UUID}-request-{YYYYMMDDHHMMSS}.json
-          {provider}-{UUID}-response-{YYYYMMDDHHMMSS}.json
+- 파일명: {provider}-{YYYYMMDDHHMMSS}-{UUID}-request.json
+          {provider}-{YYYYMMDDHHMMSS}-{UUID}-response.json
 - .env의 {PROVIDER}_AI_LOG_ENABLED 플래그로 켜기/끄기 제어 (단, GenAI는 GEN_AI_LOG_ENABLED)
 """
 
@@ -69,8 +69,10 @@ class ApiLogger:
 
     @staticmethod
     def _generate_log_id() -> str:
-        """REQ-062-005: 고유 로그 ID 생성 (UUID 8자리)."""
-        return uuid.uuid4().hex[:8]
+        """REQ-062-005: 고유 로그 ID 생성 (YYYYMMDDHHMMSS-UUID 8자리)."""
+        ts = ApiLogger._get_file_timestamp()
+        uid = uuid.uuid4().hex[:8]
+        return f"{ts}-{uid}"
 
     @staticmethod
     def _get_timestamp() -> str:
@@ -121,7 +123,7 @@ class ApiLogger:
         """
         REQ-062-003 / REQ-064-005,006: Request 로그를 JSON 파일로 저장.
 
-        파일명: {provider}-{UUID}-request-{YYYYMMDDHHMMSS}.json
+        파일명: {provider}-{YYYYMMDDHHMMSS}-{UUID}-request.json
 
         Args:
             api_url: API 엔드포인트 URL
@@ -140,8 +142,8 @@ class ApiLogger:
         if not self.enabled:
             return log_id
 
-        ts = self._get_file_timestamp()
-        filename = f"{self.provider}-{log_id}-request-{ts}.json"
+        # log_id 형식은 {YYYYMMDDHHMMSS}-{UUID}
+        filename = f"{self.provider}-{log_id}-request.json"
 
         data = {
             "log_type": "request",
@@ -166,7 +168,7 @@ class ApiLogger:
         """
         REQ-062-004 / REQ-064-005,006: Response 로그를 JSON 파일로 저장.
 
-        파일명: {provider}-{UUID}-response-{YYYYMMDDHHMMSS}.json
+        파일명: {provider}-{YYYYMMDDHHMMSS}-{UUID}-response.json
 
         Args:
             log_id: 요청과 동일한 고유 ID
@@ -183,8 +185,7 @@ class ApiLogger:
         if not self.enabled:
             return None
 
-        ts = self._get_file_timestamp()
-        filename = f"{self.provider}-{log_id}-response-{ts}.json"
+        filename = f"{self.provider}-{log_id}-response.json"
 
         data = {
             "log_type": "response",

@@ -4,9 +4,25 @@ GeminiCodeAssistant - Google Gemini API 코딩 어시스턴트 모듈
 """
 
 import json
+import platform
 import re
 from typing import List, Dict, Optional, Any
 from pathlib import Path
+
+
+def _get_os_shell_hint() -> str:
+    if platform.system() == 'Windows':
+        return (
+            "현재 실행 환경: Windows OS.\n"
+            "쉘 스크립트 작성 시 반드시 PowerShell 구문을 사용하고 "
+            "코드 블록 언어 태그를 `powershell` 또는 `ps1`로 지정하세요. "
+            "`bash`, `sh` 코드 블록은 이 환경에서 실행되지 않습니다."
+        )
+    return (
+        f"현재 실행 환경: {platform.system()} OS.\n"
+        "쉘 스크립트 작성 시 bash 구문을 사용하고 "
+        "코드 블록 언어 태그를 `bash` 또는 `sh`로 지정하세요."
+    )
 
 import requests
 import sseclient
@@ -34,7 +50,7 @@ class GeminiCodeAssistant:
         api_key: str, 
         model_id: str = "gemini-3.0-flash",
         workspace_dir: str = ".",
-        endpoint_url: str = "https://generativelanguage.googleapis.com/v1beta"
+        endpoint_url: str = "https://aiplatform.googleapis.com/v1/publishers/google/models/"
     ):
         self.api_key = api_key
         self.endpoint_url = endpoint_url
@@ -95,8 +111,11 @@ def calculate_sum(a, b):
 - 기술 문서는 Markdown 형식으로 깔끔하게 정리합니다.
 - 이모지(Emoji) 사용은 최소화하고, 전문적인 어조를 유지합니다.
 
-이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요."""
-        
+이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
+
+[실행 환경]
+""" + _get_os_shell_hint()
+
         self.system_prompt = self.default_system_prompt
 
     def set_system_prompt_from_template(self, template_name: str) -> bool:

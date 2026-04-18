@@ -488,6 +488,17 @@ def main():
                     )
                     processor.process_files(matched_files, question)
 
+                elif command == '/agents':
+                    from src.agents_command import handle_agents_command
+                    handle_agents_command(
+                        assistant=assistant,
+                        cli_handler=input_handler,
+                        streaming=streaming_mode,
+                        args=args,
+                        assistant_role="assistant",
+                    )
+                    last_response = ""
+
                 elif command == '/save':
                     if not last_response:
                         print("❌ 저장할 응답이 없습니다.")

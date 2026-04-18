@@ -40,6 +40,12 @@ class CommandRegistry:
                         '/context <pattern> [질문]',         'src/*.py 이 코드 리뷰해줘'),
             CommandInfo('/auto_context',  '패턴별 파일을 순서대로 자동 처리',
                         '/auto_context <pattern> [질문]',    'original/*.md 한글로 번역해줘'),
+            CommandInfo('/agents',        '자율 에이전트 루프 실행 (목표 멀티라인, 선택적 파일 컨텍스트)',
+                        '/agents [pattern | [p1, p2, ...] | stop]', '[src/*.py, docs/*.md]'),
+            CommandInfo('/agents resume', '마지막(또는 지정) 에이전트 세션 복원 및 재개',
+                        '/agents resume [filename]',              'agent_20260418_123045_tetris.json'),
+            CommandInfo('/agents list',   '저장된 에이전트 세션 목록 표시',
+                        '/agents list',                           ''),
             # ── 응답 처리 ────────────────────────────────────────────────────
             CommandInfo('/save',          'AI 응답의 코드 블록 추출·파일로 저장',
                         '/save',                             ''),
