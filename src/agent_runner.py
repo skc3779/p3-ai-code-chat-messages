@@ -27,6 +27,15 @@ class AgentStopReason(Enum):
     USER_STOP = "user_stop"              # /agents stop 또는 Ctrl+C
     USER_ABORT_ON_ERROR = "user_abort"   # 에러 프롬프트에서 사용자가 s 선택
     FATAL_ERROR = "fatal_error"          # 복구 불가 예외
+    # FSD v1.0.100
+    BYPASS_TIMEOUT = "bypass_timeout"           # 시간 예산 초과
+    BYPASS_STAGNATION = "bypass_stagnation"     # 진행 정체 탐지
+    BYPASS_LOOP_DETECTED = "bypass_loop"        # 반복 루프 탐지
+    BYPASS_DANGEROUS_LIMIT = "bypass_danger_limit"  # 위험 액션 한도 초과
+
+
+class _BypassAbort(Exception):
+    """bypass 안전장치(S5) 내부 전용 예외 — 스택 트레이스 미노출."""
 
 
 @dataclass
@@ -58,6 +67,10 @@ class AgentSession:
     agent_history: List[Dict[str, str]] = field(default_factory=list)
     auto_approve_dangerous_shell: bool = False
     auto_approve_file_mutation: bool = False
+    # FSD v1.0.100
+    bypass_approvals: bool = False
+    bypass_started_at: Optional[float] = None   # time.monotonic() — 직렬화 시 None 처리
+    bypass_dangerous_count: int = 0
     stop_reason: Optional[AgentStopReason] = None
 
 
@@ -102,6 +115,11 @@ class AgentRunner:
         self.compact_after    = int(os.getenv("AGENT_COMPACT_AFTER", "5"))
         self.code_timeout     = int(os.getenv("AGENT_CODE_TIMEOUT", "30"))
         self.done_token       = os.getenv("AGENT_DONE_TOKEN", "[AGENT_DONE]")
+        # FSD v1.0.100 bypass 안전장치
+        self.bypass_timeout_sec       = int(os.getenv("AGENT_BYPASS_TIMEOUT", "1800"))
+        self.bypass_stagnation_window = int(os.getenv("AGENT_BYPASS_STAGNATION_N", "3"))
+        self.bypass_loop_window       = int(os.getenv("AGENT_BYPASS_LOOP_N", "3"))
+        self.bypass_max_dangerous     = int(os.getenv("AGENT_BYPASS_MAX_DANGEROUS", "5"))
 
         # 에이전트 전용 CodeExecutor (AGENT_CODE_TIMEOUT 반영)
         self.code_executor = CodeExecutor(
@@ -117,6 +135,7 @@ class AgentRunner:
         goal: str = "",
         file_patterns: Optional[List[str]] = None,
         resume_session: Optional["AgentSession"] = None,
+        bypass_approvals: bool = False,
     ) -> "AgentSession":
         auto_save_interval = int(os.getenv("AGENT_AUTO_SAVE_INTERVAL", "3"))
 
@@ -126,6 +145,10 @@ class AgentRunner:
             session.stop_reason = None  # 이전 종료 사유 초기화 (P5, 이슈#5)
             session.auto_approve_dangerous_shell = False  # 보안 리셋 (이슈#5)
             session.auto_approve_file_mutation = False
+            # FR-100-11: bypass 는 resume 시 항상 초기화 — 명시적 -ba 재지정 필요
+            session.bypass_approvals = False
+            session.bypass_started_at = None
+            session.bypass_dangerous_count = 0
             start_iteration = len(session.iterations) + 1
             file_context = ""
             print(f"\n🤖 에이전트 재개 — iteration {start_iteration} 부터 계속합니다.")
@@ -187,6 +210,10 @@ class AgentRunner:
                     print("  에이전트는 이 파일들이 존재하지 않음을 인지하지 못할 수 있습니다.\n")
             except Exception:
                 pass
+
+        # bypass_approvals 인자로 시작 시점 진입 (신규/resume 공통)
+        if bypass_approvals:
+            self._enter_bypass_mode(session)
 
         # 비동기 stop 리스너 시작 (TTY 가 아니면 자동 비활성)
         self._input_listener.clear_stop()
@@ -267,6 +294,15 @@ class AgentRunner:
 
                 self._compact_history_if_needed(session)
 
+                # ── bypass 모드: 안전장치 검사 후 자동 진행 ──
+                if session.bypass_approvals:
+                    brk = self._check_bypass_safety(session)
+                    if brk is not None:
+                        session.stop_reason = brk
+                        completed = True
+                        break
+                    continue
+
                 # 사용자 턴 사이 프롬프트 (동기 input — 리스너 일시 정지)
                 with self._input_listener.paused():
                     choice, fb = self._ask_continue()
@@ -276,6 +312,8 @@ class AgentRunner:
                     break
                 if choice == 'f':
                     feedback = fb
+                if choice == 'b':
+                    self._enter_bypass_mode(session)
 
             if not completed and session.stop_reason is None:
                 session.stop_reason = AgentStopReason.MAX_ITERATIONS
@@ -287,6 +325,9 @@ class AgentRunner:
             if self._input_listener.enabled:
                 print("💡 다음부터는 's' 키로도 안전하게 중단할 수 있습니다.")
             self._auto_save(session)
+        except _BypassAbort as e:
+            # stop_reason 은 _run_shell_lines 에서 이미 설정됨 — 덮어쓰지 않음
+            print(f"\n🛑 Bypass 안전장치 발동: {e}")
         except Exception as e:
             session.stop_reason = AgentStopReason.FATAL_ERROR
             print(f"\n❌ 에이전트 오류: {e}")
@@ -305,6 +346,73 @@ class AgentRunner:
         session.stop_reason = AgentStopReason.USER_STOP
         print("\n\n⚠️  사용자 중단 (비동기 stop — 's' 키).")
         return True
+
+    # ─── Bypass Approvals (FSD v1.0.100) ────────────────────
+    def _enter_bypass_mode(self, session: AgentSession) -> None:
+        """bypass 플래그 세팅 + auto-approve 통합 + 시작 시각 기록."""
+        import time as _time
+        session.bypass_approvals = True
+        session.auto_approve_dangerous_shell = True
+        session.auto_approve_file_mutation = True
+        session.bypass_started_at = _time.monotonic()
+        remaining = self.max_iterations - len(session.iterations)
+        print("\n" + "━" * 60)
+        print("🚀 BYPASS APPROVALS 활성화")
+        print(f"  남은 iteration: 최대 {remaining} 회")
+        print(f"  시간 예산      : {self.bypass_timeout_sec}초 "
+              f"(env AGENT_BYPASS_TIMEOUT)")
+        print(f"  위험 액션 한도 : {self.bypass_max_dangerous} 회 "
+              f"(env AGENT_BYPASS_MAX_DANGEROUS)")
+        print("  중단 방법      : 's' 키 또는 Ctrl+C")
+        print("━" * 60)
+
+    def _check_bypass_safety(self, session: AgentSession) -> Optional[AgentStopReason]:
+        """S2/S3/S4 안전장치 검사. 위반 시 해당 AgentStopReason 반환, 정상 시 None."""
+        import time as _time
+
+        # S2: 시간 예산
+        if session.bypass_started_at is not None:
+            elapsed = _time.monotonic() - session.bypass_started_at
+            if elapsed > self.bypass_timeout_sec:
+                print(f"\n⏱️  Bypass 시간 예산 초과 "
+                      f"({elapsed:.0f}s > {self.bypass_timeout_sec}s) — 루프 종료.")
+                return AgentStopReason.BYPASS_TIMEOUT
+
+        # S3: 진행 정체 탐지
+        if self._check_stagnation(session):
+            print(f"\n⚠️  Bypass 정체 탐지 "
+                  f"({self.bypass_stagnation_window}회 연속 성공 액션 없음) — 루프 종료.")
+            return AgentStopReason.BYPASS_STAGNATION
+
+        # S4: 반복 루프 탐지
+        if self._check_loop(session):
+            print(f"\n⚠️  Bypass 루프 탐지 "
+                  f"({self.bypass_loop_window}회 동일 ACT) — 루프 종료.")
+            return AgentStopReason.BYPASS_LOOP_DETECTED
+
+        return None
+
+    def _check_stagnation(self, session: AgentSession) -> bool:
+        """최근 N iteration 에 성공 액션이 하나도 없으면 True."""
+        if len(session.iterations) < self.bypass_stagnation_window:
+            return False
+        recent = session.iterations[-self.bypass_stagnation_window:]
+        for rec in recent:
+            if any(a.success for a in rec.actions):
+                return False
+        return True
+
+    def _check_loop(self, session: AgentSession) -> bool:
+        """최근 K iteration 의 ACT 텍스트 해시가 모두 동일하면 True."""
+        if len(session.iterations) < self.bypass_loop_window:
+            return False
+        import hashlib
+        recent = session.iterations[-self.bypass_loop_window:]
+        hashes = {
+            hashlib.md5(rec.act_text.encode("utf-8")).hexdigest()
+            for rec in recent
+        }
+        return len(hashes) == 1
 
     def _auto_save(self, session: "AgentSession") -> None:
         try:
@@ -520,6 +628,20 @@ class AgentRunner:
             base = cmd.split()[0].lower() if cmd.split() else ""
             dangerous = base in self.terminal_executor.DANGEROUS_COMMANDS
 
+            if dangerous:
+                if session.bypass_approvals:
+                    # S5: 위험 액션 한도 검사 (실행 전)
+                    session.bypass_dangerous_count += 1
+                    if session.bypass_dangerous_count > self.bypass_max_dangerous:
+                        session.stop_reason = AgentStopReason.BYPASS_DANGEROUS_LIMIT
+                        raise _BypassAbort(
+                            f"위험 명령 누적 한도 초과 "
+                            f"({session.bypass_dangerous_count} > "
+                            f"{self.bypass_max_dangerous}): '{cmd}'"
+                        )
+                    print(f"\n⚡ BYPASS: 위험 명령 자동 승인 "
+                          f"({session.bypass_dangerous_count}/{self.bypass_max_dangerous})")
+
             if dangerous and not session.auto_approve_dangerous_shell:
                 approved = self._approve_dangerous(
                     session, "auto_approve_dangerous_shell",
@@ -601,7 +723,9 @@ class AgentRunner:
     # ─── 사용자 개입 ─────────────────────────────────────────
     def _ask_continue(self) -> Tuple[str, Optional[str]]:
         try:
-            ans = input("\n▶ [c]ontinue / [f]eedback / [s]top ? (c): ").strip().lower()
+            ans = input(
+                "\n▶ [c]ontinue / [f]eedback / [b]ypass approvals / [s]top ? (c): "
+            ).strip().lower()
         except (EOFError, KeyboardInterrupt):
             return ('s', None)
         if not ans:
@@ -615,6 +739,8 @@ class AgentRunner:
             return ('f', feedback or None)
         if ans == 's':
             return ('s', None)
+        if ans == 'b':
+            return ('b', None)
         return ('c', None)
 
     # ─── 히스토리 압축 / 요약 ───────────────────────────────
@@ -683,7 +809,14 @@ class AgentRunner:
 
     # ─── 출력 유틸 ───────────────────────────────────────────
     def _print_header(self, session: AgentSession, iteration_idx: int) -> None:
-        print(f"\n━━━ Iteration {iteration_idx}/{self.max_iterations} ━━━")
+        if session.bypass_approvals and session.bypass_started_at is not None:
+            import time as _time
+            elapsed = int(_time.monotonic() - session.bypass_started_at)
+            mm, ss = divmod(elapsed, 60)
+            print(f"\n━━━ Iteration {iteration_idx}/{self.max_iterations} "
+                  f"[BYPASS · elapsed {mm:02d}:{ss:02d}] ━━━")
+        else:
+            print(f"\n━━━ Iteration {iteration_idx}/{self.max_iterations} ━━━")
 
     def _print_block(self, emoji: str, title: str, body: str) -> None:
         print(f"\n{emoji} {title}")

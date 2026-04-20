@@ -1,10 +1,40 @@
 """
-agents_command - /agents 명령 공용 처리 모듈 (FSD v1.0.085)
+agents_command - /agents 명령 공용 처리 모듈 (FSD v1.0.085, FSD v1.0.100)
 
 gemini / claude / gen-ai 세 엔트리 포인트에서 공통으로 호출한다.
 """
 
-from typing import List
+import os
+from typing import List, Tuple
+
+BYPASS_FLAGS = {"-ba", "--bypassapprovals", "--bypass-approvals"}
+
+
+def _extract_bypass_flag(args: str) -> Tuple[bool, str]:
+    """args 에서 bypass 플래그를 분리해 (bypass, 남은_args) 를 반환.
+
+    대괄호 블록([...]) 내부 토큰은 건드리지 않는다.
+    AGENT_BYPASS_DEFAULT=true 환경변수가 설정된 경우에도 bypass=True.
+    """
+    stripped = args.strip()
+    env_default = os.getenv("AGENT_BYPASS_DEFAULT", "false").lower() == "true"
+
+    if not stripped:
+        return env_default, ""
+
+    # 대괄호 블록은 패턴 파싱에 넘기므로 플래그 추출 없음
+    if stripped.startswith("["):
+        return env_default, args
+
+    tokens = stripped.split()
+    bypass = env_default
+    remaining: List[str] = []
+    for tok in tokens:
+        if tok.lower() in BYPASS_FLAGS:
+            bypass = True
+        else:
+            remaining.append(tok)
+    return bypass, " ".join(remaining)
 
 
 def handle_agents_command(
@@ -25,11 +55,15 @@ def handle_agents_command(
     from .agent_runner import AgentRunner
     from .agent_session_store import AgentSessionStore
 
+    # bypass 플래그 선추출
+    bypass, args = _extract_bypass_flag(args)
     stripped = args.strip()
     sub = stripped.lower().split()[0] if stripped else ""
 
     # ── /agents stop ────────────────────────────────────────
     if sub == "stop":
+        if bypass:
+            print("⚠️  /agents stop 에는 -ba 플래그가 적용되지 않습니다.")
         print(
             "💡 에이전트는 현재 실행 중이 아닙니다. "
             "루프 도중에는 's' 키(또는 Ctrl+C)로 안전하게 중단할 수 있습니다."
@@ -38,6 +72,8 @@ def handle_agents_command(
 
     # ── /agents list ────────────────────────────────────────
     if sub == "list":
+        if bypass:
+            print("⚠️  /agents list 에는 -ba 플래그가 적용되지 않습니다.")
         store = AgentSessionStore(str(assistant.file_manager.workspace_dir))
         store.print_session_list()
         return
@@ -77,7 +113,7 @@ def handle_agents_command(
             streaming=streaming,
             assistant_role=assistant_role,
         )
-        runner.run(resume_session=session)
+        runner.run(resume_session=session, bypass_approvals=bypass)
         return
 
     # ── /agents [pattern] — 신규 실행 ──────────────────────
@@ -114,4 +150,4 @@ def handle_agents_command(
         streaming=streaming,
         assistant_role=assistant_role,
     )
-    runner.run(goal, file_patterns=file_patterns or None)
+    runner.run(goal, file_patterns=file_patterns or None, bypass_approvals=bypass)
