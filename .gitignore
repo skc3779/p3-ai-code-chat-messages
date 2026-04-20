@@ -84,6 +84,7 @@ logs/
 
 ### Agent sessions ###
 .agent_sessions/
+.system_prompts/
 
 ### Build ###
 target/

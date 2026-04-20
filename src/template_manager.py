@@ -14,7 +14,7 @@ from typing import Dict, List, Optional, Any
 class TemplateManager:
     """프롬프트 템플릿 관리자"""
     
-    PROMPTS_DIR = ".system-prompts"
+    PROMPTS_DIR = ".system_prompts"
     
     def __init__(self, workspace_dir: str):
         self.workspace_dir = Path(workspace_dir).resolve()
