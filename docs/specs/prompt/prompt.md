@@ -1327,3 +1327,36 @@ src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_exe
 
 
 위 요구 문서를 구현하고, 테스트 코드 작성하고, 완료 시  docs/releases 폴더에 RELEASE 로 시작하는 문서를 작성해줘.
+
+
+---
+
+## 사용자 개입 
+
+```python
+    # ─── 사용자 개입 ─────────────────────────────────────────
+    def _ask_continue(self) -> Tuple[str, Optional[str]]:
+        try:
+            ans = input("\n▶ [c]ontinue / [f]eedback / [s]top ? (c): ").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            return ('s', None)
+        if not ans:
+            ans = 'c'
+        if ans == 'f':
+            print("💬 피드백 입력 (멀티라인, 종료: /end 또는 Esc+Enter):")
+            try:
+                feedback = self.cli_handler.get_multiline()
+            except Exception:
+                feedback = ""
+            return ('f', feedback or None)
+        if ans == 's':
+            return ('s', None)
+        return ('c', None)
+```        
+
+`사용자 개입` 없이 실행 되는 Bypass Approvals 기능의 FSD 문서를 작성해줘 
+- `사용자 개입` 에서 이후 _ask_continue 메소드에  [b]ypass Approvals 를 추가하여 b 를 입력하면 이후부터는 사용자 개입없이 최대 `AGENT_MAX_ITERATIONS` 지정 횟수만큼 진행 후 종료 되도록 한다.
+- `/agents` 실행시 -ba --bypassApprovals 모드를 추가하여 사용자 개입없이 최대 `AGENT_MAX_ITERATIONS` 지정 횟수만큼 진행 후 종료 되도록 한다.
+- 깊이 생각해서 추가로 강제 종료에 대한 안전 장치를 제안한다.
+- 더 낳은 제안이 있으면 제시한다.
+- docs/specs/requirements 폴더에 FSD v1.0.100 문서로 작성한다.
