@@ -549,12 +549,12 @@ class AgentRunner:
         if not act_text:
             return []
         results: List[ActionResult] = []
-        results += self._save_file_blocks(act_text)
+        results += self._save_file_blocks(session, act_text)
         results += self._run_code_blocks(act_text)
         results += self._run_shell_lines(session, act_text)
         return results
 
-    def _save_file_blocks(self, act_text: str) -> List[ActionResult]:
+    def _save_file_blocks(self, session: AgentSession, act_text: str) -> List[ActionResult]:
         results: List[ActionResult] = []
         # 파일명 목록을 사전 추출 (저장 전/후 비교)
         declared = [m.strip() for m in self.RE_FILENAME_BLOCK.findall(act_text)]
@@ -562,7 +562,10 @@ class AgentRunner:
             return results
 
         try:
-            saved = self.response_parser.parse_and_save(act_text) or []
+            saved = self.response_parser.parse_and_save(
+                act_text,
+                auto_overwrite=bool(session.bypass_approvals),
+            ) or []
         except Exception as e:
             for path in declared:
                 results.append(ActionResult(

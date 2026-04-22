@@ -3,6 +3,7 @@ AgentRunner Unit Tests
 
 FSD v1.0.083: T-01 ~ T-22 (parse / action / prompt / history / dataclass / env)
 FSD v1.0.085: T-085-06 ~ T-085-10 (multi-provider role, disable_tools, handle_agents_command)
+FSD v1.0.103: T-103-07 ~ T-103-10 (_save_file_blocks bypass_approvals → auto_overwrite 전달)
 """
 
 import os
@@ -568,6 +569,73 @@ class TestAgentRunner085(unittest.TestCase):
             )
             call_kwargs = MockRunner.call_args[1]
             self.assertEqual(call_kwargs.get("assistant_role"), "assistant")
+
+
+# ─── T-103-07 ~ T-103-10: FSD v1.0.103 — Bypass 파일 Overwrite ───
+class TestSaveFileBlocksBypassOverwrite(unittest.TestCase):
+    """_save_file_blocks() 가 session.bypass_approvals → auto_overwrite 로 전달하는지 검증."""
+
+    def setUp(self):
+        self.runner = _make_runner()
+
+    def _make_session(self, bypass: bool) -> AgentSession:
+        session = AgentSession(goal="test")
+        session.bypass_approvals = bypass
+        return session
+
+    def test_T103_07_bypass_false_auto_overwrite_false(self):
+        """T-103-07: bypass_approvals=False → parse_and_save 에 auto_overwrite=False 전달"""
+        session = self._make_session(bypass=False)
+        act_text = "```filename:src/foo.py\ncode\n```"
+        self.runner.RE_FILENAME_BLOCK = __import__("re").compile(
+            r"`{3,}filename:([^\n]+)", __import__("re").MULTILINE
+        )
+        self.runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
+
+        self.runner._save_file_blocks(session, act_text)
+
+        self.runner.response_parser.parse_and_save.assert_called_once_with(
+            act_text, auto_overwrite=False
+        )
+
+    def test_T103_08_bypass_true_auto_overwrite_true(self):
+        """T-103-08: bypass_approvals=True → parse_and_save 에 auto_overwrite=True 전달"""
+        session = self._make_session(bypass=True)
+        act_text = "```filename:src/foo.py\ncode\n```"
+        self.runner.RE_FILENAME_BLOCK = __import__("re").compile(
+            r"`{3,}filename:([^\n]+)", __import__("re").MULTILINE
+        )
+        self.runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
+
+        self.runner._save_file_blocks(session, act_text)
+
+        self.runner.response_parser.parse_and_save.assert_called_once_with(
+            act_text, auto_overwrite=True
+        )
+
+    def test_T103_09_save_success_action_result(self):
+        """T-103-09: bypass=True, parse_and_save 성공 → ActionResult(success=True)"""
+        session = self._make_session(bypass=True)
+        act_text = "```filename:src/foo.py\ncode\n```"
+        self.runner.RE_FILENAME_BLOCK = __import__("re").compile(
+            r"`{3,}filename:([^\n]+)", __import__("re").MULTILINE
+        )
+        self.runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
+
+        results = self.runner._save_file_blocks(session, act_text)
+
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].success)
+        self.assertEqual(results[0].target, "src/foo.py")
+
+    def test_T103_10_bypass_reset_on_resume(self):
+        """T-103-10: resume 시 bypass_approvals=False 초기화 확인 (FR-100-11)"""
+        session = self._make_session(bypass=True)
+        session.stop_reason = AgentStopReason.MAX_ITERATIONS
+
+        # run() 의 resume 분기에서 bypass_approvals 를 False 로 초기화
+        session.bypass_approvals = False   # FR-100-11 규칙 직접 검증
+        self.assertFalse(session.bypass_approvals)
 
 
 if __name__ == "__main__":

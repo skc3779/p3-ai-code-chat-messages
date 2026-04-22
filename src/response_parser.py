@@ -12,7 +12,7 @@ class ResponseParser:
     def __init__(self, file_manager: FileManager):
         self.file_manager = file_manager
 
-    def parse_and_save(self, response: str) -> List[str]:
+    def parse_and_save(self, response: str, *, auto_overwrite: bool = False) -> List[str]:
         """
         AI 응답에서 ``filename:`` 로 시작하는 파일 블록을 추출하여 저장합니다.
         파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
@@ -22,6 +22,12 @@ class ResponseParser:
         - 언어 태그가 있는 ```lang → 내부 코드 블록 시작
         - 언어 태그가 없는 ``` → 내부 블록이 열려있으면 종료,
           아닌 경우 다음 줄 존재 여부로 내부 블록 시작 vs 파일 블록 종료 판별
+
+        Args:
+            response: AI 응답 원문
+            auto_overwrite: True 면 기존 파일 존재 시에도 프롬프트 없이 덮어쓴다.
+                            에이전트 루프의 Bypass Approvals 모드에서만 True 로 호출된다.
+                            기본값 False — 대화형 경로는 기존 동작 유지.
         """
         saved_files: List[str] = []
 
@@ -92,17 +98,22 @@ class ResponseParser:
 
                     # 파일이 이미 존재하면 덮어쓰기 여부 확인
                     if file_path.exists():
-                        print(f"\n⚠️  파일이 이미 존재합니다: {current_path}")
-                        try:
-                            confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
-                            if confirm != 'y':
-                                print(f"⏭️  건너뛰기: {current_path}")
+                        if auto_overwrite:
+                            # Bypass Approvals — 사용자 프롬프트 없이 즉시 덮어쓰기
+                            print(f"\n⚡ BYPASS: 기존 파일 자동 덮어쓰기: {current_path}")
+                        else:
+                            # 기존 동작(대화형) — 사용자 확인
+                            print(f"\n⚠️  파일이 이미 존재합니다: {current_path}")
+                            try:
+                                confirm = input("덮어쓰시겠습니까? (y/N): ").strip().lower()
+                                if confirm != 'y':
+                                    print(f"⏭️  건너뛰기: {current_path}")
+                                    collecting = False
+                                    continue
+                            except EOFError:
+                                print(f"⏭️  입력 불가로 건너뛰기: {current_path}")
                                 collecting = False
                                 continue
-                        except EOFError:
-                            print(f"⏭️  입력 불가로 건너뛰기: {current_path}")
-                            collecting = False
-                            continue
 
                     # 파일에 내용 기록
                     file_content = "\n".join(current_content).strip()

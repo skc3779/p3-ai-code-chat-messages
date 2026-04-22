@@ -311,3 +311,9 @@ Created FSD_v1.0.087_agents-async-stop.md
 `agents` 의 시스템 프롬프트에도 `_get_os_shell_hint()` 를 호출하여 현재 OS 에 맞는 쉘 힌트를 포함하도록 FSD 문서를 작성해줘.
 - `claude-ai-chat-code.py`, `gen-ai-chat-code.py`, `gemini-ai-chat-code.py` 의 `_get_os_shell_hint()` 함수를 참고해줘.
 - docs/specs/requirements 폴더에 FSD v1.0.088_agents-os-shell-hint.md 로 작성해줘.
+
+---
+
+`FSD v1.0.100 — 에이전트 Bypass Approvals (사용자 개입 없는 자율 실행 모드)` 일 때 적용된 기능에 파일 overwrite 를 사용자에게 물어보지 말고 바로 덮어쓰기 기능을 반영해 주는 FSD 문서를 작성해줘.
+- `/agents` 모드가 `Bypass Approvals` 일 때만 적용한다.
+- docs/specs/requirements 폴더에 FSD v1.0.103 문서로 작성한다.
