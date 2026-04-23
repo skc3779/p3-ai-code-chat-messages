@@ -72,6 +72,8 @@ class AgentSession:
     bypass_started_at: Optional[float] = None   # time.monotonic() — 직렬화 시 None 처리
     bypass_dangerous_count: int = 0
     stop_reason: Optional[AgentStopReason] = None
+    # FSD v1.0.101 — 런타임 캐시 (JSON 직렬화에서 제외)
+    effective_max_iterations: Optional[int] = None
 
 
 class AgentRunner:
@@ -136,6 +138,7 @@ class AgentRunner:
         file_patterns: Optional[List[str]] = None,
         resume_session: Optional["AgentSession"] = None,
         bypass_approvals: bool = False,
+        max_iterations_override: Optional[int] = None,   # FSD v1.0.101
     ) -> "AgentSession":
         auto_save_interval = int(os.getenv("AGENT_AUTO_SAVE_INTERVAL", "3"))
 
@@ -149,6 +152,8 @@ class AgentRunner:
             session.bypass_approvals = False
             session.bypass_started_at = None
             session.bypass_dangerous_count = 0
+            # FR-101-13: 이전 오버라이드 재활성 방지
+            session.effective_max_iterations = None
             start_iteration = len(session.iterations) + 1
             file_context = ""
             print(f"\n🤖 에이전트 재개 — iteration {start_iteration} 부터 계속합니다.")
@@ -211,6 +216,16 @@ class AgentRunner:
             except Exception:
                 pass
 
+        # FSD v1.0.101: 오버라이드 적용 (지역 변수로만 — 인스턴스 상태 불변)
+        effective_max = (
+            max_iterations_override
+            if (max_iterations_override and max_iterations_override >= 1)
+            else self.max_iterations
+        )
+        if max_iterations_override and max_iterations_override >= 1:
+            print(f"🔧 max_iterations 오버라이드: {effective_max} (기본 {self.max_iterations})")
+        session.effective_max_iterations = effective_max
+
         # bypass_approvals 인자로 시작 시점 진입 (신규/resume 공통)
         if bypass_approvals:
             self._enter_bypass_mode(session)
@@ -233,7 +248,7 @@ class AgentRunner:
             feedback: Optional[str] = None
             completed = False
 
-            for i in range(start_iteration, self.max_iterations + 1):
+            for i in range(start_iteration, effective_max + 1):
                 # ── 체크포인트 1: iteration 시작 전 ──
                 if self._check_async_stop(session):
                     completed = True
@@ -317,7 +332,7 @@ class AgentRunner:
 
             if not completed and session.stop_reason is None:
                 session.stop_reason = AgentStopReason.MAX_ITERATIONS
-                print(f"\n⚠️  최대 iteration ({self.max_iterations}) 초과 — 한도 도달.")
+                print(f"\n⚠️  최대 iteration ({effective_max}) 초과 — 한도 도달.")
 
         except KeyboardInterrupt:
             session.stop_reason = AgentStopReason.USER_STOP
@@ -355,7 +370,8 @@ class AgentRunner:
         session.auto_approve_dangerous_shell = True
         session.auto_approve_file_mutation = True
         session.bypass_started_at = _time.monotonic()
-        remaining = self.max_iterations - len(session.iterations)
+        mx = session.effective_max_iterations or self.max_iterations
+        remaining = mx - len(session.iterations)
         print("\n" + "━" * 60)
         print("🚀 BYPASS APPROVALS 활성화")
         print(f"  남은 iteration: 최대 {remaining} 회")
@@ -812,14 +828,15 @@ class AgentRunner:
 
     # ─── 출력 유틸 ───────────────────────────────────────────
     def _print_header(self, session: AgentSession, iteration_idx: int) -> None:
+        mx = session.effective_max_iterations or self.max_iterations
         if session.bypass_approvals and session.bypass_started_at is not None:
             import time as _time
             elapsed = int(_time.monotonic() - session.bypass_started_at)
             mm, ss = divmod(elapsed, 60)
-            print(f"\n━━━ Iteration {iteration_idx}/{self.max_iterations} "
+            print(f"\n━━━ Iteration {iteration_idx}/{mx} "
                   f"[BYPASS · elapsed {mm:02d}:{ss:02d}] ━━━")
         else:
-            print(f"\n━━━ Iteration {iteration_idx}/{self.max_iterations} ━━━")
+            print(f"\n━━━ Iteration {iteration_idx}/{mx} ━━━")
 
     def _print_block(self, emoji: str, title: str, body: str) -> None:
         print(f"\n{emoji} {title}")

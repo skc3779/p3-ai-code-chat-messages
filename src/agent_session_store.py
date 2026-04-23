@@ -43,6 +43,8 @@ class AgentSessionStore:
         # stop_reason Enum → value (asdict 이 Enum 을 그대로 넣으므로 수동 변환)
         if isinstance(data.get("stop_reason"), AgentStopReason):
             data["stop_reason"] = data["stop_reason"].value
+        # FSD v1.0.101 — 런타임 캐시는 직렬화 제외
+        data.pop("effective_max_iterations", None)
         # workspace 경로 저장 (resume 시 경로 검증용)
         data["_workspace"] = str(self.workspace_dir)
         return json.dumps(data, cls=_AgentSessionEncoder, ensure_ascii=False, indent=2)
@@ -123,7 +125,8 @@ class AgentSessionStore:
             print(f"{i:<3} {s['filename']:<40} {s['stop_reason']:<14} {s['iterations']:<5} {s['mtime']}")
             print(f"    목표: {s['goal']}")
         print(f"{'─'*80}")
-        print("⚠️  세션 파일에 대화 내용이 평문으로 저장됩니다. git 에는 포함되지 않습니다.\n")
+        print("⚠️  세션 파일에 대화 내용이 평문으로 저장됩니다. git 에는 포함되지 않습니다.")
+        print("💡 /agents resume <번호> 또는 /agents resume <파일명>\n")
 
     def validate_matched_files(self, session: AgentSession) -> List[str]:
         missing = []

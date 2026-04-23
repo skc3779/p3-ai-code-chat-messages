@@ -4,7 +4,7 @@
 |---|---|
 | 문서 버전 | v1.0.101 |
 | 작성일 | 2026-04-21 |
-| 상태 | 📝 사전 분석 (구현 대기) |
+| 상태 | ✅ 구현 완료 (2026-04-23) |
 | 선행 문서 | FSD v1.0.083 (자율 루프), FSD v1.0.086 (세션 직렬화/Resume), FSD v1.0.100 (Bypass Approvals) |
 | 대상 파일 | [src/agent_runner.py](src/agent_runner.py), [src/agents_command.py](src/agents_command.py), [src/agent_session_store.py](src/agent_session_store.py), [src/command_registry.py](src/command_registry.py) |
 | 신규 파일 | 없음 (기존 파일 수정만) |
@@ -512,11 +512,11 @@ runner.run(resume_session=session, ...)
 
 ## 10. 승인
 
-- [ ] 설계 검토 (2026-04-21)
-- [ ] [src/agents_command.py](src/agents_command.py) 플래그 파싱 및 resume 인덱스 해석 구현
-- [ ] [src/agent_runner.py](src/agent_runner.py) `run()` 시그니처 확장 및 `effective_max_iterations` 도입
-- [ ] [src/agent_session_store.py](src/agent_session_store.py) 직렬화 제외 및 help 힌트
-- [ ] [src/command_registry.py](src/command_registry.py) 도움말 갱신
-- [ ] T-101-01 ~ T-101-18 테스트 통과
+- [x] 설계 검토 (2026-04-21)
+- [x] [src/agents_command.py](src/agents_command.py) 플래그 파싱 및 resume 인덱스 해석 구현
+- [x] [src/agent_runner.py](src/agent_runner.py) `run()` 시그니처 확장 및 `effective_max_iterations` 도입
+- [x] [src/agent_session_store.py](src/agent_session_store.py) 직렬화 제외 및 help 힌트
+- [x] [src/command_registry.py](src/command_registry.py) 도움말 갱신
+- [x] T-101-01 ~ T-101-18 테스트 통과 (2026-04-23, 18/18 passed)
 - [ ] 세 엔트리 포인트(gemini / claude / gen-ai) 통합 동작 확인
-- [ ] [docs/specs/releases/RELEASE_v1.0.101_*.md](docs/specs/releases/) 작성
+- [x] [docs/specs/releases/RELEASE_v1.0.101_agents-max-iterations-and-resume-index.md](docs/specs/releases/RELEASE_v1.0.101_agents-max-iterations-and-resume-index.md) 작성

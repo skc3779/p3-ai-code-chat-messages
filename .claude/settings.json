@@ -20,7 +20,9 @@
       "Bash(python -m pytest tests/test_api_logger.py -q)",
       "Bash(ls c:\\\\\\\\03_sources\\\\\\\\skc3779_srcs\\\\\\\\p3-ai-code-chat-messages\\\\\\\\docs\\\\\\\\specs\\\\\\\\requirements\\\\\\\\)",
       "Bash(python -m pytest tests/test_response_parser_overwrite.py tests/test_agent_runner.py::TestSaveFileBlocksBypassOverwrite -v)",
-      "Bash(python -m pytest tests/test_response_parser.py tests/test_agent_runner.py tests/test_bypass_approvals.py -v)"
+      "Bash(python -m pytest tests/test_response_parser.py tests/test_agent_runner.py tests/test_bypass_approvals.py -v)",
+      "Bash(python -m pytest tests/test_agents_flags.py -v)",
+      "Bash(python -m pytest tests/ -v --tb=short -q)"
     ]
   }
 }

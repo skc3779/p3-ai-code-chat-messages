@@ -41,9 +41,9 @@ class CommandRegistry:
             CommandInfo('/auto_context',  '패턴별 파일을 순서대로 자동 처리',
                         '/auto_context <pattern> [질문]',    'original/*.md 한글로 번역해줘'),
             CommandInfo('/agents',        "자율 에이전트 루프 실행 (목표 멀티라인, 루프 중 's' 키 또는 Ctrl+C 로 중단)",
-                        '/agents [-ba|--bypassApprovals] [pattern | [p1,p2,...] | stop]', '[src/*.py, docs/*.md]'),
-            CommandInfo('/agents resume', '마지막(또는 지정) 에이전트 세션 복원 및 재개',
-                        '/agents resume [filename]',              'agent_20260418_123045_tetris.json'),
+                        '/agents [-ba|--bypassApprovals] [-s <N>] [pattern | [p1,p2,...] | stop]', '[src/*.py, docs/*.md]'),
+            CommandInfo('/agents resume', '마지막(또는 지정 인덱스/파일) 에이전트 세션 복원',
+                        '/agents resume [N | filename]',          'agent_20260421_123045_tetris.json  또는  2'),
             CommandInfo('/agents list',   '저장된 에이전트 세션 목록 표시',
                         '/agents list',                           ''),
             # ── 응답 처리 ────────────────────────────────────────────────────

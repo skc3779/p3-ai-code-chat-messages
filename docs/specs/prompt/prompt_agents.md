@@ -317,3 +317,11 @@ Created FSD_v1.0.087_agents-async-stop.md
 `FSD v1.0.100 — 에이전트 Bypass Approvals (사용자 개입 없는 자율 실행 모드)` 일 때 적용된 기능에 파일 overwrite 를 사용자에게 물어보지 말고 바로 덮어쓰기 기능을 반영해 주는 FSD 문서를 작성해줘.
 - `/agents` 모드가 `Bypass Approvals` 일 때만 적용한다.
 - docs/specs/requirements 폴더에 FSD v1.0.103 문서로 작성한다.
+
+
+---
+
+FSD 요구문서를 구현하고 문서내 `10. 승인` 올바르게 처리해줘
+
+---
+
