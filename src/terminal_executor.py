@@ -355,6 +355,76 @@ class TerminalExecutor:
         return "\n".join(lines)
 
     @staticmethod
+    def agent_shell_brief() -> str:
+        """에이전트 시스템 프롬프트 삽입용 현 쉘 환경 요약.
+
+        `shell_help()` 의 `/shell <cmd>` 포맷 대신 에이전트가 실제 생성하는
+        `$ <cmd>` 포맷으로 안전 명령 예시 9개와 위험 명령 목록을 제공한다.
+        """
+        shell_type = TerminalExecutor.get_shell_type()
+        dangerous = sorted(TerminalExecutor._get_dangerous_for_shell(shell_type))
+
+        if shell_type == 'Windows PowerShell':
+            safe_examples = [
+                "$ Get-ChildItem                 # 파일 목록",
+                "$ Get-Content <file>            # 파일 내용",
+                "$ Get-Location                  # 현재 경로",
+                "$ Test-Path <path>              # 경로 존재 여부",
+                "$ Select-String <pat> <file>    # 텍스트 검색",
+                "$ python --version",
+                "$ pip list",
+                "$ git status",
+                "$ git log --oneline -10",
+            ]
+        elif shell_type == 'Windows CMD':
+            safe_examples = [
+                "$ dir                           # 파일 목록",
+                "$ type <file>                   # 파일 내용",
+                "$ where <cmd>                   # 명령어 경로",
+                '$ find /i "text" <file>         # 텍스트 검색',
+                "$ python --version",
+                "$ pip list",
+                "$ git status",
+                "$ git log --oneline -10",
+                "$ tasklist",
+            ]
+        elif shell_type == 'Mac':
+            safe_examples = [
+                "$ ls -la",
+                "$ cat <file>",
+                "$ grep -r 'pat' src/",
+                "$ find . -name '*.py'",
+                "$ python3 --version",
+                "$ pip3 list",
+                "$ git status",
+                "$ git log --oneline -10",
+                "$ sw_vers",
+            ]
+        else:  # Linux
+            safe_examples = [
+                "$ ls -la",
+                "$ cat <file>",
+                "$ grep -r 'pat' src/",
+                "$ find . -name '*.py'",
+                "$ python3 --version",
+                "$ pip3 list",
+                "$ git status",
+                "$ git log --oneline -10",
+                "$ uname -a",
+            ]
+
+        lines = [
+            f"[쉘 환경 요약 — 현재 쉘: {shell_type}]",
+            "",
+            "안전 명령 예시 (선택지 C — `$ <cmd>` 형식):",
+            *[f"  {ex}" for ex in safe_examples],
+            "",
+            "위험 명령 (실행 전 승인 프롬프트 표시 · 코드 블록 안에서도 동일 적용):",
+            f"  {', '.join(dangerous)}",
+        ]
+        return "\n".join(lines)
+
+    @staticmethod
     def _get_dangerous_for_shell(shell_type: str) -> Set[str]:
         if shell_type == 'Windows PowerShell':
             return TerminalExecutor._DANGEROUS_WINDOWS_POWERSHELL

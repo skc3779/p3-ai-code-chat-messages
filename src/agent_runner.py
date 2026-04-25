@@ -16,6 +16,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+from .agent_action_dispatcher import AgentActionDispatcher
 from .agent_input_listener import AgentInputListener
 from .code_executor import CodeExecutor
 from .os_utils import get_os_shell_hint
@@ -127,6 +128,9 @@ class AgentRunner:
         self.code_executor = CodeExecutor(
             self.file_manager.workspace_dir, timeout=self.code_timeout
         )
+
+        # FSD v1.0.107: 지능형 디스패처
+        self._dispatcher = AgentActionDispatcher(self)
 
         # 비동기 stop 리스너 (FSD v1.0.087)
         self._input_listener = AgentInputListener()
@@ -441,37 +445,88 @@ class AgentRunner:
 
     # ─── 프롬프트 구성 ───────────────────────────────────────
     def _build_system_prompt(self) -> str:
-        shell_lang = "powershell" if platform.system() == "Windows" else "bash"
+        """FSD v1.0.107: 시스템 프롬프트 — 선택지 A/B/C + 금지 패턴 + 쉘 환경 요약."""
+        from .terminal_executor import TerminalExecutor
+
+        shell_type = TerminalExecutor.get_shell_type()
+        shell_brief = TerminalExecutor.agent_shell_brief()
+        os_hint = get_os_shell_hint()
+
         return (
             "당신은 자율 코딩 에이전트입니다. 주어진 상위 목표를 달성하기 위해\n"
             "스스로 계획을 세우고 단계별로 실행합니다.\n\n"
+
+            f"[실행 환경]\n{os_hint}\n\n"
+
             "[응답 형식 — 반드시 준수]\n"
             "첫 번째 응답(계획 수립)은 번호 매긴 목록으로 전체 PLAN 을 나열하세요.\n"
             "이후 매 반복(iteration) 응답은 다음 세 블록을 순서대로 포함해야 합니다.\n\n"
+
             "[REASON]\n"
-            "현재 상태를 분석하고 이번 단계에서 무엇을 할지 논리적으로 서술\n"
-            "(바로 직전 [OBSERVE] 결과를 반드시 참조)\n\n"
+            "3줄 이내. 직전 [OBSERVE] 인용 + 이번 단계 의도.\n\n"
+
             "[ACT]\n"
-            "이번 단계에서 수행할 구체적 행동:\n"
-            "- 파일 생성/수정:  ```filename:<경로>\n   ...\n   ```\n   블록\n"
-           f"- 코드 실행:       ```python\n ...\n ```\n ```{shell_lang}\n ...\n ```\n ```javascript\n ...\n ```\n 블록 (파일명 없음 → 임시 실행)\n"
-            "- 쉘 명령 실행:    라인 시작에 `$ <명령>` (한 줄에 한 명령)\n\n"
+            "아래 세 선택지 중 1~3 개를 골라 순서대로 작성하세요.\n\n"
+
+            "== 선택지 A. 파일 생성/수정 ==\n"
+            "  ```filename:<상대경로>\n"
+            "  ... 파일 전문 ...\n"
+            "  ```\n"
+            "  • 한 블록에 한 파일. 워크스페이스 상대경로.\n"
+            "  • 줄바꿈·인코딩 원본 그대로. 언어 태그를 섞지 마세요.\n\n"
+
+            "== 선택지 B. 코드 실행 (임시 실행 — 파일 저장 없음) ==\n"
+            "  ```python\n"
+            "  print(\"hello\")\n"
+            "  ```\n"
+            "  • 언어 태그는 정확히 `python` / `javascript` 두 가지만 사용.\n"
+            "  • 타임아웃 30초 · 워크스페이스 cwd · UTF-8 자동 강제.\n"
+            "  • ⚠️ `bash`/`sh`/`shell`/`powershell`/`ps1` 태그는 쉘로 자동 라우팅됩니다.\n\n"
+
+            "== 선택지 C. 쉘 명령 실행 ==\n"
+            "  라인 시작에 `$ <명령>` — 코드 블록으로 감싸지 마세요.\n"
+            "    $ git status\n"
+            "    $ python --version\n"
+            "  • 한 줄에 한 명령. 파이프(|)·리다이렉트(>)·`&&` 는 한 줄 내 허용.\n"
+            f"  • 명령은 {shell_type} 구문을 사용하세요.\n"
+            "  • (선택) 명시 라우팅: `[ACTION:shell]` 태그.\n\n"
+
             "[OBSERVE]\n"
-            "위 ACT 를 실행했을 때 기대되는 결과를 간단히 서술\n"
-            "(실제 실행 결과는 시스템이 다음 프롬프트에 주입합니다)\n\n"
+            "기대 결과 1~3줄. (실제 결과는 시스템이 다음 프롬프트에 주입)\n\n"
+
             "[완료 판정]\n"
-            f"목표를 완전히 달성했다고 판단되면 응답 맨 끝에 정확히 다음 한 줄을 추가:\n"
-            f"  {self.done_token}\n\n"
+            f"목표 달성 시 응답 맨 끝에 정확히: {self.done_token}\n\n"
+
             "[Self-Correction]\n"
-            "[OBSERVE] 또는 시스템이 제공한 실행 결과에 오류가 포함된 경우,\n"
-            "다음 [REASON] 에서 원인을 진단하고 [ACT] 에서 수정 버전을 제시하세요.\n\n"
+            "오류 시 다음 [REASON] 에서 원인 진단 + [ACT] 에서 교정.\n\n"
+
+            "[❌ 금지 패턴 — AI 가 자주 저지르는 실수]\n\n"
+
+            "1) 쉘 명령을 코드 블록으로 감싸기\n"
+            "   ```powershell\n"
+            "   $ git status\n"
+            "   ```\n"
+            "   → 시스템이 \"쉘 의도\" 로 인식해 쉘 경로로 라우팅합니다.\n"
+            "      가능하면 코드 블록 없이 `$ git status` 형태로 작성하세요.\n\n"
+
+            "2) 같은 명령 중복 작성\n"
+            "   디스패처가 중복을 감지해 1회만 실행하지만 노이즈 발생.\n\n"
+
+            "3) 여러 줄 파이썬 로직을 $ 한 줄로\n"
+            "   짧은 -c 는 OK. 여러 줄이면 선택지 B 사용.\n\n"
+
+            "4) 위험 명령을 코드 블록으로 숨기기\n"
+            "   v1.0.107 부터 코드 경로의 쉘 블록도 동일한 위험 명령 검사를\n"
+            "   거칩니다. 승인 프롬프트가 표시됩니다.\n\n"
+
+            f"{shell_brief}\n\n"
+
             "[주의]\n"
             "- 코드 블록 밖에서 장황하게 설명하지 마세요.\n"
             "- 한 iteration 에서 너무 많은 파일/명령을 시도하지 말고 1~3 개로 쪼개세요.\n"
-            "- 위험 명령(rm, mv, del, move 등)은 반드시 필요한 경우에만 사용하세요. 사용자가 거부할 수 있습니다.\n"
-            "- 실행 전 중요한 파일은 git commit 으로 백업되어 있다고 가정하세요.\n\n"
-            "[실행 환경]\n"
-            + get_os_shell_hint()
+            "- 의도가 모호하면 `[ACTION:file]` / `[ACTION:code]` / `[ACTION:shell]` "
+            "태그를 ACT 첫 줄에 추가해 명시할 수 있습니다.\n"
+            "- 실행 전 중요한 파일은 git commit 으로 백업되어 있다고 가정하세요.\n"
         )
 
     def _build_initial_prompt(self, goal: str, file_context: str = "") -> str:
@@ -562,13 +617,51 @@ class AgentRunner:
     def _execute_actions(
         self, session: AgentSession, act_text: str
     ) -> List[ActionResult]:
-        if not act_text:
-            return []
-        results: List[ActionResult] = []
-        results += self._save_file_blocks(session, act_text)
-        results += self._run_code_blocks(act_text)
-        results += self._run_shell_lines(session, act_text)
-        return results
+        """v1.0.107: 디스패처가 단일 경로로 라우팅."""
+        return self._dispatcher.dispatch(session, act_text)
+
+    # ─── 디스패처 전용 — 단일 쉘 명령 실행 ────────────────────
+    def _exec_single_shell_command(
+        self, session: AgentSession, cmd: str
+    ) -> ActionResult:
+        """디스패처 전용 — 단일 쉘 명령 실행 + 위험 명령 검사."""
+        base = cmd.split()[0].lower() if cmd.split() else ""
+        dangerous = base in self.terminal_executor.DANGEROUS_COMMANDS
+
+        if dangerous:
+            if session.bypass_approvals:
+                session.bypass_dangerous_count += 1
+                if session.bypass_dangerous_count > self.bypass_max_dangerous:
+                    session.stop_reason = AgentStopReason.BYPASS_DANGEROUS_LIMIT
+                    raise _BypassAbort(
+                        f"위험 명령 누적 한도 초과 "
+                        f"({session.bypass_dangerous_count} > "
+                        f"{self.bypass_max_dangerous}): '{cmd}'"
+                    )
+                print(f"\n⚡ BYPASS: 위험 명령 자동 승인 "
+                      f"({session.bypass_dangerous_count}/{self.bypass_max_dangerous})")
+            if not session.auto_approve_dangerous_shell:
+                if not self._approve_dangerous(
+                    session, "auto_approve_dangerous_shell", f"shell '{cmd}'"
+                ):
+                    return ActionResult(
+                        kind="shell", target=cmd, success=False,
+                        detail="사용자 거부",
+                    )
+
+        print(f"\n▶️  $ {cmd}")
+        result = self.terminal_executor.execute(cmd, allow_unsafe=dangerous)
+        success = bool(result.get("success"))
+        if success:
+            stdout = (result.get("stdout") or "").strip()
+            detail = f"returncode=0\n{stdout[:500]}" if stdout else "returncode=0"
+        else:
+            err = (result.get("stderr") or result.get("error") or "").strip()
+            rc = result.get("returncode", "?")
+            detail = f"returncode={rc}\n{err[:500]}"
+        return ActionResult(
+            kind="shell", target=cmd, success=success, detail=detail,
+        )
 
     def _save_file_blocks(self, session: AgentSession, act_text: str) -> List[ActionResult]:
         results: List[ActionResult] = []

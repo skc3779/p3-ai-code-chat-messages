@@ -4,7 +4,7 @@
 |---|---|
 | 문서 버전 | v1.0.107 |
 | 작성일 | 2026-04-25 |
-| 상태 | 🟡 설계 확정 (구현 대기) |
+| 상태 | ✅ 구현 완료 (수동 확인 대기) |
 | 선행 문서 | FSD v1.0.083 (자율 루프), FSD v1.0.088 (OS Shell Hint), FSD v1.0.100 (Bypass), FSD v1.0.101 (max_iterations override), FSD v1.0.103 (Bypass Overwrite), FSD v1.0.104 (Terminal Executor Shell Hint), RELEASE v1.0.105 (Terminal Executor Shell-Aware), FSD v1.0.106 (System Prompt 재작성 — strict-reject 접근) |
 | 대상 파일 | [src/agent_runner.py](src/agent_runner.py), [src/os_utils.py](src/os_utils.py), [src/terminal_executor.py](src/terminal_executor.py), [src/code_executor.py](src/code_executor.py), [tests/test_agent_runner.py](tests/test_agent_runner.py) |
 | 신규 파일 | [src/agent_action_dispatcher.py](src/agent_action_dispatcher.py), [tests/test_agent_action_dispatcher.py](tests/test_agent_action_dispatcher.py) |
@@ -1226,13 +1226,13 @@ dispatch():
 
 ## 13. 승인
 
-- [ ] 설계 검토
-- [ ] `src/terminal_executor.py` `agent_shell_brief()` 구현 및 T-107-24 ~ T-107-28 통과
-- [ ] `src/os_utils.py` 4-쉘 분기 개선 및 T-107-29 ~ T-107-32 통과
-- [ ] `src/agent_action_dispatcher.py` 신규 모듈 구현 및 T-107-07 ~ T-107-23 통과
-- [ ] `src/agent_runner.py` `_build_system_prompt()` 재작성 및 T-107-01 ~ T-107-06 통과
-- [ ] `src/agent_runner.py` `_execute_actions()` 디스패처 위임 + `_exec_single_shell_command()` / `_format_*_action_result()` 유틸 추가
-- [ ] 기존 회귀 없음 (`tests/test_agent_runner.py`, `tests/test_terminal_executor.py`, `tests/test_os_utils.py`, `tests/test_agent_session_store.py`)
-- [ ] Bypass Approvals (FSD v1.0.100), Bypass Overwrite (v1.0.103), max_iterations override (v1.0.101) 회귀 없음
+- [x] 설계 검토
+- [x] `src/terminal_executor.py` `agent_shell_brief()` 구현 및 T-107-24 ~ T-107-28 통과
+- [x] `src/os_utils.py` 4-쉘 분기 개선 및 T-107-29 ~ T-107-32 통과
+- [x] `src/agent_action_dispatcher.py` 신규 모듈 구현 및 T-107-07 ~ T-107-23 통과
+- [x] `src/agent_runner.py` `_build_system_prompt()` 재작성 및 T-107-01 ~ T-107-06 통과
+- [x] `src/agent_runner.py` `_execute_actions()` 디스패처 위임 + `_exec_single_shell_command()` / `_format_*_action_result()` 유틸 추가
+- [x] 기존 회귀 없음 (`tests/test_agent_runner.py`, `tests/test_terminal_executor.py`, `tests/test_os_utils_and_agent_prompt.py`, `tests/test_agent_session_store.py`, `tests/test_bypass_approvals.py`) — 126건 전체 통과
+- [x] Bypass Approvals (FSD v1.0.100), Bypass Overwrite (v1.0.103), max_iterations override (v1.0.101) 회귀 없음
 - [ ] `/agents` 실사용 수동 확인 — § 1.1.1 ~ 1.1.4 4 패턴 재현 시 단일 경로 라우팅 + 위험 명령 승인 정상 동작
-- [ ] `docs/specs/releases/RELEASE_v1.0.107_agents-act-intelligent-dispatcher.md` 작성
+- [x] `docs/specs/releases/RELEASE_v1.0.107_agents-act-intelligent-dispatcher.md` 작성

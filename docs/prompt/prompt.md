@@ -1360,3 +1360,27 @@ src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_exe
 - 깊이 생각해서 추가로 강제 종료에 대한 안전 장치를 제안한다.
 - 더 낳은 제안이 있으면 제시한다.
 - docs/specs/requirements 폴더에 FSD v1.0.100 문서로 작성한다.
+
+---
+
+`print_banner()` 를 화면에 출력여부를 `.env` 파일의 `PRINT_BANNER` 환경변수로 제어 할 수 있도록 추가해줘. 
+- `PRINT_BANNER=true` 이면 출력 false 이면 출력하지 않는다. 
+- *-ai-chat-code.py 3개 파일에 적용한다.
+- docs/requirements 폴더의 FSD v1.0.108 문서로 작성한다.
+ 
+---
+
+## 아래 조건에 맞게 FSD 문서를 작성해줘.
+### *-ai-chat-code.py에 `print_banner()`
+- `.env` 파일의 `PRINT_BANNER` 환경변수로 제어 할 수 있도록 작성한다.
+- `PRINT_BANNER=true` 이면 출력 false 이면 출력하지 않는다. 
+### terminal_executor.py 
+- "Windows PowerShell" | "Windows CMD" | "Linux" | "Mac" 환경을 감지하여 `execute(self, command: str, allow_unsafe: bool = False)` 각각에 맞는 명령어로 실행하도록 개선한다.
+- Windows PowerShell: `powershell.exe -Command <command>`
+- Windows CMD: `cmd.exe /c <command>`
+- Linux/Mac: `/bin/bash -c <command>`
+### code_executor.py
+- "Windows PowerShell" | "Windows CMD" | "Linux" | "Mac" 환경을 감지하여 SUPPORTED_LANGUAGES를 정리 될 수 있도록 작성한다.
+- _BASE_LANGUAGES 과 _build_shell_config, _SHELL_LANG_KEYS 가 복잡하게 분리되어 있는데 좀더 깔끔한 코드로 작성한다.
+### terminal_executor.py 와 code_executor.py 모두 한글깨짐 인코딩 문제가 없도록 한다.
+### docs/requirements 폴더의 FSD v1.0.110 문서로 작성한다.

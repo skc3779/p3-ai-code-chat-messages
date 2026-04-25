@@ -14,6 +14,13 @@ from typing import List, Dict
 def _build_shell_config() -> dict:
     """OS에 따라 쉘 실행 설정을 반환"""
     if platform.system() == 'Windows':
+        if os.environ.get('PSModulePath'):
+            return {
+                'cmd': 'cmd',
+                'args': [],
+                'ext': '.bat',
+                'icon': '🪟',
+            }
         return {
             'cmd': 'powershell',
             'args': ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File'],
@@ -21,12 +28,11 @@ def _build_shell_config() -> dict:
             'icon': '🪟',
         }
     return {
-        'cmd': 'bash',
+        'cmd': '/bin/bash',
         'args': [],
         'ext': '.sh',
         'icon': '🖥️',
     }
-
 
 _BASE_LANGUAGES = {
     'python':     {'cmd': 'python', 'args': [], 'ext': '.py',  'icon': '🐍'},
