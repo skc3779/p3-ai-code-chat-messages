@@ -18,3 +18,4 @@ def get_os_shell_hint() -> str:
         "쉘 스크립트 작성 시 bash 구문을 사용하고 "
         "코드 블록 언어 태그를 `bash` 또는 `sh`로 지정하세요."
     )
+

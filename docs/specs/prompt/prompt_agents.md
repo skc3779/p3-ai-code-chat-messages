@@ -325,3 +325,66 @@ FSD 요구문서를 구현하고 문서내 `10. 승인` 올바르게 처리해�
 
 ---
 
+
+`terminal_executor.py` 의 `_execute_command_safely()` 함수에서 `get_os_shell_hint()` 함수를 호출하여 `system_prompt` 에 현재 OS 에 맞는 쉘 힌트를 포함하도록 해줘. 
+- 이 기능을 구현하기 위한 FSD 문서를 docs/specs/requirements 폴더에 FSD v1.0.104_terminal-executor-os-shell-hint.md 로 작성해줘.
+
+---
+
+`terminal_executor.py` 를 아래 조건에 맞게 개선해줘.
+- 현재 실행 쉘이 Windows 환경일 때와 Linux/Mac 환경일 때를 확인하는 함수를 만들고 결과 값을 반환해줘.
+  - 확인한 결과는 "Windows PowerShell", "Windows CMD", "Linux", "Mac" 으로 반환해줘.
+- DANGEROUS_COMMANDS 를 "Windows PowerShell" , "Windows CMD", "Linux", "Mac" 환경에 꼭 필요한 것만 정리해줘.
+- 명령어 검증은 DANGEROUS_COMMANDS 경우만 사용하고, ALLOWED_COMMANDS, ALLOWED_POWERSHELL_CMDLETS 는 제거해줘.
+- shell_help를 "Windows PowerShell" , "Windows CMD", "Linux", "Mac" 환경에 맞게 정리해줘.
+- docs/specs/releases 폴더에 완료 시 RELEASE v1.0.105 문서로 정리해줘.
+- `terminal_executor.py` 참조 파일 목록
+  ```
+  claude-ai-chat-code.py
+  gemini-ai-chat-code.py
+  gen-ai-chat-code.py
+  test_bypass_approvals.py
+  agent_runner.py
+  ```
+
+---
+
+`agent_runner.py` 의 _build_system_prompt() 의 시스템 명령을 AI 모델이 이해 못하고 잘못된 응답을 하는 경우가 있어서, 시스템 명령을 좀 더 구체적이고 명확하게 작성하는 FSD 문서를 작성해줘.
+- src/agent_*.py, src/os_utils.py, src/terminal_executor.py, src/code_executor.py 를 중점으로 참고한다. 
+- [ACT] 의 `코드 실행`과 `쉘 명령 실행`를 구분하여 명확하게 답변을 하지 못하는 경우가 발생한다.
+  - 예시 "```powershell\n  $ <명령>\n ```\n" 와 `코드 실행`과 `쉘 명령 실행`를 함께 사용하는 경우가 많음.
+  - `코드 실행`과 `쉘 명령 실행`이 정상적으로 실행되지 않는 경우가 발생함. 
+- `/agents`를 위한 시스템 명령에 AI 모델이 이해하기 쉬운 구체적인 지침과 예를 작성한다.
+- "터미널 명령어 실행 - 안전한 쉘 명령 실행 환경" 의 내용을 `/agents`를 위한 시스템 명령에 포함하여 AI 모델이 정확하게 쉘 명령어를 사용할 수 있도록 한다.
+- 현재의 시스템 명령의 `코드 실행`과 `쉘 명령 실행`에 대한 깊게 생각하고 AI 모델이 이해하기 쉬운 구체적인 지침과 예를 포함하여 수정하는 FSD 문서를 작성해줘.
+- `[ACT]` 블록에 올바른 처리를 위해 `agent_runner.py` 에 대한 다양한 케이스의 단위 테스트 코드를 작성해줘.
+- `코드 실행`과 `쉘 명령 실행` 관련하여 기존 연관 소스코드 개선이 필요하면 깊게 생각하고 같이 반영하여 작성해줘.
+- 만일 `코드 실행`과 `쉘 명령 실행`를 AI 모델이 구분하지 못하는 경우를 해결하기 위한 더 좋은 개선안이 있으면 적극적으로 제안하고 반영해줘.
+    - AI 모델 시스템 명령 및 소스코드 개선 모두를 포함 한다.
+- docs/specs/requirements 폴더에 FSD v1.0.107 로 작성해줘.
+
+---
+
+[ACT] 의 `코드 실행`과 `쉘 명령 실행`를 구분하여 명확하게 응답하지 못하더라도, 아래와 같이 판단하여 처리 될 수 있도록 개선해줘.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

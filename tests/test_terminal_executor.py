@@ -13,103 +13,158 @@ sys.path.insert(0, str(project_root))
 
 from src.terminal_executor import TerminalExecutor
 
+
 class TestTerminalExecutor(unittest.TestCase):
     """TerminalExecutor 클래스 테스트"""
-    
+
     def setUp(self):
         """테스트 환경 설정"""
         self.temp_dir = Path(tempfile.mkdtemp())
         self.executor = TerminalExecutor(self.temp_dir, timeout=10)
-    
+        self.shell_type = TerminalExecutor.get_shell_type()
+
     def tearDown(self):
         """테스트 환경 정리"""
         import shutil
         shutil.rmtree(self.temp_dir, ignore_errors=True)
-    
+
+    # ── get_shell_type ────────────────────────────────────────────────────────
+
+    def test_get_shell_type_returns_valid_value(self):
+        """get_shell_type 반환 값이 지정된 네 가지 중 하나여야 함"""
+        valid = {'Windows PowerShell', 'Windows CMD', 'Linux', 'Mac'}
+        self.assertIn(self.shell_type, valid)
+
+    def test_get_shell_type_consistent(self):
+        """같은 환경에서 두 번 호출해도 동일한 값 반환"""
+        self.assertEqual(TerminalExecutor.get_shell_type(), self.shell_type)
+
+    # ── execute — 기본 실행 ───────────────────────────────────────────────────
+
     def test_execute_allowed_command(self):
-        """허용된 명령어 실행 테스트"""
-        # echo는 허용된 명령어
+        """echo 명령어 실행 — 모든 환경에서 성공해야 함"""
         result = self.executor.execute("echo hello")
-        
+
         self.assertTrue(result['success'])
         self.assertIn('hello', result['stdout'])
-    
+
     def test_execute_additional_allowed_commands(self):
-        """추가된 허용 명령어(whoami, date 등) 테스트"""
-        # whoami
-        result = self.executor.execute("whoami")
-        self.assertTrue(result['success'], f"whoami 실패: {result.get('error')}")
-        
-        # date (Windows/Linux 공통)
-        # Windows에서는 date가 사용자 입력을 기다릴 수 있으므로 /t 옵션이 필요할 수 있으나, 
-        # python subprocess에서는 date만으로도 날짜를 출력하고 종료될 수 있음.
-        # 안전하게 'hostname' 사용
-        result = self.executor.execute("hostname")
-        self.assertTrue(result['success'], f"hostname 실패: {result.get('error')}")
+        """whoami, hostname 실행 — 모든 환경에서 성공해야 함"""
+        for cmd in ('whoami', 'hostname'):
+            result = self.executor.execute(cmd)
+            self.assertTrue(result['success'], f"{cmd} 실패: {result.get('error')}")
 
-    def test_all_allowed_commands_are_permitted(self):
-        """ALLOWED_COMMANDS 목록의 모든 명령어가 실행 시도 시 차단되지 않는지 테스트"""
-        # 실제 실행까지 하면 시간이 오래 걸리거나 설치되지 않은 도구 때문에 실패할 수 있음.
-        # 따라서 여기서는 '허용되지 않은 명령어' 에러가 발생하지 않는지만 확인 (실행 에러는 허용)
-        
-        # 일부 명령어는 실행 시 부작용이 있거나(mkdir), 대기 상태가 될 수 있으므로(cat)
-        # 테스트에서 제외하거나 안전한 인자로 실행해야 함.
-        # 하지만 단순히 목록 검증이 목적이라면, execute 메서드 내부 로직을 우회 검증하는 것이 나음.
-        # 여기서는 executor의 검증 로직을 통과하는지만 확인.
-        
-        for cmd in TerminalExecutor.ALLOWED_COMMANDS:
-            # 명령어 실행 시도 (존재하지 않는 인자 등으로 빨리 종료되게 유도)
-            if cmd in ['python', 'python3', 'node', 'npm', 'git', 'cat', 'grep', 'find']:
-                 # 버전 확인 등으로 안전하게 실행 시도
-                 command_str = f"{cmd} --version"
-            elif cmd in ['ls', 'dir', 'pwd', 'whoami', 'date', 'time', 'hostname', 'echo']:
-                 command_str = cmd
-            else:
-                 # 나머지는 실행하지 않고 검증 로직만 통과하는지 확인하고 싶지만, 
-                 # subprocess.run까지 가면 '파일을 찾을 수 없음' 에러가 나야 정상 (차단 에러 X)
-                 command_str = f"{cmd} --help"
-
-            result = self.executor.execute(command_str)
-            
-            # '허용되지 않은 명령어' 에러가 아니어야 함
-            is_blocked = not result['success'] and '허용되지 않은 명령어' in result.get('error', '')
-            self.assertFalse(is_blocked, f"명령어 '{cmd}'가 차단되었습니다 안전 모드 목록에 있어야 합니다.")
-    
-    def test_execute_dangerous_command_blocked(self):
-        """위험 명령어 차단 테스트"""
-        result = self.executor.execute("rm test.txt")
-        
-        self.assertFalse(result['success'])
-        self.assertIn('위험 명령어', result['error'])
-    
-    def test_execute_dangerous_command_with_unsafe(self):
-        """위험 모드로 위험 명령어 실행 테스트"""
-        # allow_unsafe=True면 실행 시도 (파일이 없어도 명령 자체는 실행됨)
-        result = self.executor.execute("echo safe_test", allow_unsafe=True)
-        
-        self.assertTrue(result['success'])
-    
-    def test_execute_unknown_command_blocked(self):
-        """알 수 없는 명령어 차단 테스트"""
+    def test_execute_unknown_command_allowed(self):
+        """알 수 없는 명령어는 차단하지 않고 실행 시도해야 함 (위험 명령어 아님)"""
         result = self.executor.execute("unknowncommand123")
-        
-        self.assertFalse(result['success'])
-        self.assertIn('허용되지 않은 명령어', result['error'])
-    
+
+        # 위험 명령어 차단 메시지가 없어야 함 (실행 시도 후 OS 에러는 허용)
+        self.assertNotIn('위험 명령어', result.get('error', ''))
+
     def test_execute_empty_command(self):
-        """빈 명령어 테스트"""
+        """빈 명령어는 에러 반환"""
         result = self.executor.execute("")
-        
+
         self.assertFalse(result['success'])
         self.assertIn('비어있습니다', result['error'])
-    
-    def test_get_allowed_commands(self):
-        """허용 명령어 목록 조회 테스트"""
-        allowed = self.executor.get_allowed_commands()
-        
-        self.assertIn('pip', allowed)
-        self.assertIn('git', allowed)
-        self.assertIn('echo', allowed)
+
+    # ── execute — 위험 명령어 차단 ───────────────────────────────────────────
+
+    def test_execute_dangerous_command_blocked(self):
+        """현재 환경에 맞는 위험 명령어가 안전 모드에서 차단되어야 함"""
+        if self.shell_type == 'Windows PowerShell':
+            cmd = 'Remove-Item test.txt'
+        elif self.shell_type == 'Windows CMD':
+            cmd = 'del test.txt'
+        else:  # Linux / Mac
+            cmd = 'rm test.txt'
+
+        result = self.executor.execute(cmd)
+
+        self.assertFalse(result['success'])
+        self.assertIn('위험 명령어', result['error'])
+
+    def test_execute_dangerous_command_with_unsafe(self):
+        """allow_unsafe=True 시 위험 명령어도 실행 시도"""
+        result = self.executor.execute("echo safe_test", allow_unsafe=True)
+
+        self.assertTrue(result['success'])
+
+    def test_dangerous_commands_not_in_safe_mode(self):
+        """현재 환경의 DANGEROUS_COMMANDS 목록은 모두 안전 모드에서 차단되어야 함"""
+        for cmd in self.executor.DANGEROUS_COMMANDS:
+            result = self.executor.execute(cmd)
+            is_blocked = not result['success'] and '위험 명령어' in result.get('error', '')
+            self.assertTrue(is_blocked, f"'{cmd}' 가 차단되지 않았습니다.")
+
+    # ── DANGEROUS_COMMANDS 환경별 검증 ──────────────────────────────────────
+
+    def test_dangerous_commands_windows_powershell(self):
+        """Windows PowerShell 위험 명령어 목록에 핵심 항목 포함 여부"""
+        dangerous = TerminalExecutor._DANGEROUS_WINDOWS_POWERSHELL
+        for expected in ('remove-item', 'invoke-expression', 'stop-process', 'set-content'):
+            self.assertIn(expected, dangerous)
+
+    def test_dangerous_commands_windows_cmd(self):
+        """Windows CMD 위험 명령어 목록에 핵심 항목 포함 여부"""
+        dangerous = TerminalExecutor._DANGEROUS_WINDOWS_CMD
+        for expected in ('del', 'rmdir', 'format', 'taskkill', 'shutdown'):
+            self.assertIn(expected, dangerous)
+
+    def test_dangerous_commands_linux(self):
+        """Linux 위험 명령어 목록에 핵심 항목 포함 여부"""
+        dangerous = TerminalExecutor._DANGEROUS_LINUX
+        for expected in ('rm', 'chmod', 'kill', 'shutdown', 'sudo'):
+            self.assertIn(expected, dangerous)
+
+    def test_dangerous_commands_mac(self):
+        """Mac 위험 명령어 목록에 핵심 항목 포함 여부"""
+        dangerous = TerminalExecutor._DANGEROUS_MAC
+        for expected in ('rm', 'chmod', 'diskutil', 'launchctl', 'sudo'):
+            self.assertIn(expected, dangerous)
+
+    # ── get_dangerous_commands ────────────────────────────────────────────────
+
+    def test_get_dangerous_commands_returns_string(self):
+        """get_dangerous_commands 는 위험 명령어 목록을 문자열로 반환"""
+        result = self.executor.get_dangerous_commands()
+
+        self.assertIsInstance(result, str)
+        self.assertGreater(len(result), 0)
+
+    def test_get_dangerous_commands_contains_env_specific(self):
+        """get_dangerous_commands 반환값에 현재 환경의 핵심 위험 명령어 포함"""
+        result = self.executor.get_dangerous_commands()
+
+        if self.shell_type == 'Windows PowerShell':
+            self.assertIn('remove-item', result)
+        elif self.shell_type == 'Windows CMD':
+            self.assertIn('del', result)
+        elif self.shell_type == 'Mac':
+            self.assertIn('diskutil', result)
+        else:  # Linux
+            self.assertIn('rm', result)
+
+    # ── shell_help ───────────────────────────────────────────────────────────
+
+    def test_shell_help_contains_shell_type(self):
+        """shell_help 출력에 현재 환경 이름이 포함되어야 함"""
+        help_text = TerminalExecutor.shell_help()
+
+        if self.shell_type == 'Windows PowerShell':
+            self.assertIn('PowerShell', help_text)
+        elif self.shell_type == 'Windows CMD':
+            self.assertIn('CMD', help_text)
+        elif self.shell_type == 'Mac':
+            self.assertIn('macOS', help_text)
+        else:
+            self.assertIn('Linux', help_text)
+
+    def test_shell_help_contains_dangerous_section(self):
+        """shell_help 출력에 위험 명령어 섹션이 포함되어야 함"""
+        help_text = TerminalExecutor.shell_help()
+        self.assertIn('위험 명령어', help_text)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -22,7 +22,8 @@
       "Bash(python -m pytest tests/test_response_parser_overwrite.py tests/test_agent_runner.py::TestSaveFileBlocksBypassOverwrite -v)",
       "Bash(python -m pytest tests/test_response_parser.py tests/test_agent_runner.py tests/test_bypass_approvals.py -v)",
       "Bash(python -m pytest tests/test_agents_flags.py -v)",
-      "Bash(python -m pytest tests/ -v --tb=short -q)"
+      "Bash(python -m pytest tests/ -v --tb=short -q)",
+      "Bash(python -m pytest tests/test_terminal_executor.py -v)"
     ]
   }
 }
