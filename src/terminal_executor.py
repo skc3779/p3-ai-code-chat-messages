@@ -158,10 +158,20 @@ class TerminalExecutor:
           - Windows CMD        : ('cmd.exe /c "..."',     True)
           - Linux / Mac        : (['/bin/bash', '-c', ..], False)
         """
+        def _get_powershell_executable():
+            
+            if shutil.which("pwsh.exe"):
+                return "pwsh.exe"
+            return "powershell.exe"      
         if shell_type == 'Windows PowerShell':
+            import shutil
+            if shutil.which("pwsh.exe"):
+                powershell_exe = "pwsh.exe"
+            else:
+                powershell_exe = "powershell.exe"
             return (
                 [
-                    'powershell.exe', '-NoProfile', '-NonInteractive',
+                    powershell_exe, '-NoProfile', '-NonInteractive',
                     '-Command', TerminalExecutor.PS_INLINE_PREAMBLE + command,
                 ],
                 False,

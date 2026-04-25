@@ -46,8 +46,13 @@ class CodeExecutor:
     def _shell_lang_config(shell_type: str) -> dict:
         """현 쉘 환경에 맞는 쉘-스크립트 실행 설정 반환."""
         if shell_type == 'Windows PowerShell':
+            import shutil
+            if shutil.which("pwsh.exe"):
+                powershell_exe = "pwsh.exe"
+            else:
+                powershell_exe = "powershell.exe"            
             return {
-                'cmd': 'powershell.exe',
+                'cmd': powershell_exe,
                 'args': ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File'],
                 'ext': '.ps1',
                 'icon': '🪟',
