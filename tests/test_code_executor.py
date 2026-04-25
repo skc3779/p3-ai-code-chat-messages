@@ -13,6 +13,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from src.code_executor import CodeExecutor
+from src.terminal_executor import TerminalExecutor
 
 class TestCodeExecutor(unittest.TestCase):
     """CodeExecutor 클래스 테스트"""
@@ -95,34 +96,34 @@ code2
         blocks = self.executor.extract_code_from_response(response)
         self.assertEqual(len(blocks), 2)
 
-    @patch('platform.system', return_value='Windows')
-    def test_shell_config_windows(self, mock_system):
-        """Windows 환경에서 쉘(bash/powershell) 설정 테스트"""
+    @patch.object(TerminalExecutor, 'get_shell_type', return_value='Windows PowerShell')
+    def test_shell_config_windows(self, _mock):
+        """Windows PowerShell 환경에서 쉘(bash/powershell) 설정 테스트"""
         executor = CodeExecutor(self.temp_dir)
-        
+
         self.assertIn('bash', executor.SUPPORTED_LANGUAGES)
         lang_config = executor.SUPPORTED_LANGUAGES['bash']
-        self.assertEqual(lang_config['cmd'], 'powershell')
+        self.assertEqual(lang_config['cmd'], 'powershell.exe')
         self.assertEqual(lang_config['ext'], '.ps1')
         self.assertIn('-File', lang_config['args'])
-        
-        self.assertIn('powershell', executor.SUPPORTED_LANGUAGES)
-        self.assertEqual(executor.SUPPORTED_LANGUAGES['powershell']['cmd'], 'powershell')
-        self.assertEqual(executor.SUPPORTED_LANGUAGES['ps1']['cmd'], 'powershell')
 
-    @patch('platform.system', return_value='Linux')
-    def test_shell_config_linux(self, mock_system):
+        self.assertIn('powershell', executor.SUPPORTED_LANGUAGES)
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['powershell']['cmd'], 'powershell.exe')
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['ps1']['cmd'], 'powershell.exe')
+
+    @patch.object(TerminalExecutor, 'get_shell_type', return_value='Linux')
+    def test_shell_config_linux(self, _mock):
         """Linux 환경에서 쉘(bash/sh) 설정 테스트"""
         executor = CodeExecutor(self.temp_dir)
-        
+
         self.assertIn('bash', executor.SUPPORTED_LANGUAGES)
         lang_config = executor.SUPPORTED_LANGUAGES['bash']
-        self.assertEqual(lang_config['cmd'], 'bash')
+        self.assertEqual(lang_config['cmd'], '/bin/bash')
         self.assertEqual(lang_config['ext'], '.sh')
         self.assertEqual(lang_config['args'], [])
-        
+
         self.assertIn('sh', executor.SUPPORTED_LANGUAGES)
-        self.assertEqual(executor.SUPPORTED_LANGUAGES['sh']['cmd'], 'bash')
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['sh']['cmd'], '/bin/bash')
 
     def test_execute_shell_basic(self):
         """현재 OS 환경에서 기본적인 쉘 명령 실행 테스트"""

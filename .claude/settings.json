@@ -23,7 +23,8 @@
       "Bash(python -m pytest tests/test_response_parser.py tests/test_agent_runner.py tests/test_bypass_approvals.py -v)",
       "Bash(python -m pytest tests/test_agents_flags.py -v)",
       "Bash(python -m pytest tests/ -v --tb=short -q)",
-      "Bash(python -m pytest tests/test_terminal_executor.py -v)"
+      "Bash(python -m pytest tests/test_terminal_executor.py -v)",
+      "Bash(python -m pytest tests/test_banner_toggle.py tests/test_terminal_executor_shell_dispatch.py tests/test_code_executor_shell_dispatch.py tests/test_code_executor.py tests/test_terminal_executor.py tests/test_code_executor_encoding.py -v)"
     ]
   }
 }

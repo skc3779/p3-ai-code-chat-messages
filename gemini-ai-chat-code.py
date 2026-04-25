@@ -67,6 +67,14 @@ def _supports_color() -> bool:
     return True
 
 
+def _should_print_banner() -> bool:
+    """`PRINT_BANNER` 환경 변수로 배너 출력 여부 결정. 미설정 시 True."""
+    raw = os.getenv("PRINT_BANNER", "").strip().lower()
+    if raw in ("false", "0", "no", "off"):
+        return False
+    return True
+
+
 def print_banner():
     """ANSI Art 배너 출력 - >> GEMINI AI CODE CHAT <<"""
     use_color = _supports_color()
@@ -152,7 +160,8 @@ def main():
     file_watcher = FileWatcher(workspace)
 
     # 메뉴 출력
-    print_banner()
+    if _should_print_banner():
+        print_banner()
     print(f"\n📂 작업 디렉토리: {workspace}")
     print(f"🤖 모델: {GEMINI_MODEL_ID}")
 

@@ -13,6 +13,13 @@ from typing import Dict, Set
 class TerminalExecutor:
     """터미널 명령어 실행 - 안전한 쉘 명령 실행 환경"""
 
+    # PowerShell -Command 인라인용 UTF-8 강제 프리앰블 (CRLF 대신 ; 구분)
+    PS_INLINE_PREAMBLE = (
+        "$OutputEncoding = [Console]::OutputEncoding = "
+        "[System.Text.Encoding]::UTF8; "
+        "chcp 65001 > $null; "
+    )
+
     # 환경별 위험 명령어 — shell! 에서만 실행 허용
     _DANGEROUS_WINDOWS_POWERSHELL: Set[str] = {
         # 파일/디렉토리 삭제
@@ -130,6 +137,40 @@ class TerminalExecutor:
         else:
             self.DANGEROUS_COMMANDS = self._DANGEROUS_LINUX
 
+    def _build_child_env(self) -> Dict[str, str]:
+        """자식 프로세스용 UTF-8 강제 환경 변수 세트 반환.
+
+        부모 os.environ 은 복사본만 생성하여 변경하지 않는다.
+        """
+        env = os.environ.copy()
+        env["PYTHONIOENCODING"] = "utf-8"
+        env["PYTHONUTF8"] = "1"
+        env.setdefault("LC_ALL", "C.UTF-8")
+        env.setdefault("LANG", "C.UTF-8")
+        return env
+
+    @staticmethod
+    def _compose_argv(shell_type: str, command: str):
+        """쉘 타입에 맞는 subprocess argv와 shell 플래그를 반환.
+
+        Returns: (argv, shell_flag)
+          - Windows PowerShell : (['powershell.exe', ...], False)
+          - Windows CMD        : ('cmd.exe /c "..."',     True)
+          - Linux / Mac        : (['/bin/bash', '-c', ..], False)
+        """
+        if shell_type == 'Windows PowerShell':
+            return (
+                [
+                    'powershell.exe', '-NoProfile', '-NonInteractive',
+                    '-Command', TerminalExecutor.PS_INLINE_PREAMBLE + command,
+                ],
+                False,
+            )
+        if shell_type == 'Windows CMD':
+            return (f'cmd.exe /c "chcp 65001 > NUL & {command}"', True)
+        # Linux | Mac
+        return (['/bin/bash', '-c', command], False)
+
     def execute(self, command: str, allow_unsafe: bool = False) -> Dict:
         """명령어 실행"""
         if not command.strip():
@@ -152,17 +193,21 @@ class TerminalExecutor:
                 'hint': '위험 명령을 실행하려면 /shell! 을 사용하세요.'
             }
 
+        shell_type = self.get_shell_type()
+        argv, shell_flag = self._compose_argv(shell_type, command)
+        env = self._build_child_env()
+
         try:
             result = subprocess.run(
-                command,
-                shell=True,
+                argv,
+                shell=shell_flag,
                 capture_output=True,
                 text=True,
                 encoding='utf-8',
                 errors='replace',
                 timeout=self.timeout,
                 cwd=str(self.workspace_dir),
-                env=os.environ.copy()
+                env=env,
             )
             return {
                 'success': result.returncode == 0,
