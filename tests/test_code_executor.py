@@ -38,7 +38,16 @@ class TestCodeExecutor(unittest.TestCase):
         self.assertTrue(result['success'])
         self.assertIn('Hello, World!', result['stdout'])
         self.assertEqual(result['returncode'], 0)
-    
+
+    def test_execute_powershell_success(self):
+        """powershell 코드 실행 성공 테스트"""
+        code = "write-Host 'Hello, World!'"
+        result = self.executor.execute(code, 'powershell')
+        
+        self.assertTrue(result['success'])
+        self.assertIn('Hello, World!', result['stdout'])
+        self.assertEqual(result['returncode'], 0)
+
     def test_execute_python_error(self):
         """Python 코드 실행 오류 테스트"""
         code = "print(undefined_variable)"
@@ -68,8 +77,21 @@ print('hello')
         self.assertEqual(blocks[0]['code'], "print('hello')")
         self.assertEqual(blocks[0]['language'], 'python')
     
-    def test_extract_code_from_response_language_format(self):
-        """언어 식별자 형식 코드 추출 테스트"""
+    def test_extract_code_from_response_language_powershell_format(self):
+        """언어 식별자 형식 powershell 코드 추출 테스트"""
+        response = """
+```powershell
+write-Host "hello"
+```
+"""
+        blocks = self.executor.extract_code_from_response(response)
+        
+        self.assertEqual(len(blocks), 1)
+        self.assertEqual(blocks[0]['language'], 'powershell')
+        self.assertIn('write-Host "hello"', blocks[0]['code'])
+
+    def test_extract_code_from_response_language_python_format(self):
+        """언어 식별자 형식 python 코드 추출 테스트"""
         response = """
 ```python
 x = 1 + 1

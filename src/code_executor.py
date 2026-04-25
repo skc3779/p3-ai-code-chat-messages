@@ -40,7 +40,6 @@ class CodeExecutor:
         'py':         {'cmd': 'python', 'args': [], 'ext': '.py',    'icon': '🐍'},
         'javascript': {'cmd': 'node',   'args': [], 'ext': '.js',    'icon': '📜'},
         'js':         {'cmd': 'node',   'args': [], 'ext': '.js',    'icon': '📜'},
-        'java':       {'cmd': 'java',   'args': [], 'ext': '.java',  'icon': '☕️'},
     }
 
     @staticmethod
