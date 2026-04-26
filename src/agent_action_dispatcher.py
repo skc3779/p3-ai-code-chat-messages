@@ -16,7 +16,7 @@ from typing import List, Optional
 
 @dataclass
 class _ParsedAction:
-    kind: str           # "file" | "code" | "shell" | "script"
+    kind: str           # "file" | "code" | "shell" | "script" | "patch"
     payload: str        # 원본 텍스트 / 라인
     lang: Optional[str] = None
     filepath: Optional[str] = None
@@ -83,6 +83,14 @@ class AgentActionDispatcher:
 
         actions = self._dedupe(actions)
 
+        # FR-111-25: 같은 iteration 안에서 같은 파일을 filename 과 patch 양쪽으로
+        # 작성한 경우, filename 을 우선 적용하고 patch 는 보고만 한다.
+        file_paths = {
+            (a.filepath or "").strip().replace("\\", "/")
+            for a in actions
+            if a.kind == "file" and a.filepath
+        }
+
         results: list = []
         for a in actions:
             if a.kind == "file":
@@ -93,6 +101,17 @@ class AgentActionDispatcher:
                 results.append(self._exec_script(session, a))
             elif a.kind == "shell":
                 results.append(self._exec_shell(session, a))
+            elif a.kind == "patch":
+                key = (a.filepath or "").strip().replace("\\", "/")
+                if key and key in file_paths:
+                    results.append(ActionResult(
+                        kind="file",
+                        target=a.filepath or "?",
+                        success=False,
+                        detail="동일 파일에 filename 블록이 우선 적용됨",
+                    ))
+                    continue
+                results.append(self._exec_patch(session, a))
         return results
 
     # ─── 파싱 ──────────────────────────────────────────────────
@@ -117,6 +136,14 @@ class AgentActionDispatcher:
                 filepath = tag.split(":", 1)[1].strip()
                 actions.append(_ParsedAction(
                     kind="file", payload=code, filepath=filepath,
+                ))
+                continue
+
+            # patch:path → patch action (FSD v1.0.115)
+            if tag.lower().startswith("patch:"):
+                filepath = tag.split(":", 1)[1].strip()
+                actions.append(_ParsedAction(
+                    kind="patch", payload=code, filepath=filepath,
                 ))
                 continue
 
@@ -245,6 +272,64 @@ class AgentActionDispatcher:
     def _exec_shell(self, session, a: _ParsedAction):
         """단일 쉘 명령 — AgentRunner._exec_single_shell_command() 위임."""
         return self._runner._exec_single_shell_command(session, a.payload)
+
+    def _exec_patch(self, session, a: _ParsedAction):
+        """patch 적용 — AgentPatchApplier 위임 (FSD v1.0.115)."""
+        from .agent_patch_applier import AgentPatchApplier
+        from .agent_runner import ActionResult
+
+        if not a.filepath:
+            return ActionResult(
+                kind="file", target="?", success=False,
+                detail="patch path 미지정",
+            )
+
+        applier = AgentPatchApplier(self._runner.file_manager)
+        auto_approve = bool(
+            getattr(session, "bypass_approvals", False)
+            or getattr(session, "auto_approve_file_mutation", False)
+        )
+        on_first_approval = lambda: self._runner._approve_dangerous(
+            session, "auto_approve_file_mutation",
+            f"파일 patch '{a.filepath}'",
+        )
+
+        print(f"\n📝 patch 적용: {a.filepath}")
+        result = applier.apply(
+            a.filepath,
+            a.payload,
+            auto_approve=auto_approve,
+            on_first_approval=on_first_approval,
+        )
+
+        # 보고 형식 (FR-111-24): N/M blocks (statuses)
+        statuses = [r.status for r in result.block_results]
+        status_summary = ", ".join(statuses) if statuses else "-"
+
+        if result.success:
+            detail = (
+                f"patched {result.applied_count}/{result.total_count} blocks "
+                f"({status_summary})"
+            )
+            print(f"✅ patch {a.filepath} — {detail}")
+            return ActionResult(
+                kind="file", target=a.filepath, success=True, detail=detail,
+            )
+
+        # 실패 — diagnostic 첨부
+        diag_lines: List[str] = []
+        for i, r in enumerate(result.block_results):
+            tag = r.status
+            if r.diagnostic:
+                diag_lines.append(f"  block#{i + 1}: {tag}\n    {r.diagnostic}")
+            else:
+                diag_lines.append(f"  block#{i + 1}: {tag}")
+        head = result.error or f"patch 실패 — {result.total_count} 블록 중 적용 안됨"
+        detail = head + ("\n" + "\n".join(diag_lines) if diag_lines else "")
+        print(f"❌ patch {a.filepath} — {head}")
+        return ActionResult(
+            kind="file", target=a.filepath, success=False, detail=detail,
+        )
 
 
 # ─── 헬퍼 함수 ───────────────────────────────────────────────

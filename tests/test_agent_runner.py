@@ -125,10 +125,10 @@ class TestHasCodeFailure(unittest.TestCase):
         actions = [ActionResult(kind="code", target="python", success=False, detail="err")]
         self.assertTrue(AgentRunner._has_code_failure(actions))
 
-    def test_T06_file_only_failure_returns_false(self):
-        """T-06: file 액션만 실패하면 False (code/shell 아님)"""
+    def test_T06_file_failure_returns_true(self):
+        """T-06 (FSD v1.0.115 FR-111-22): file 액션 실패도 자기 수정 트리거 — patch 실패 포함."""
         actions = [ActionResult(kind="file", target="foo.py", success=False, detail="err")]
-        self.assertFalse(AgentRunner._has_code_failure(actions))
+        self.assertTrue(AgentRunner._has_code_failure(actions))
 
     def test_T07_shell_failure_returns_true(self):
         """T-07: shell 액션 실패 시 True"""

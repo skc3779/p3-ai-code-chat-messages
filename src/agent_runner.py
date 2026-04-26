@@ -445,7 +445,7 @@ class AgentRunner:
 
     # ─── 프롬프트 구성 ───────────────────────────────────────
     def _build_system_prompt(self) -> str:
-        """FSD v1.0.107: 시스템 프롬프트 — 선택지 A/B/C + 금지 패턴 + 쉘 환경 요약."""
+        """FSD v1.0.115: 시스템 프롬프트 — 의사결정 트리 + 선택지 A-1/A-2/B/C."""
         from .terminal_executor import TerminalExecutor
 
         shell_type = TerminalExecutor.get_shell_type()
@@ -465,15 +465,75 @@ class AgentRunner:
             "[REASON]\n"
             "3줄 이내. 직전 [OBSERVE] 인용 + 이번 단계 의도.\n\n"
 
-            "[ACT]\n"
-            "아래 세 선택지 중 1~3 개를 골라 순서대로 작성하세요.\n\n"
+            "[ACT — 의사결정 트리]\n"
+            "무엇을 해야 하는지에 따라 1~3개의 선택지를 고르세요.\n\n"
+            "  파일을 만들거나 바꿔야 하는가?\n"
+            "    └─ YES\n"
+            "        ├─ 신규 파일?                              → 선택지 A-1 (filename)\n"
+            "        ├─ 기존 파일을 일부만 수정 (변경 < 40%)?  → 선택지 A-2 (patch)  ★ 권장 ★\n"
+            "        └─ 기존 파일을 사실상 다시 쓰기?          → 선택지 A-1 (filename)\n"
+            "    └─ NO\n"
+            "        ├─ 짧은 코드를 한 번 돌려 결과만 보고 싶은가?  → 선택지 B\n"
+            "        └─ OS / Git / 패키지 매니저 명령이 필요한가? → 선택지 C\n\n"
 
-            "== 선택지 A. 파일 생성/수정 ==\n"
+            "== 선택지 A-1. 파일 전문 (신규 또는 대규모 재작성) ==\n"
             "  ```filename:<상대경로>\n"
             "  ... 파일 전문 ...\n"
             "  ```\n"
             "  • 한 블록에 한 파일. 워크스페이스 상대경로.\n"
             "  • 줄바꿈·인코딩 원본 그대로. 언어 태그를 섞지 마세요.\n\n"
+
+            "== 선택지 A-2. 파일 패치 (기존 파일의 부분 수정) ==\n"
+            "  ```patch:<상대경로>\n"
+            "  <<<<<<< SEARCH\n"
+            "  (원본에 있는 텍스트 블록 — 한 곳에서만 매칭되도록 충분한 컨텍스트 포함)\n"
+            "  =======\n"
+            "  (바뀐 텍스트 블록)\n"
+            "  >>>>>>> REPLACE\n"
+            "  ```\n"
+            "  • 한 펜스에 같은 파일의 여러 SEARCH/REPLACE 쌍을 넣을 수 있습니다.\n"
+            "  • SEARCH 블록은 원본 파일에 정확히 한 번 등장해야 합니다.\n"
+            "    모호하면 위/아래에 한두 줄을 더 포함시켜 유일하게 만드세요.\n"
+            "  • 들여쓰기·공백·줄바꿈을 원본 그대로 복사하세요.\n"
+            "  • 블록 삭제는 REPLACE 를 비우면 됩니다.\n"
+            "  • 신규 파일을 만들 때는 A-2 가 아닌 A-1 을 사용하세요.\n\n"
+
+            "  📋 예시 — `import json` 을 imports 끝에 추가:\n"
+            "    ```patch:src/agent_runner.py\n"
+            "    <<<<<<< SEARCH\n"
+            "    import os\n"
+            "    import platform\n"
+            "    import re\n"
+            "    =======\n"
+            "    import os\n"
+            "    import platform\n"
+            "    import re\n"
+            "    import json\n"
+            "    >>>>>>> REPLACE\n"
+            "    ```\n\n"
+
+            "  📋 예시 — 함수 본문 교체 + 상수 추가 (한 펜스, 두 블록):\n"
+            "    ```patch:src/agent_runner.py\n"
+            "    <<<<<<< SEARCH\n"
+            "        def _has_code_failure(actions):\n"
+            "            return any(not a.success for a in actions)\n"
+            "    =======\n"
+            "        def _has_code_failure(actions):\n"
+            "            return any((not a.success) and a.kind in ('code','shell','file')\n"
+            "                       for a in actions)\n"
+            "    >>>>>>> REPLACE\n"
+            "    <<<<<<< SEARCH\n"
+            "        SEP = '─' * 60\n"
+            "    =======\n"
+            "        SEP = '─' * 60\n"
+            "        PATCH_FUZZY = True\n"
+            "    >>>>>>> REPLACE\n"
+            "    ```\n\n"
+
+            "  ❌ 자주 하는 실수:\n"
+            "    1) SEARCH 블록을 너무 짧게 작성 → 여러 곳 매칭 → ambiguous 실패\n"
+            "    2) SEARCH 의 들여쓰기를 임의로 줄임 → 매칭 실패 가능\n"
+            "    3) 한 파일을 ```filename:``` 과 ```patch:``` 양쪽으로 동시 작성\n\n"
 
             "== 선택지 B. 코드 실행 (임시 실행 — 파일 저장 없음) ==\n"
             "  ```python\n"
@@ -481,13 +541,17 @@ class AgentRunner:
             "  ```\n"
             "  • 언어 태그는 정확히 `python` / `javascript` 두 가지만 사용.\n"
             "  • 타임아웃 120초 · 워크스페이스 cwd · UTF-8 자동 강제.\n"
-            "  • ⚠️ `bash`/`sh`/`shell`/`powershell`/`ps1` 태그는 쉘로 자동 라우팅됩니다.\n\n"
+            "  • ⚠️ 코드 안에서 `subprocess.run` / `os.system` 으로 OS 호출하지 마세요 —\n"
+            "     OS 명령은 선택지 C 로 분리하세요. (가독성·승인 정책 분리)\n"
+            "  • ⚠️ `bash`/`sh`/`shell`/`powershell`/`ps1` 태그는 자동으로 쉘로 라우팅됩니다.\n\n"
 
             "== 선택지 C. 쉘 명령 실행 ==\n"
             "  라인 시작에 `$ <명령>` — 코드 블록으로 감싸지 마세요.\n"
             "    $ git status\n"
             "    $ python --version\n"
-            "  • 한 줄에 한 명령. 파이프(|)·리다이렉트(>)·`&&` 는 한 줄 내 허용.\n"
+            "  • 한 줄에 한 명령. 파이프(|)·리다이렉트(>)·`&&`·`;`·`||` 는 한 줄 내 허용.\n"
+            "  • ⚠️ 체이닝(`&&`/`;`/`||`) 안에 위험 명령(rm, del 등) 이 있으면 시스템이\n"
+            "     각 세그먼트를 검사해 승인을 요구합니다.\n"
             f"  • 명령은 {shell_type} 구문을 사용하세요.\n"
             "  • (선택) 명시 라우팅: `[ACTION:shell]` 태그.\n\n"
 
@@ -499,25 +563,6 @@ class AgentRunner:
 
             "[Self-Correction]\n"
             "오류 시 다음 [REASON] 에서 원인 진단 + [ACT] 에서 교정.\n\n"
-
-            "[❌ 금지 패턴 — AI 가 자주 저지르는 실수]\n\n"
-
-            "1) 쉘 명령을 코드 블록으로 감싸기\n"
-            "   ```powershell\n"
-            "   $ git status\n"
-            "   ```\n"
-            "   → 시스템이 \"쉘 의도\" 로 인식해 쉘 경로로 라우팅합니다.\n"
-            "      가능하면 코드 블록 없이 `$ git status` 형태로 작성하세요.\n\n"
-
-            "2) 같은 명령 중복 작성\n"
-            "   디스패처가 중복을 감지해 1회만 실행하지만 노이즈 발생.\n\n"
-
-            "3) 여러 줄 파이썬 로직을 $ 한 줄로\n"
-            "   짧은 -c 는 OK. 여러 줄이면 선택지 B 사용.\n\n"
-
-            "4) 위험 명령을 코드 블록으로 숨기기\n"
-            "   v1.0.107 부터 코드 경로의 쉘 블록도 동일한 위험 명령 검사를\n"
-            "   거칩니다. 승인 프롬프트가 표시됩니다.\n\n"
 
             f"{shell_brief}\n\n"
 
@@ -620,13 +665,73 @@ class AgentRunner:
         """v1.0.107: 디스패처가 단일 경로로 라우팅."""
         return self._dispatcher.dispatch(session, act_text)
 
+    # ─── 위험 명령 체이닝 검사 (FSD v1.0.115 §3.5) ────────────
+    @staticmethod
+    def _split_chained_segments(cmd: str) -> List[str]:
+        """`&&`, `||`, `;` 로 분할. 큰따옴표/작은따옴표 안 또는 백슬래시
+        이스케이프된 구분자는 분리하지 않는다."""
+        segments: List[str] = []
+        buf: List[str] = []
+        i, n = 0, len(cmd)
+        quote: Optional[str] = None
+        while i < n:
+            c = cmd[i]
+            if quote:
+                if c == quote and (i == 0 or cmd[i - 1] != "\\"):
+                    quote = None
+                buf.append(c)
+                i += 1
+                continue
+            if c in ("'", '"'):
+                quote = c
+                buf.append(c)
+                i += 1
+                continue
+            # 백슬래시로 이스케이프된 구분자 (`\&\&`, `\;`, `\|\|`)
+            if c == "\\" and i + 1 < n and cmd[i + 1] in ("&", "|", ";"):
+                buf.append(c)
+                buf.append(cmd[i + 1])
+                i += 2
+                continue
+            # 2글자 분리자 (`&&`, `||`)
+            if c in ("&", "|") and i + 1 < n and cmd[i + 1] == c:
+                segments.append("".join(buf).strip())
+                buf = []
+                i += 2
+                continue
+            if c == ";":
+                segments.append("".join(buf).strip())
+                buf = []
+                i += 1
+                continue
+            buf.append(c)
+            i += 1
+        tail = "".join(buf).strip()
+        if tail:
+            segments.append(tail)
+        return [s for s in segments if s]
+
+    def _is_chain_dangerous(self, cmd: str) -> Tuple[bool, List[str]]:
+        """체이닝된 모든 세그먼트의 첫 토큰 중 위험 명령 여부.
+
+        Returns:
+            (is_dangerous, dangerous_segments)
+        """
+        dangerous_set = self.terminal_executor.DANGEROUS_COMMANDS
+        bad: List[str] = []
+        for seg in self._split_chained_segments(cmd):
+            tokens = seg.split()
+            first = tokens[0].lower() if tokens else ""
+            if first in dangerous_set:
+                bad.append(seg)
+        return (bool(bad), bad)
+
     # ─── 디스패처 전용 — 단일 쉘 명령 실행 ────────────────────
     def _exec_single_shell_command(
         self, session: AgentSession, cmd: str
     ) -> ActionResult:
-        """디스패처 전용 — 단일 쉘 명령 실행 + 위험 명령 검사."""
-        base = cmd.split()[0].lower() if cmd.split() else ""
-        dangerous = base in self.terminal_executor.DANGEROUS_COMMANDS
+        """디스패처 전용 — 단일 쉘 명령 실행 + 위험 명령 검사 (체이닝 분해)."""
+        dangerous, bad_segments = self._is_chain_dangerous(cmd)
 
         if dangerous:
             if session.bypass_approvals:
@@ -641,8 +746,13 @@ class AgentRunner:
                 print(f"\n⚡ BYPASS: 위험 명령 자동 승인 "
                       f"({session.bypass_dangerous_count}/{self.bypass_max_dangerous})")
             if not session.auto_approve_dangerous_shell:
+                label = (
+                    f"shell '{cmd}' — 위험 세그먼트: {bad_segments}"
+                    if bad_segments and bad_segments != [cmd]
+                    else f"shell '{cmd}'"
+                )
                 if not self._approve_dangerous(
-                    session, "auto_approve_dangerous_shell", f"shell '{cmd}'"
+                    session, "auto_approve_dangerous_shell", label,
                 ):
                     return ActionResult(
                         kind="shell", target=cmd, success=False,
@@ -737,8 +847,7 @@ class AgentRunner:
             cmd = cmd.strip()
             if not cmd:
                 continue
-            base = cmd.split()[0].lower() if cmd.split() else ""
-            dangerous = base in self.terminal_executor.DANGEROUS_COMMANDS
+            dangerous, bad_segments = self._is_chain_dangerous(cmd)
 
             if dangerous:
                 if session.bypass_approvals:
@@ -755,9 +864,13 @@ class AgentRunner:
                           f"({session.bypass_dangerous_count}/{self.bypass_max_dangerous})")
 
             if dangerous and not session.auto_approve_dangerous_shell:
+                label = (
+                    f"shell '{cmd}' — 위험 세그먼트: {bad_segments}"
+                    if bad_segments and bad_segments != [cmd]
+                    else f"shell '{cmd}'"
+                )
                 approved = self._approve_dangerous(
-                    session, "auto_approve_dangerous_shell",
-                    f"shell '{cmd}'",
+                    session, "auto_approve_dangerous_shell", label,
                 )
                 if not approved:
                     results.append(ActionResult(
@@ -976,8 +1089,10 @@ class AgentRunner:
     # ─── 보조 판정 / 포맷 ───────────────────────────────────
     @staticmethod
     def _has_code_failure(actions: List[ActionResult]) -> bool:
+        # FSD v1.0.115 FR-111-22: patch 실패도 자기 수정 트리거에 포함
         return any(
-            (not a.success) and a.kind in ("code", "shell") for a in actions
+            (not a.success) and a.kind in ("code", "shell", "file")
+            for a in actions
         )
 
     @staticmethod
@@ -1008,5 +1123,6 @@ class AgentRunner:
             elif a.kind == "shell":
                 parts.append(f"[쉘 실패: {a.target}]\n{a.detail}")
             elif a.kind == "file":
-                parts.append(f"[파일 저장 실패: {a.target}]\n{a.detail}")
+                # patch 실패는 detail 에 nearest snippet 이 포함됨 (FR-111-23)
+                parts.append(f"[파일 작업 실패: {a.target}]\n{a.detail}")
         return "\n\n".join(parts) if parts else "(실패 액션 없음 — 참고)"

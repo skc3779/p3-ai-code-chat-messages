@@ -4,7 +4,8 @@
 |---|---|
 | 문서 버전 | v1.0.115 |
 | 작성일 | 2026-04-26 |
-| 상태 | 📝 설계 |
+| 구현일 | 2026-04-27 |
+| 상태 | ✅ 구현 완료 (수동 확인 대기) |
 | 선행 문서 | FSD v1.0.083 (Agents Autonomous Loop), FSD v1.0.100 (Bypass Approvals), FSD v1.0.103 (Bypass File Overwrite), FSD v1.0.106 (System Prompt Disambiguation), FSD v1.0.107 (Action Dispatcher), FSD v1.0.110 (Shell-Aware Executors) |
 | 대상 파일 | [src/agent_runner.py](src/agent_runner.py), [src/agent_action_dispatcher.py](src/agent_action_dispatcher.py), [src/response_parser.py](src/response_parser.py) |
 | 신규 파일 | [src/agent_patch_applier.py](src/agent_patch_applier.py), [tests/test_agent_patch_applier.py](tests/test_agent_patch_applier.py), [tests/test_agent_dispatcher_patch.py](tests/test_agent_dispatcher_patch.py), [tests/test_agent_system_prompt_v111.py](tests/test_agent_system_prompt_v111.py) |
@@ -849,17 +850,17 @@ _self_correct_loop() 진입
 
 ## 10. 승인
 
-- [ ] 설계 검토 (선택지 A 의 patch 모드 도입 + 결정 트리 + 보안 패치)
-- [ ] [src/agent_patch_applier.py](src/agent_patch_applier.py) 신규 — `AgentPatchApplier` 클래스
-- [ ] [src/agent_action_dispatcher.py](src/agent_action_dispatcher.py) `_parse()` 의 `patch:` 분기 + `_exec_patch()` 어댑터
-- [ ] [src/agent_runner.py](src/agent_runner.py) 시스템 프롬프트 v1.0.111 본문 교체
-- [ ] [src/agent_runner.py](src/agent_runner.py) `_split_chained_segments()` / `_is_chain_dangerous()` + 위험 검사 두 곳 치환
-- [ ] [src/agent_runner.py](src/agent_runner.py) `_has_code_failure()` 에 `"file"` 포함
-- [ ] [src/agent_runner.py](src/agent_runner.py) `auto_approve_file_mutation` patch 흐름 연동
-- [ ] [tests/test_agent_patch_applier.py](tests/test_agent_patch_applier.py) T-111-01 ~ T-111-20 작성·통과
-- [ ] [tests/test_agent_dispatcher_patch.py](tests/test_agent_dispatcher_patch.py) T-111-30 ~ T-111-39 작성·통과
-- [ ] [tests/test_agent_system_prompt_v111.py](tests/test_agent_system_prompt_v111.py) T-111-40 ~ T-111-44 작성·통과
-- [ ] [tests/test_agent_chain_danger.py](tests/test_agent_chain_danger.py) T-111-50 ~ T-111-56 작성·통과
-- [ ] 기존 테스트 회귀 확인 (NFR-111-09)
+- [x] 설계 검토 (선택지 A 의 patch 모드 도입 + 결정 트리 + 보안 패치)
+- [x] [src/agent_patch_applier.py](../../src/agent_patch_applier.py) 신규 — `AgentPatchApplier` 클래스
+- [x] [src/agent_action_dispatcher.py](../../src/agent_action_dispatcher.py) `_parse()` 의 `patch:` 분기 + `_exec_patch()` 어댑터
+- [x] [src/agent_runner.py](../../src/agent_runner.py) 시스템 프롬프트 v1.0.111 본문 교체
+- [x] [src/agent_runner.py](../../src/agent_runner.py) `_split_chained_segments()` / `_is_chain_dangerous()` + 위험 검사 두 곳 치환
+- [x] [src/agent_runner.py](../../src/agent_runner.py) `_has_code_failure()` 에 `"file"` 포함
+- [x] [src/agent_runner.py](../../src/agent_runner.py) `auto_approve_file_mutation` patch 흐름 연동 (`_exec_patch` 의 auto_approve 게이트)
+- [x] [tests/test_agent_patch_applier.py](../../tests/test_agent_patch_applier.py) T-111-01 ~ T-111-20 작성·통과 (+ 승인 흐름 2건)
+- [x] [tests/test_agent_dispatcher_patch.py](../../tests/test_agent_dispatcher_patch.py) T-111-30 ~ T-111-39 작성·통과
+- [x] [tests/test_agent_system_prompt_v111.py](../../tests/test_agent_system_prompt_v111.py) T-111-40 ~ T-111-44 작성·통과 (+ FR-111-19/20 회귀)
+- [x] [tests/test_agent_chain_danger.py](../../tests/test_agent_chain_danger.py) T-111-50 ~ T-111-56 작성·통과 (+ 분리기 단위)
+- [x] 기존 테스트 회귀 확인 (NFR-111-09) — `test_agent_runner.py` T-06 갱신, `test_os_utils_and_agent_prompt.py` T-107-02/06 갱신, 직접 영향 242 건 전체 통과
 - [ ] Windows PowerShell / Linux 환경에서 `/agents` 자율 루프 patch 모드 수동 검증 — 1줄 추가, 함수 교체, 다중 블록, ambiguous 자기 수정
-- [ ] [docs/releases/RELEASE_v1.0.111_*.md](../releases/) 작성
+- [x] [docs/releases/RELEASE_v1.0.115_agents-patch-mode.md](../releases/RELEASE_v1.0.115_agents-patch-mode.md) 작성

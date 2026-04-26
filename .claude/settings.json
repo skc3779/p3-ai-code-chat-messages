@@ -24,7 +24,20 @@
       "Bash(python -m pytest tests/test_agents_flags.py -v)",
       "Bash(python -m pytest tests/ -v --tb=short -q)",
       "Bash(python -m pytest tests/test_terminal_executor.py -v)",
-      "Bash(python -m pytest tests/test_banner_toggle.py tests/test_terminal_executor_shell_dispatch.py tests/test_code_executor_shell_dispatch.py tests/test_code_executor.py tests/test_terminal_executor.py tests/test_code_executor_encoding.py -v)"
+      "Bash(python -m pytest tests/test_banner_toggle.py tests/test_terminal_executor_shell_dispatch.py tests/test_code_executor_shell_dispatch.py tests/test_code_executor.py tests/test_terminal_executor.py tests/test_code_executor_encoding.py -v)",
+      "Bash(python -m pytest tests/test_agent_action_dispatcher.py tests/test_agent_runner.py -q)",
+      "Bash(python -c \"from src.agent_runner import AgentRunner; from src.agent_action_dispatcher import AgentActionDispatcher; from src.agent_patch_applier import AgentPatchApplier; print\\('imports OK'\\)\")",
+      "Bash(python -m pytest tests/test_agent_runner.py tests/test_agent_action_dispatcher.py tests/test_bypass_approvals.py tests/test_response_parser.py -q)",
+      "Bash(python -m pytest tests/test_agent_patch_applier.py -q)",
+      "Bash(python -m pytest tests/test_agent_patch_applier.py::TestAgentPatchApplier::test_T111_01_exact_single_pair tests/test_agent_patch_applier.py::TestAgentPatchApplier::test_T111_05_crlf_original_lf_search -q)",
+      "Bash(python -m pytest tests/test_agent_dispatcher_patch.py -q)",
+      "Bash(python -m pytest tests/test_agent_system_prompt_v111.py -q)",
+      "Bash(python -m pytest tests/test_agent_chain_danger.py -q)",
+      "Bash(python -m pytest tests/ -q --ignore=tests/test_claude_tool_use.py --ignore=tests/test_gemini_tool_use.py --ignore=tests/test_genai_tool_use.py)",
+      "Bash(python -m pytest tests/test_api_logger.py tests/test_code_executor.py::TestCodeExecutor::test_shell_config_windows tests/test_terminal_executor_shell_dispatch.py -q)",
+      "Bash(python -m pytest tests/test_agent_runner.py -q)",
+      "Bash(python -m pytest tests/test_os_utils_and_agent_prompt.py -q)",
+      "Bash(python -m pytest tests/test_os_utils_and_agent_prompt.py tests/test_agent_runner.py tests/test_agent_action_dispatcher.py tests/test_agent_patch_applier.py tests/test_agent_dispatcher_patch.py tests/test_agent_system_prompt_v111.py tests/test_agent_chain_danger.py tests/test_response_parser.py tests/test_response_parser_overwrite.py tests/test_bypass_approvals.py tests/test_agents_flags.py tests/test_agent_session_store.py tests/test_agent_input_listener.py -q)"
     ]
   }
 }
