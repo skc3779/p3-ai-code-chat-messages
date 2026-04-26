@@ -116,7 +116,7 @@ class AgentRunner:
         self.max_iterations   = int(os.getenv("AGENT_MAX_ITERATIONS", "10"))
         self.self_correct_max = int(os.getenv("AGENT_SELF_CORRECT_MAX", "3"))
         self.compact_after    = int(os.getenv("AGENT_COMPACT_AFTER", "5"))
-        self.code_timeout     = int(os.getenv("AGENT_CODE_TIMEOUT", "30"))
+        self.code_timeout     = int(os.getenv("AGENT_CODE_TIMEOUT", "60"))
         self.done_token       = os.getenv("AGENT_DONE_TOKEN", "[AGENT_DONE]")
         # FSD v1.0.100 bypass 안전장치
         self.bypass_timeout_sec       = int(os.getenv("AGENT_BYPASS_TIMEOUT", "1800"))
@@ -480,7 +480,7 @@ class AgentRunner:
             "  print(\"hello\")\n"
             "  ```\n"
             "  • 언어 태그는 정확히 `python` / `javascript` 두 가지만 사용.\n"
-            "  • 타임아웃 30초 · 워크스페이스 cwd · UTF-8 자동 강제.\n"
+            "  • 타임아웃 120초 · 워크스페이스 cwd · UTF-8 자동 강제.\n"
             "  • ⚠️ `bash`/`sh`/`shell`/`powershell`/`ps1` 태그는 쉘로 자동 라우팅됩니다.\n\n"
 
             "== 선택지 C. 쉘 명령 실행 ==\n"

@@ -124,7 +124,7 @@ class TerminalExecutor:
             return 'Mac'
         return 'Linux'
 
-    def __init__(self, workspace_dir: Path, timeout: int = 60):
+    def __init__(self, workspace_dir: Path, timeout: int = 120):
         self.workspace_dir = workspace_dir
         self.timeout = timeout
         shell_type = self.get_shell_type()
