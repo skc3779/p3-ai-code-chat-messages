@@ -82,7 +82,7 @@ class GeminiCodeAssistant:
 
 - 예시:
 ```filename:src/utils.py
-def calculate_sum(a, b):
+def add(a, b):
     return a + b
 ```
 

@@ -154,6 +154,254 @@ class TestDispatcherBasic(unittest.TestCase):
         self.assertGreaterEqual(len(results), 3)
 
 
+    def test_T107_13_multi_filename_block(self):
+        """T-107-13: 멀티 filename 블록 → file 2건, code 0건, shell 0건."""
+        act = """
+File 1:
+```filename:file1.py
+code1
+```
+
+File 2:
+```filename:src/file2.js
+code2
+```
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 2)
+        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(shells), 0)
+
+    def test_T107_14_multi_code_block(self):
+        """T-107-14: 멀티 code 블록 → file 0건, code 2건, shell 0건."""
+        act = """
+# code1
+```javascript
+let x = 1;
+console.log(x);
+```
+
+# code2
+```python
+print("hello")
+```
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 0)
+        self.assertEqual(len(codes), 2)
+        self.assertEqual(len(shells), 0)
+
+    def test_T107_14_multi_shell_block(self):
+        """T-107-14: 멀티 shell 블록 → file 0건, code 0건, shell 2건."""
+        act = """
+# shell1
+$ Write-Host "hello1"
+
+# shell2
+$ Write-Host "hello2"
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 0)
+        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(shells), 2)
+
+    def test_T107_15_filename_code_shell_block(self):
+        """T-107-15: file, code, shell 블록 → file 1건, code 1건, shell 1건."""
+        act = """
+# file1
+```filename:file1.md
+## introduce
+- number1
+- number2
+```
+
+# code2
+```python
+print("hello")
+```
+
+# shell3
+$ Write-Host "hello2"
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(len(codes), 1)
+        self.assertEqual(len(shells), 1)
+
+    def test_T107_16_nested_code_shell_in_filename_block(self):
+        """T-107-16:복잡한 file 마크다운(code+shell) → file 1건, code 0건, shell 0건."""
+        act = """
+# file1
+```filename:file1.md
+
+## introduce
+- number1
+- number2
+
+# code2-1
+```python
+print("hello")
+```
+
+# code2-2
+```javascript
+console.log("hello");
+```
+
+# shell3
+$ Write-Host "hello2"
+
+```
+
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(shells), 0)
+
+
+    def test_T107_16_nested_not_code_shell_in_filename_block(self):
+        """T-107-16:복잡한 file 마크다운(not code+shell) → file 1건, code 0건, shell 0건."""
+        act = """
+# file1
+```filename:file1.py
+
+## introduce
+- number1
+- number2
+
+```sql
+SELECT * FROM table;
+```
+
+```tree
+root
+└── child1
+    └── child2
+```
+
+```
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(shells), 0)
+
+    def test_T107_16_nested_not_code_shell_in_multi_filename_block(self):
+        """T-107-16:복잡한 멀티 file 마크다운(not code+shell) → file 2건, code 0건, shell 0건."""
+        act = """
+# file1
+```filename:file1.py
+
+## introduce1
+- number1
+- number2
+
+```sql
+SELECT * FROM table1;
+```
+
+```tree
+root
+└── child1
+    └── child2
+```
+
+```
+
+# file2
+```filename:file2.py
+
+## introduce2
+- number1
+- number2
+
+```sql
+SELECT * FROM table2;
+```
+
+```tree
+root
+└── child1
+    └── child2
+```
+
+```
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 2)
+        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(shells), 0)
+
+    def test_T107_17_mixed_filename_code_shell_block(self):
+        """T-107-17:복잡 file 마크다운(code+shell) + code + shell → file 1건, code 2건, shell 1건."""
+        act = """
+# file1
+```filename:file1.md
+
+## introduce
+- number1
+- number2
+
+# code2-1
+```python
+print("hello")
+```
+
+# code2-2
+```javascript
+console.log("hello");
+```
+
+# shell3
+$ Write-Host "hello2"
+
+```
+
+# code2-1
+```python
+print("hello")
+```
+
+# code2-2
+```javascript
+console.log("hello");
+```
+
+# shell3
+$ Write-Host "hello2"
+
+"""
+        results = self.d.dispatch(self.session, act)
+        files = [r for r in results if r.kind == "file"]
+        codes = [r for r in results if r.kind == "code"]
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(files), 1)
+        self.assertEqual(len(codes), 2)
+        self.assertEqual(len(shells), 1)
+
+
 class TestDispatcherDangerous(unittest.TestCase):
     """위험 명령 검사 (G5)."""
 
@@ -290,6 +538,229 @@ class TestDispatcherBypass(unittest.TestCase):
 
         with self.assertRaises(_BypassAbort):
             self.d.dispatch(session, "$ rm tmp")
+
+
+class TestDispatcherPatch(unittest.TestCase):
+    """선택지 A-2 — patch: 블록 라우팅 및 FR-111-25 filename 우선 정책."""
+
+    def setUp(self):
+        self.d = _make_dispatcher()
+        self.session = _make_session()
+
+    def test_T107_24_single_patch_block_parsed(self):
+        """T-107-24: patch:path 블록 → _ParsedAction(kind='patch') 1건, filepath/payload 정확."""
+        act = (
+            "```patch:src/foo.py\n"
+            "<<<<<<< SEARCH\n"
+            "old_code\n"
+            "=======\n"
+            "new_code\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        actions = self.d._parse(act)
+        patches = [a for a in actions if a.kind == "patch"]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(patches[0].filepath, "src/foo.py")
+        self.assertIn("SEARCH", patches[0].payload)
+        self.assertIn("REPLACE", patches[0].payload)
+
+    def test_T107_25_patch_dispatch_success(self):
+        """T-107-25: patch: 블록 dispatch → AgentPatchApplier 호출, file ActionResult(success=True)."""
+        act = (
+            "```patch:src/foo.py\n"
+            "<<<<<<< SEARCH\n"
+            "old_code\n"
+            "=======\n"
+            "new_code\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        mock_block = MagicMock()
+        mock_block.status = "applied"
+        mock_block.diagnostic = None
+
+        mock_result = MagicMock()
+        mock_result.success = True
+        mock_result.applied_count = 1
+        mock_result.total_count = 1
+        mock_result.block_results = [mock_block]
+        mock_result.error = None
+
+        with patch("src.agent_patch_applier.AgentPatchApplier") as MockCls:
+            MockCls.return_value.apply.return_value = mock_result
+            results = self.d.dispatch(self.session, act)
+
+        file_results = [r for r in results if r.kind == "file"]
+        self.assertEqual(len(file_results), 1)
+        self.assertTrue(file_results[0].success)
+        self.assertEqual(file_results[0].target, "src/foo.py")
+        self.assertIn("patched 1/1", file_results[0].detail)
+
+    def test_T107_26_patch_failure_reported_with_diagnostic(self):
+        """T-107-26: patch 적용 실패 → success=False + diagnostic 포함 detail."""
+        act = (
+            "```patch:src/bar.py\n"
+            "<<<<<<< SEARCH\n"
+            "nonexistent\n"
+            "=======\n"
+            "replacement\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        mock_block = MagicMock()
+        mock_block.status = "no_match"
+        mock_block.diagnostic = "SEARCH 블록 매칭 실패"
+
+        mock_result = MagicMock()
+        mock_result.success = False
+        mock_result.applied_count = 0
+        mock_result.total_count = 1
+        mock_result.block_results = [mock_block]
+        mock_result.error = "patch 실패"
+
+        with patch("src.agent_patch_applier.AgentPatchApplier") as MockCls:
+            MockCls.return_value.apply.return_value = mock_result
+            results = self.d.dispatch(self.session, act)
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+        self.assertIn("no_match", results[0].detail)
+        self.assertIn("SEARCH 블록 매칭 실패", results[0].detail)
+
+    def test_T107_27_patch_and_filename_same_file_filename_wins(self):
+        """T-107-27: 동일 파일 filename + patch → filename 우선, patch 는 건너뜀 보고 (FR-111-25)."""
+        act = (
+            "```filename:src/foo.py\n"
+            "def new(): pass\n"
+            "```\n\n"
+            "```patch:src/foo.py\n"
+            "<<<<<<< SEARCH\n"
+            "old\n"
+            "=======\n"
+            "new\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        self.d._runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
+
+        results = self.d.dispatch(self.session, act)
+
+        file_results = [r for r in results if r.kind == "file"]
+        # filename 성공 1건 + patch 건너뜀(실패 보고) 1건
+        self.assertEqual(len(file_results), 2)
+        skipped = [r for r in file_results if not r.success and "filename" in r.detail]
+        self.assertEqual(len(skipped), 1)
+        saved = [r for r in file_results if r.success]
+        self.assertEqual(len(saved), 1)
+        self.assertEqual(saved[0].target, "src/foo.py")
+
+    def test_T107_28_patch_empty_path_failure(self):
+        """T-107-28: patch: 경로 없음 → 'patch path 미지정' 실패."""
+        act = (
+            "```patch:\n"
+            "<<<<<<< SEARCH\n"
+            "old\n"
+            "=======\n"
+            "new\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        with patch("src.agent_patch_applier.AgentPatchApplier"):
+            results = self.d.dispatch(self.session, act)
+
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+        self.assertIn("미지정", results[0].detail)
+
+    def test_T107_29_patch_multi_block_payload(self):
+        """T-107-29: patch 블록 내 다중 SEARCH/REPLACE 쌍 → payload 에 두 쌍 모두 포함."""
+        act = (
+            "```patch:src/foo.py\n"
+            "<<<<<<< SEARCH\n"
+            "line_a\n"
+            "=======\n"
+            "line_A\n"
+            ">>>>>>> REPLACE\n"
+            "<<<<<<< SEARCH\n"
+            "line_b\n"
+            "=======\n"
+            "line_B\n"
+            ">>>>>>> REPLACE\n"
+            "```"
+        )
+        actions = self.d._parse(act)
+        patches = [a for a in actions if a.kind == "patch"]
+        self.assertEqual(len(patches), 1)
+        self.assertEqual(patches[0].payload.count("SEARCH"), 2)
+        self.assertEqual(patches[0].payload.count("REPLACE"), 2)
+
+
+class TestDispatcherActionTagsExplicit(unittest.TestCase):
+    """[ACTION:*] 명시 태그 — explicit_tag 설정 및 REQUIRED 모드 통과 (FR-107-11/12)."""
+
+    def test_T107_30_action_shell_tag_sets_explicit_tag(self):
+        """T-107-30: [ACTION:shell] 태그 포함 → action.explicit_tag=True."""
+        d = _make_dispatcher()
+        act = "[ACTION:shell]\n$ git status"
+        actions = d._parse(act)
+        shells = [a for a in actions if a.kind == "shell"]
+        self.assertEqual(len(shells), 1)
+        self.assertTrue(shells[0].explicit_tag)
+
+    def test_T107_31_action_code_tag_sets_explicit_tag(self):
+        """T-107-31: [ACTION:code] 태그 포함 → python 블록 explicit_tag=True."""
+        d = _make_dispatcher()
+        act = "[ACTION:code]\n```python\nprint('hello')\n```"
+        actions = d._parse(act)
+        codes = [a for a in actions if a.kind == "code"]
+        self.assertEqual(len(codes), 1)
+        self.assertTrue(codes[0].explicit_tag)
+
+    def test_T107_32_action_file_tag_sets_explicit_tag(self):
+        """T-107-32: [ACTION:file] 태그 포함 → filename 블록 explicit_tag=True."""
+        d = _make_dispatcher()
+        act = "[ACTION:file]\n```filename:src/foo.py\ndef bar(): pass\n```"
+        actions = d._parse(act)
+        files = [a for a in actions if a.kind == "file"]
+        self.assertEqual(len(files), 1)
+        self.assertTrue(files[0].explicit_tag)
+
+    def test_T107_33_no_action_tag_explicit_tag_false(self):
+        """T-107-33: [ACTION:*] 태그 없음 → explicit_tag=False (기본값)."""
+        d = _make_dispatcher()
+        act = "$ git status"
+        actions = d._parse(act)
+        self.assertTrue(all(not a.explicit_tag for a in actions))
+
+    def test_T107_34_tags_required_with_action_tag_proceeds(self):
+        """T-107-34: AGENT_ACTION_TAGS_REQUIRED=1 + [ACTION:shell] → 거부 없이 shell 실행."""
+        d = _make_dispatcher(AGENT_ACTION_TAGS_REQUIRED="1")
+        session = _make_session()
+        act = "[ACTION:shell]\n$ git status"
+        results = d.dispatch(session, act)
+        # ACTION 태그 있으면 explicit_tag=True → 거부 조건 미충족 → shell 1건 실행
+        shells = [r for r in results if r.kind == "shell"]
+        self.assertEqual(len(shells), 1)
+
+    def test_T107_35_tags_required_without_tag_rejected(self):
+        """T-107-35: AGENT_ACTION_TAGS_REQUIRED=1 + 태그 없음 → 안내 메시지 1건 (T-107-18 보완)."""
+        d = _make_dispatcher(AGENT_ACTION_TAGS_REQUIRED="1")
+        session = _make_session()
+        act = "$ git status"
+        results = d.dispatch(session, act)
+        self.assertEqual(len(results), 1)
+        self.assertFalse(results[0].success)
+        self.assertIn("ACTION", results[0].detail)
+
+    def test_T107_36_action_tag_all_actions_get_explicit(self):
+        """T-107-36: [ACTION:shell] + 다중 shell 라인 → 모든 action explicit_tag=True."""
+        d = _make_dispatcher()
+        act = "[ACTION:shell]\n$ git status\n$ git log"
+        actions = d._parse(act)
+        shells = [a for a in actions if a.kind == "shell"]
+        self.assertEqual(len(shells), 2)
+        self.assertTrue(all(a.explicit_tag for a in shells))
 
 
 if __name__ == "__main__":

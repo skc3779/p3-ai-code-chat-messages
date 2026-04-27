@@ -115,81 +115,98 @@ class AgentActionDispatcher:
         return results
 
     # ─── 파싱 ──────────────────────────────────────────────────
+    _RE_FENCE_LINE = re.compile(r'^[ \t]*(`{3,})(\S*)[ \t]*$')
+
     def _parse(self, act_text: str) -> List[_ParsedAction]:
         """act_text 를 파싱하여 _ParsedAction 리스트를 반환.
 
-        1. 펜스 블록을 추출하면서 각 블록의 (start, end) 인덱스를 기록.
-        2. 펜스 영역을 공백으로 마스킹한 텍스트에서 `$ ...` 쉘 라인 추출.
-        3. 중복 shell 명령 제거는 _dedupe() 에서 처리.
+        라인 단위 depth-counting 방식으로 펜스 블록을 파싱한다.
+        filename:/patch: 블록 내부에 중첩된 코드 펜스가 있어도 올바르게
+        바깥 블록의 닫힘 위치를 탐색한다 (BUG v1.0.121).
         """
         actions: List[_ParsedAction] = []
-        fence_spans: list = []  # (start_idx, end_idx) — 마스킹용
+        lines = act_text.split('\n')
+        covered = [False] * len(lines)
 
-        # [1] 펜스 블록 추출
-        for m in self.RE_FENCE.finditer(act_text):
-            fence_spans.append((m.start(), m.end()))
+        i = 0
+        while i < len(lines):
+            m = self._RE_FENCE_LINE.match(lines[i])
+            if not m:
+                i += 1
+                continue
+
+            fence_len = len(m.group(1))
             tag = m.group(2).strip()
-            code = m.group(3)
 
-            # filename:path → file action
-            if tag.lower().startswith("filename:"):
+            # depth-counting 으로 matching closing fence 탐색
+            depth = 1
+            j = i + 1
+            while j < len(lines):
+                inner = self._RE_FENCE_LINE.match(lines[j])
+                if inner:
+                    inner_len = len(inner.group(1))
+                    inner_tag = inner.group(2).strip()
+                    if inner_len >= fence_len and not inner_tag:
+                        depth -= 1
+                        if depth == 0:
+                            break
+                    elif inner_tag:
+                        depth += 1
+                j += 1
+
+            if depth != 0:
+                # 닫히지 않은 펜스 — 무시
+                i += 1
+                continue
+
+            # j: closing fence 라인
+            content = '\n'.join(lines[i + 1: j])
+            for k in range(i, j + 1):
+                covered[k] = True
+
+            tag_lower = tag.lower()
+
+            if tag_lower.startswith("filename:"):
                 filepath = tag.split(":", 1)[1].strip()
-                actions.append(_ParsedAction(
-                    kind="file", payload=code, filepath=filepath,
-                ))
-                continue
+                actions.append(_ParsedAction(kind="file", payload=content, filepath=filepath))
 
-            # patch:path → patch action (FSD v1.0.115)
-            if tag.lower().startswith("patch:"):
+            elif tag_lower.startswith("patch:"):
                 filepath = tag.split(":", 1)[1].strip()
-                actions.append(_ParsedAction(
-                    kind="patch", payload=code, filepath=filepath,
-                ))
-                continue
+                actions.append(_ParsedAction(kind="patch", payload=content, filepath=filepath))
 
-            lang = tag.lower()
+            elif tag_lower in self.CODE_LANGS:
+                actions.append(_ParsedAction(kind="code", payload=content, lang=tag_lower))
 
-            # 코드 언어 (python, javascript)
-            if lang in self.CODE_LANGS:
-                actions.append(_ParsedAction(
-                    kind="code", payload=code, lang=lang,
-                ))
-                continue
-
-            # 쉘 계열 언어 → 분류기
-            if lang in self.SHELL_LANGS:
-                classification = self._classify_shell_block(code)
+            elif tag_lower in self.SHELL_LANGS:
+                classification = self._classify_shell_block(content)
                 if classification == "script":
-                    actions.append(_ParsedAction(
-                        kind="script", payload=code, lang=lang,
-                    ))
+                    actions.append(_ParsedAction(kind="script", payload=content, lang=tag_lower))
                 else:
-                    # commands — 라인별로 분해
-                    for line in code.splitlines():
+                    for line in content.splitlines():
                         stripped = line.strip()
                         if not stripped or stripped.startswith("#"):
                             continue
                         cmd = self._strip_dollar(stripped)
                         if cmd:
-                            actions.append(_ParsedAction(
-                                kind="shell", payload=cmd,
-                            ))
-                continue
+                            actions.append(_ParsedAction(kind="shell", payload=cmd))
 
-            # 알 수 없는 태그(text, json 등) → 무시
-            # 단, 코드 블록 자체는 fence_spans 에 기록됨
+            # 알 수 없는 태그(text, json, sql, tree 등) → 무시
 
-        # [2] 펜스 영역 마스킹 → 외부 텍스트에서 $ 라인 추출
-        masked = list(act_text)
-        for start, end in fence_spans:
-            for i in range(start, min(end, len(masked))):
-                masked[i] = ' '
-        masked_text = ''.join(masked)
+            i = j + 1
 
-        for m in self.RE_SHELL_LINE.finditer(masked_text):
-            cmd = m.group(1).strip()
-            if cmd:
-                actions.append(_ParsedAction(kind="shell", payload=cmd))
+        # 펜스 바깥의 $ 쉘 라인 추출
+        for k, line in enumerate(lines):
+            if not covered[k]:
+                m = self.RE_SHELL_LINE.match(line)
+                if m:
+                    cmd = m.group(1).strip()
+                    if cmd:
+                        actions.append(_ParsedAction(kind="shell", payload=cmd))
+
+        # [ACTION:*] 태그 감지 → explicit_tag 설정 (AGENT_ACTION_TAGS_REQUIRED 모드 통과용)
+        if self.RE_ACTION_TAG.search(act_text):
+            for a in actions:
+                a.explicit_tag = True
 
         return actions
 

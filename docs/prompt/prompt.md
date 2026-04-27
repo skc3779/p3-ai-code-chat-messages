@@ -1384,3 +1384,51 @@ src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_exe
 - _BASE_LANGUAGES 과 _build_shell_config, _SHELL_LANG_KEYS 가 복잡하게 분리되어 있는데 좀더 깔끔한 코드로 작성한다.
 ### terminal_executor.py 와 code_executor.py 모두 한글깨짐 인코딩 문제가 없도록 한다.
 ### docs/requirements 폴더의 FSD v1.0.110 문서로 작성한다.
+
+---
+
+`agent_action_dispatcher.py` 파일에 단위테스트 중 정상 적동하지 않고 아래와 같은 버그가 발생한다.
+`test_agent_action_dispatcher.py` 파일에 있는 아래 단위테스트는 정상 `OK` 가 되어야 하는데 `FAILED` 가 발생한다.
+- test_T107_16_nested_code_shell_in_filename_block 
+  - `file1.md` 는 1개 복잡한 file 블록으로 인식이 되지 않고 내부 첫번째 "```"에서 블록 짤림 현상이 발생한다.
+  - file 블록 내에 code 와 shell 블록이 섞여 있는 있어도 `file1.md` 는 복잡한 file 블록으로 인식되어야 한다.
+- test_T107_16_nested_not_code_shell_in_filename_block
+  - `file1.md` 는 1개 복잡한 file 블록으로 인식이 되지 않고 내부 첫번째 "```"에서 블록 짤림 현상이 발생한다.
+- test_T107_16_nested_not_code_shell_in_multi_filename_block
+  - `file1.md` 는 2개 복잡한 file 블록으로 인식이 되지 않고  내부 첫번째 "```"에서 블록 짤림 현상이 발생한다.
+  - file 블록 내에 code 와 shell 블록이 섞여 있는 있어도 `file1.md` 는 단순 file 블록으로 인식되어야 한다.
+- 그외 연관된 파일을 함께 참고 바랍니다.
+- 심층 분석 및 검토 후 docs/requirements 폴더에 BUG v1.0.121 문서에 해결방법 작성한다.
+
+- 단위테스트를 실행하여 버그 수정이 정상적으로 되었는지 확인한다. 
+  ```powershell
+  python -m unittest tests.test_agent_action_dispatcher.TestDispatcherBasic -v
+  ```
+
+---
+
+
+`agent_runner.py` 의 소스 코드에 시스템 명령에서 언급된 `agent_action_dispatcher.py` 에 적용된 개선사항에 대한 아래 조건 단위테스트 코드를 추가로 작성한다.
+- `== 선택지 A-2. 파일 패치 (기존 파일의 부분 수정) ==` 에 대한 단위테스트를 작성한다.
+- 의도가 모호한 경우에는 `[ACTION:file]` / `[ACTION:code]` / `[ACTION:shell]` 태그를 추가하여 명확한 코드로 변경후 단일 경로 실행 되도록 하는 단위테스트를 작성한다.
+- 완료 후 `docs/releases` 폴더에 `RELEASE-v1.0.122` 문서에 추가한다.
+
+
+---
+
+`/auto_context` 명령어 기능을 아래조건에 맞게 개선하는 FSD문서를 작성해줘.
+
+- `-c` `--check` 옵션을 파일 단위 자동 분할 반복 질의에 의해 생성된 파일에 대해 파일의 코드(요구) 품질을 검사하고 개선사항이 있으면 수정해 주는 기능을 추가한다. 
+- 품질 검사 시 수정사항에 대해 모두 수정하지 않고 diff 를 표시하여 해당 부분만 추가로 수정한다.
+
+
+
+
+
+
+
+
+
+
+
+
