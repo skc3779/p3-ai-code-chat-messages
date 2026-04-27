@@ -1416,19 +1416,27 @@ src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_exe
 
 ---
 
-`/auto_context` 명령어 기능을 아래조건에 맞게 개선하는 FSD문서를 작성해줘.
+## 1 `/auto_context` 명령어 기능을 아래조건에 맞게 개선하는 FSD문서를 작성해줘.
 
-- `-c` `--check` 옵션을 파일 단위 자동 분할 반복 질의에 의해 생성된 파일에 대해 파일의 코드(요구) 품질을 검사하고 개선사항이 있으면 수정해 주는 기능을 추가한다. 
-- 품질 검사 시 수정사항에 대해 모두 수정하지 않고 diff 를 표시하여 해당 부분만 추가로 수정한다.
+- `-qc` `--quality-check` 옵션을 추가한다.
+- `-qc` `--quality-check` 옵션 사용 시 반복 질의에 의해 생성된 답변 파일에 대해 AI 모델에게 2차 품질 검사를 요구하고 개선사항을 수정해 주는 기능을 추가한다. 
+- 2차 품질 검사 시 수정사항에 대해 모두 수정을 요구하지 않고 `기존 파일을 일부만 수정 (patch)` 방식으로 표시하도록 관련 `system prompting` 을 추가하여 제공한다.
+- 2차 품질 검사에 사용되는 `system prompting`은 2차 품질 검사에서만 적용되며, 다른 파일 반복 1차 질의시 사용하지 않는다.
+- 2차 품질 검사를 수행하는 이유는 AI 모델의 답변에 문법적 오류를 점검하고, 응답 파일에 대한 품질을 높이기 위해서이다. 
+- `patch` 기능은 `agent_*.py` 에서 사용하는 `patch` 기능과 동일한 기능이다.
+- 해당 옵션 기능에 너가 제안하는 더 좋은 방안이 있으면 구체적으로 제안 보강해줘.
 
+## 2 `/context` 명령어 기능을 아래조건에 맞게 개선하는 FSD문서를 작성해줘.
+- 현재 `/context` 명령어는 `include_tree=True` 로 기본 설정되어 있어 프로젝트 구조가 복잡한 경우 
+- `-nt`, `--no-tree` 옵션을 추가하여 프로젝트 구조를 포함하지 않고 파일 내용만 포함하도록 한다.
+- `*_assistant.py` 파일과 `*-ai-chat-code.py` 에 동일하게 적용한다. 
+```python
+      context = self.context_builder.build_context(
+          include_tree=False,
+          file_patterns=file_patterns
+      )
+```
 
-
-
-
-
-
-
-
-
+1,2 기능에 대해 `docs/requirements` 폴더에 `FSD v1.0.123` 문서로 작성한다.
 
 
