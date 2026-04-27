@@ -121,13 +121,13 @@ def main():
 
     def chat(self, user_message: str, streaming: bool = True,
              include_context: bool = False, file_patterns: Optional[List[str]] = None,
-             disable_tools: bool = False) -> str:
+             disable_tools: bool = False, *, include_tree: bool = True) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
         if include_context:
             context = self.context_builder.build_context(
-                include_tree=True,
+                include_tree=include_tree,
                 file_patterns=file_patterns
             )
 

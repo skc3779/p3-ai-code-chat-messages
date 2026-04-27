@@ -539,3 +539,57 @@ class CLIInputHandler:
     def update_streaming_mode(self, streaming: bool):
         """스트리밍 모드 업데이트 (하단 상태 바 갱신용)"""
         self.streaming_mode = streaming
+
+
+# ═══════════════════════════════════════════════════════════════
+# FSD v1.0.123 § 5.1 — 공통 옵션 파싱 헬퍼
+# ═══════════════════════════════════════════════════════════════
+
+from typing import Dict, Set, Tuple
+
+
+def parse_command_options(
+    args: str,
+    aliases: Dict[str, str],
+) -> Tuple[Set[str], str]:
+    """
+    명령어 인자에서 선두의 옵션 토큰을 분리해 (옵션집합, 나머지) 반환.
+
+    Args:
+        args: 명령어 뒤의 전체 문자열 (예: "-qc src/*.py 질문")
+        aliases: { "-qc": "quality_check", "--quality-check": "quality_check",
+                   "-nt": "no_tree",       "--no-tree":       "no_tree" }
+
+    Returns:
+        (set of canonical names, remaining args str)
+
+    Notes:
+        - 위치 인자 시작 = 첫 번째 토큰이 옵션이 아닌 시점
+        - "[" 로 시작하는 토큰은 패턴 리스트로 간주, 옵션 파싱 종료
+        - 알 수 없는 -옵션 은 ValueError
+        - "--" 토큰은 옵션 종료 명시 (FR-C-04)
+
+    Raises:
+        ValueError: 알 수 없는 옵션 토큰이 발견된 경우
+    """
+    tokens = args.split()
+    options: Set[str] = set()
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        # "--" 는 옵션 종료 명시자 (FR-C-04)
+        if tok == "--":
+            i += 1
+            break
+        if not tok.startswith("-") or tok.startswith("["):
+            break
+        if tok not in aliases:
+            raise ValueError(f"알 수 없는 옵션: {tok}")
+        options.add(aliases[tok])
+        i += 1
+
+    # 토큰 재결합 — 옵션 토큰까지의 길이만 잘라냄
+    if i == 0:
+        return options, args
+    consumed_len = sum(len(t) for t in tokens[:i]) + i  # i개의 공백 포함
+    return options, args[consumed_len:].lstrip()

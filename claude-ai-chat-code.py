@@ -22,6 +22,7 @@ from src import (
     DiffViewer,
 )
 from src.command_registry import print_menu
+from src.cli_input import parse_command_options
 
 _MENU_TITLE = "Claude Code Assistant - AI 코딩 어시스턴트"
 
@@ -389,12 +390,21 @@ def main():
 
                 elif command == '/context':
                     if not args:
-                        print("❌ 형식: /context <파일패턴> [질문]")
+                        print("❌ 형식: /context [-nt] <파일패턴> [질문]")
                         print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
                         print("예: /context src/*.py")
                         print("예: /context src/*.py 이 코드를 리팩토링해줘")
-                        print("예: /context [src/*.py, docs/*.md] README.md 파일을 작성해줘")
+                        print("예: /context -nt [src/*.py, docs/*.md] README.md 파일을 작성해줘")
                         continue
+
+                    # FSD v1.0.123: -nt 옵션 파싱
+                    _NT_ALIASES = {"-nt": "no_tree", "--no-tree": "no_tree"}
+                    try:
+                        options, args = parse_command_options(args, _NT_ALIASES)
+                    except ValueError as e:
+                        print(f"❌ {e}")
+                        continue
+                    no_tree = "no_tree" in options
 
                     file_patterns = []
                     question = ""
@@ -426,17 +436,27 @@ def main():
                         question,
                         streaming=streaming_mode,
                         include_context=True,
-                        file_patterns=file_patterns
+                        file_patterns=file_patterns,
+                        include_tree=not no_tree,
                     )
 
                 elif command == '/auto_context':
                     if not args:
-                        print("❌ 형식: /auto_context <파일패턴> [질문]")
+                        print("❌ 형식: /auto_context [-qc] <파일패턴> [질문]")
                         print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
                         print("예: /auto_context src/*.py")
-                        print("예: /auto_context src/*.py 이 코드를 리팩토링해줘")
+                        print("예: /auto_context -qc src/*.py 이 코드를 리팩토링해줘")
                         print("예: /auto_context [src/*.py, docs/*.md] README 작성해줘")
                         continue
+
+                    # FSD v1.0.123: -qc 옵션 파싱
+                    _QC_ALIASES = {"-qc": "quality_check", "--quality-check": "quality_check"}
+                    try:
+                        options, args = parse_command_options(args, _QC_ALIASES)
+                    except ValueError as e:
+                        print(f"❌ {e}")
+                        continue
+                    quality_check = "quality_check" in options
 
                     file_patterns = []
                     question = ""
@@ -493,7 +513,8 @@ def main():
                     processor = ContextProcessor(
                         assistant=assistant,
                         file_manager=assistant.file_manager,
-                        streaming=streaming_mode
+                        streaming=streaming_mode,
+                        quality_check=quality_check,
                     )
                     processor.process_files(matched_files, question)
 

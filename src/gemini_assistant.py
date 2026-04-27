@@ -125,13 +125,15 @@ def add(a, b):
         user_message: str, 
         streaming: bool = True,
         include_context: bool = False,
-        file_patterns: Optional[List[str]] = None
+        file_patterns: Optional[List[str]] = None,
+        *,
+        include_tree: bool = True,
     ) -> str:
         """AI와 채팅"""
         # 컨텍스트 구성
         if include_context:
             context = self.context_builder.build_context(
-                include_tree=True,
+                include_tree=include_tree,
                 file_patterns=file_patterns
             )
             full_message = f"{context}\n\n{'=' * 80}\n\n{user_message}" if context else user_message

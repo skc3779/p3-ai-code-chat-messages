@@ -1032,19 +1032,21 @@ build_context(include_tree=False, file_patterns=["src/*.py"])
 
 ## 12. 승인
 
-- [ ] 설계 검토 (2차 검사 system prompt swap + patch 적용기 재사용 + `-nt` 옵션 confirm)
-- [ ] [src/quality_check_prompt.py](src/quality_check_prompt.py) 신규 — `QUALITY_CHECK_SYSTEM_PROMPT` 정의
-- [ ] [src/cli_input.py](src/cli_input.py) 에 `parse_command_options()` 추가
-- [ ] [src/context_processor.py](src/context_processor.py) 의 `quality_check` 필드 + `_run_quality_check` / `_apply_qc_patches` / `_temporarily_override_system_prompt` / `_extract_patch_fences` / `_print_summary` 신규
-- [ ] [src/claude_assistant.py](src/claude_assistant.py) `chat()` 에 `include_tree` keyword-only 추가
-- [ ] [src/genai_assistant.py](src/genai_assistant.py) 동일
-- [ ] [src/gemini_assistant.py](src/gemini_assistant.py) 동일
-- [ ] [claude-ai-chat-code.py](claude-ai-chat-code.py) `/context` 와 `/auto_context` 분기에 옵션 파서 + 인자 전달
-- [ ] [gemini-ai-chat-code.py](gemini-ai-chat-code.py) 동일
-- [ ] [gen-ai-chat-code.py](gen-ai-chat-code.py) 동일
-- [ ] [tests/test_command_parser_options.py](tests/test_command_parser_options.py) T-123-01 ~ T-123-08 작성·통과
-- [ ] [tests/test_context_processor_quality_check.py](tests/test_context_processor_quality_check.py) T-123-10 ~ T-123-24 작성·통과
-- [ ] [tests/test_assistants_include_tree.py](tests/test_assistants_include_tree.py) T-123-30 ~ T-123-36 작성·통과
-- [ ] 기존 테스트 회귀 확인 — `tests/test_context_processor.py` (FSD v1.0.076 흐름), `tests/test_context_builder.py`
+- [x] 설계 검토 (2차 검사 system prompt swap + patch 적용기 재사용 + `-nt` 옵션 confirm)
+- [x] [src/quality_check_prompt.py](src/quality_check_prompt.py) 신규 — `QUALITY_CHECK_SYSTEM_PROMPT` 정의
+- [x] [src/cli_input.py](src/cli_input.py) 에 `parse_command_options()` 추가
+- [x] [src/context_processor.py](src/context_processor.py) 의 `quality_check` 필드 + `_run_quality_check` / `_apply_qc_patches` / `_temporarily_override_system_prompt` / `_extract_patch_fences` / `_print_summary` 신규
+- [x] [src/claude_assistant.py](src/claude_assistant.py) `chat()` 에 `include_tree` keyword-only 추가
+- [x] [src/genai_assistant.py](src/genai_assistant.py) 동일
+- [x] [src/gemini_assistant.py](src/gemini_assistant.py) 동일
+- [x] [claude-ai-chat-code.py](claude-ai-chat-code.py) `/context` 와 `/auto_context` 분기에 옵션 파서 + 인자 전달
+- [x] [gemini-ai-chat-code.py](gemini-ai-chat-code.py) 동일
+- [x] [gen-ai-chat-code.py](gen-ai-chat-code.py) 동일
+- [x] [tests/test_command_parser_options.py](tests/test_command_parser_options.py) T-123-01 ~ T-123-08 작성·통과
+- [x] [tests/test_context_processor_quality_check.py](tests/test_context_processor_quality_check.py) T-123-10 ~ T-123-24 작성·통과
+- [x] [tests/test_assistants_include_tree.py](tests/test_assistants_include_tree.py) T-123-30 ~ T-123-36 작성·통과
+- [x] 기존 테스트 회귀 확인 — `tests/test_context_processor.py` (17건 OK), `tests/test_context_builder.py` (8건 OK)
 - [ ] 3 어시스턴트(Claude/Gemini/GenAI) 에서 `/auto_context -qc`, `/context -nt` 수동 검증 — M-123-01 ~ M-123-08
-- [ ] [docs/releases/RELEASE_v1.0.123_auto-context-qc-and-context-no-tree.md](docs/releases/RELEASE_v1.0.123_auto-context-qc-and-context-no-tree.md) 작성
+- [x] [docs/releases/RELEASE_v1.0.123_auto-context-qc-and-context-no-tree.md](docs/releases/RELEASE_v1.0.123_auto-context-qc-and-context-no-tree.md) 작성
+
+
