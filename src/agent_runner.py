@@ -88,7 +88,8 @@ class AgentRunner:
     RE_ACT     = re.compile(r"\[ACT\](.*?)(?=\[OBSERVE\]|\[AGENT_DONE\]|\Z)", re.DOTALL)
     RE_OBSERVE = re.compile(r"\[OBSERVE\](.*?)(?=\[AGENT_DONE\]|\Z)", re.DOTALL)
     RE_SHELL   = re.compile(r"^\s*\$\s+(.+)$", re.MULTILINE)
-    RE_FILENAME_BLOCK = re.compile(r"`{3,}filename:([^\n]+)", re.MULTILINE)
+    # v1.0.141 — `@@@filename:` 신규 패턴도 인식
+    RE_FILENAME_BLOCK = re.compile(r"(?:`{3,}|@{3,})filename:([^\n]+)", re.MULTILINE)
 
     SEP = "─" * 60
 
@@ -470,28 +471,28 @@ class AgentRunner:
             "  파일을 만들거나 바꿔야 하는가?\n"
             "    └─ YES\n"
             "        ├─ 신규 파일?                          → 선택지 A-1 (filename)\n"
-            "        ├─ 기존 파일을 일부만 수정 (변경 < 40%)?  → 선택지 A-2 (patch) **권장**\n"
+            "        ├─ 기존 파일을 일부만 수정 (변경 < 30%)?  → 선택지 A-2 (patch) **권장**\n"
             "        └─ 기존 파일을 사실상 다시 쓰기?          → 선택지 A-1 (filename)\n"
             "    └─ NO\n"
             "        ├─ 짧은 코드를 한 번 돌려 결과만 보고 싶은가?  → 선택지 B\n"
             "        └─ OS / Git / 패키지 매니저 명령이 필요한가? → 선택지 C\n\n"
 
             "- == 선택지 A-1. 파일 전문 (신규 또는 대규모 재작성) ==\n"
-            "  ```filename:<경로/파일명.확장자>\n... 파일 전문 ...\n```\n"
+            "  @@@filename:경로/파일명.확장자\n코드 내용 ...\n@@@\n"
             "  - 예시 :\n"
-            "  ```filename:src/utils.py\ndef add(a, b):\n    return a + b\n```\n\n"
+            "  @@@filename:src/utils.py\ndef add(a, b):\n    return a + b\n@@@\n\n"
 
             "  - 한 블록에 한 파일. 워크스페이스 상대경로.\n"
             "  - 줄바꿈·인코딩 원본 그대로. 언어 태그를 섞지 마세요.\n\n"
 
             "- == 선택지 A-2. 파일 패치 (기존 파일의 부분 수정) ==\n"
-            "  ```patch:<경로/파일명.확장자>\n"
+            "  @@@patch:경로/파일명.확장자\n"
             "  <<<<<<< SEARCH\n"
             "  (원본에 있는 텍스트 블록 — 한 곳에서만 매칭되도록 충분한 컨텍스트 포함)\n"
             "  =======\n"
             "  (바뀐 텍스트 블록)\n"
             "  >>>>>>> REPLACE\n"
-            "  ```\n"
+            "  @@@\n"
             "  - 한 펜스에 같은 파일의 여러 SEARCH/REPLACE 쌍을 넣을 수 있습니다.\n"
             "  - SEARCH 블록은 원본 파일에 정확히 한 번 등장해야 합니다.\n"
             "    모호하면 위/아래에 한두 줄을 더 포함시켜 유일하게 만드세요.\n"
@@ -500,7 +501,7 @@ class AgentRunner:
             "  - 신규 파일을 만들 때는 A-2 가 아닌 A-1 을 사용하세요.\n\n"
 
             "  예시 — `import json` 을 imports 끝에 추가:\n"
-            "    ```patch:src/agent_runner.py\n"
+            "    @@@patch:src/agent_runner.py\n"
             "    <<<<<<< SEARCH\n"
             "    import os\n"
             "    import platform\n"
@@ -511,10 +512,10 @@ class AgentRunner:
             "    import re\n"
             "    import json\n"
             "    >>>>>>> REPLACE\n"
-            "    ```\n\n"
+            "    @@@\n\n"
 
             "  예시 — 함수 본문 교체 + 상수 추가 (한 펜스, 두 블록):\n"
-            "    ```patch:src/agent_runner.py\n"
+            "    @@@patch:src/agent_runner.py\n"
             "    <<<<<<< SEARCH\n"
             "        def _has_code_failure(actions):\n"
             "            return any(not a.success for a in actions)\n"
@@ -529,12 +530,12 @@ class AgentRunner:
             "        SEP = '─' * 60\n"
             "        PATCH_FUZZY = True\n"
             "    >>>>>>> REPLACE\n"
-            "    ```\n\n"
+            "    @@@\n\n"
 
             "  자주 하는 실수:\n"
             "    1) SEARCH 블록을 너무 짧게 작성 → 여러 곳 매칭 → ambiguous 실패\n"
             "    2) SEARCH 의 들여쓰기를 임의로 줄임 → 매칭 실패 가능\n"
-            "    3) 한 파일을 ```filename:``` 과 ```patch:``` 양쪽으로 동시 작성\n\n"
+            "    3) 한 파일을 @@@filename:@@@ 와 @@@patch:@@@ 양쪽으로 동시 작성\n\n"
 
             "== 선택지 B. 코드 실행 (임시 실행 — 파일 저장 없음) ==\n"
             "  ```python\n"
@@ -544,16 +545,18 @@ class AgentRunner:
             "  - 타임아웃 120초 · 워크스페이스 cwd · UTF-8 자동 강제.\n"
             "  - 경고: 코드 안에서 `subprocess.run` / `os.system` 으로 OS 호출하지 마세요 —\n"
             "     OS 명령은 선택지 C 로 분리하세요. (가독성·승인 정책 분리)\n"
-            "  - 경고: `bash`/`sh`/`shell`/`powershell`/`ps1` 태그는 자동으로 쉘로 라우팅됩니다.\n\n"
+            "  - 경고: `powershell`/`ps1`/`bash`/`sh`/`shell` 태그는 자동으로 쉘로 라우팅됩니다.\n\n"
 
             "== 선택지 C. 쉘 명령 실행 ==\n"
             "  라인 시작에 `$ <명령>` — 코드 블록으로 감싸지 마세요.\n"
             "    $ git status\n"
             "    $ python --version\n"
+           f"  - 명령은 {shell_type} 구문을 사용하세요.\n"            
             "  - 한 줄에 한 명령. 파이프(|)·리다이렉트(>)·`&&`·`;`·`||` 는 한 줄 내 허용.\n"
+            "  - 변수 사용, 다음 줄에 쉘 명령 값 전달 등 명령이 필요한 경우는 `선택지 B`만 허용."
             "  - 경고: 체이닝(`&&`/`;`/`||`) 안에 위험 명령(rm, del 등) 이 있으면 시스템이\n"
             "     각 세그먼트를 검사해 승인을 요구합니다.\n"
-           f"  - 명령은 {shell_type} 구문을 사용하세요.\n"
+
             "  - (선택) 명시 라우팅: `[ACTION:shell]` 태그.\n\n"
 
             "[OBSERVE]\n"

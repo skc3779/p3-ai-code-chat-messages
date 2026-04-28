@@ -38,7 +38,7 @@ class TestContextProcessorRetry(unittest.TestCase):
     def test_retry_success_on_first_attempt(self):
         """T-01: 1회 시도로 저장 성공, 재시도 없음"""
         self.mock_assistant.chat.return_value = (
-            "```filename:output/file1.md\n번역된 내용\n```"
+            "@@@filename:output/file1.md\n번역된 내용\n@@@"
         )
 
         processor = ContextProcessor(
@@ -60,7 +60,7 @@ class TestContextProcessorRetry(unittest.TestCase):
         """T-02: 2회차 재시도에서 저장 성공"""
         self.mock_assistant.chat.side_effect = [
             "일반 텍스트 응답 (filename: 블록 없음)",  # 1회차 실패
-            "```filename:output/file1.md\n번역된 내용\n```",  # 2회차 성공
+            "@@@filename:output/file1.md\n번역된 내용\n@@@",  # 2회차 성공
         ]
 
         processor = ContextProcessor(
@@ -103,7 +103,7 @@ class TestContextProcessorRetry(unittest.TestCase):
         self.mock_assistant.chat.side_effect = [
             "",  # 1회차: 빈 응답
             "",  # 2회차: 빈 응답
-            "```filename:output/file1.md\n결과\n```",  # 3회차 성공
+            "@@@filename:output/file1.md\n결과\n@@@",  # 3회차 성공
         ]
 
         processor = ContextProcessor(
@@ -124,7 +124,7 @@ class TestContextProcessorRetry(unittest.TestCase):
         """T-04b: AI 응답이 None이면 재시도"""
         self.mock_assistant.chat.side_effect = [
             None,  # 1회차: None
-            "```filename:output/file1.md\n결과\n```",  # 2회차 성공
+            "@@@filename:output/file1.md\n결과\n@@@",  # 2회차 성공
         ]
 
         processor = ContextProcessor(
@@ -150,9 +150,9 @@ class TestContextProcessorRetry(unittest.TestCase):
             "일반 텍스트",  # file1 - 1회차 실패
             "일반 텍스트",  # file1 - 2회차 실패
             "일반 텍스트",  # file1 - 3회차 실패
-            "```filename:output/file2.md\n번역2\n```",  # file2 - 1회차 성공
+            "@@@filename:output/file2.md\n번역2\n@@@",  # file2 - 1회차 성공
             "일반 텍스트",  # file3 - 1회차 실패
-            "```filename:output/file3.md\n번역3\n```",  # file3 - 2회차 성공
+            "@@@filename:output/file3.md\n번역3\n@@@",  # file3 - 2회차 성공
         ]
 
         processor = ContextProcessor(
@@ -218,8 +218,8 @@ class TestContextProcessorRetry(unittest.TestCase):
         """T-09: 일부 파일 저장 성공 시 재시도하지 않음"""
         # 2개 중 1개만 저장됨 (하나는 write_file 실패) → saved ≠ [] → 재시도 안 함
         self.mock_assistant.chat.return_value = (
-            "```filename:output/ok.md\n성공 내용\n```\n"
-            "```filename:output/fail.md\n실패 내용\n```"
+            "@@@filename:output/ok.md\n성공 내용\n@@@\n"
+            "@@@filename:output/fail.md\n실패 내용\n@@@"
         )
 
         processor = ContextProcessor(
@@ -240,7 +240,7 @@ class TestContextProcessorRetry(unittest.TestCase):
     # 파일 읽기 실패 시 실패 목록에 포함
     def test_retry_file_read_failure_in_failed_list(self):
         """파일 읽기 실패 → 실패 목록에 포함"""
-        self.mock_assistant.chat.return_value = "```filename:out.md\n결과\n```"
+        self.mock_assistant.chat.return_value = "@@@filename:out.md\n결과\n@@@"
 
         processor = ContextProcessor(
             assistant=self.mock_assistant,
@@ -278,7 +278,7 @@ class TestContextProcessorRetry(unittest.TestCase):
         self.mock_assistant.chat.side_effect = [
             "일반 텍스트",  # 1회차 실패
             "",             # 2회차 빈 응답
-            "```filename:output/file1.md\n결과\n```",  # 3회차 성공
+            "@@@filename:output/file1.md\n결과\n@@@",  # 3회차 성공
         ]
 
         processor = ContextProcessor(

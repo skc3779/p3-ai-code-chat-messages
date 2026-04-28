@@ -1,7 +1,7 @@
 """
 AgentActionDispatcher patch 통합 테스트 (FSD v1.0.115)
 
-T-111-30 ~ T-111-39 — ```patch:<path>``` 펜스의 파싱, 라우팅, 승인 흐름,
+T-111-30 ~ T-111-39 — @@@patch:<path>``` 펜스의 파싱, 라우팅, 승인 흐름,
 filename 우선 적용(FR-111-25), 자기 수정 트리거.
 """
 
@@ -86,7 +86,7 @@ def _save_via_fm(fm: FileManager, act_text: str):
     import re
     saved = []
     pattern = re.compile(
-        r"```filename:([^\n]+)\n(.*?)\n```", re.DOTALL,
+        r"@@@filename:([^\n]+)\n(.*?)\n@@@", re.DOTALL,
     )
     for m in pattern.finditer(act_text):
         rel = m.group(1).strip()
@@ -126,13 +126,13 @@ class TestDispatcherPatch(unittest.TestCase):
     # ─── T-111-30 ──────────────────────────────────────────
     def test_T111_30_patch_fence_parsed(self):
         act = (
-            "```patch:src/x.py\n"
+            "@@@patch:src/x.py\n"
             "<<<<<<< SEARCH\n"
             "foo\n"
             "=======\n"
             "bar\n"
             ">>>>>>> REPLACE\n"
-            "```\n"
+            "@@@\n"
         )
         actions = self.dispatcher._parse(act)
         kinds = [a.kind for a in actions]
@@ -144,13 +144,13 @@ class TestDispatcherPatch(unittest.TestCase):
     def test_T111_31_patch_path_missing(self):
         # patch: 만 있고 path 누락 — dispatcher 가 처리
         act = (
-            "```patch:\n"
+            "@@@patch:\n"
             "<<<<<<< SEARCH\n"
             "foo\n"
             "=======\n"
             "bar\n"
             ">>>>>>> REPLACE\n"
-            "```\n"
+            "@@@\n"
         )
         results = self.dispatcher.dispatch(self.session, act)
         self.assertEqual(len(results), 1)
@@ -162,16 +162,16 @@ class TestDispatcherPatch(unittest.TestCase):
         """FR-111-25 — 같은 파일에 filename + patch → filename 우선, patch 는 보고만."""
         self._seed("a.txt", "foo\n")
         act = (
-            "```filename:a.txt\n"
+            "@@@filename:a.txt\n"
             "WHOLE_FILE_CONTENT\n"
-            "```\n"
-            "```patch:a.txt\n"
+            "@@@\n"
+            "@@@patch:a.txt\n"
             "<<<<<<< SEARCH\n"
             "foo\n"
             "=======\n"
             "bar\n"
             ">>>>>>> REPLACE\n"
-            "```\n"
+            "@@@\n"
         )
         self.session.bypass_approvals = True
         results = self.dispatcher.dispatch(self.session, act)
@@ -190,9 +190,9 @@ class TestDispatcherPatch(unittest.TestCase):
     def test_T111_33_patch_plus_python_both_run(self):
         self._seed("a.txt", "foo\n")
         act = (
-            "```patch:a.txt\n"
+            "@@@patch:a.txt\n"
             "<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n"
-            "```\n"
+            "@@@\n"
             "```python\n"
             "print('hello')\n"
             "```\n"
@@ -206,7 +206,7 @@ class TestDispatcherPatch(unittest.TestCase):
     # ─── T-111-34 ──────────────────────────────────────────
     def test_T111_34_bypass_approvals_no_prompt(self):
         self._seed("a.txt", "foo\n")
-        act = "```patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n```\n"
+        act = "@@@patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n@@@\n"
         self.session.bypass_approvals = True
         # _approve_dangerous 는 호출되어선 안 됨 (auto_approve=True 경로)
         with patch.object(self.runner, "_approve_dangerous") as m_approve:
@@ -220,8 +220,8 @@ class TestDispatcherPatch(unittest.TestCase):
         """bypass=False, auto_approve_file_mutation=False, 사용자 'A' → flag True."""
         self._seed("a.txt", "foo\n")
         self._seed("b.txt", "alpha\n")
-        act_a = "```patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n```\n"
-        act_b = "```patch:b.txt\n<<<<<<< SEARCH\nalpha\n=======\nbeta\n>>>>>>> REPLACE\n```\n"
+        act_a = "@@@patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n@@@\n"
+        act_b = "@@@patch:b.txt\n<<<<<<< SEARCH\nalpha\n=======\nbeta\n>>>>>>> REPLACE\n@@@\n"
 
         # 첫 호출은 _approve_dangerous 가 호출되며 'A' 선택 → flag 세팅 + True 반환
         def fake_approve(session, attr, _label):
@@ -245,9 +245,9 @@ class TestDispatcherPatch(unittest.TestCase):
         self._seed("a.txt", "alpha\nbeta\ngamma\ndelta\n")
         # SEARCH 가 매칭되지 않음
         act = (
-            "```patch:a.txt\n"
+            "@@@patch:a.txt\n"
             "<<<<<<< SEARCH\nzeta\n=======\nx\n>>>>>>> REPLACE\n"
-            "```\n"
+            "@@@\n"
         )
         self.session.bypass_approvals = True
         results = self.dispatcher.dispatch(self.session, act)
@@ -265,8 +265,8 @@ class TestDispatcherPatch(unittest.TestCase):
         """같은 path 두 번 들어와도 두 번 시도된다 (file 과 동일 정책)."""
         self._seed("a.txt", "alpha\nbravo\n")
         act = (
-            "```patch:a.txt\n<<<<<<< SEARCH\nalpha\n=======\nALPHA\n>>>>>>> REPLACE\n```\n"
-            "```patch:a.txt\n<<<<<<< SEARCH\nbravo\n=======\nBRAVO\n>>>>>>> REPLACE\n```\n"
+            "@@@patch:a.txt\n<<<<<<< SEARCH\nalpha\n=======\nALPHA\n>>>>>>> REPLACE\n@@@\n"
+            "@@@patch:a.txt\n<<<<<<< SEARCH\nbravo\n=======\nBRAVO\n>>>>>>> REPLACE\n@@@\n"
         )
         self.session.bypass_approvals = True
         results = self.dispatcher.dispatch(self.session, act)
@@ -278,7 +278,7 @@ class TestDispatcherPatch(unittest.TestCase):
     # ─── T-111-38 ──────────────────────────────────────────
     def test_T111_38_action_result_kind_is_file(self):
         self._seed("a.txt", "foo\n")
-        act = "```patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n```\n"
+        act = "@@@patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n@@@\n"
         self.session.bypass_approvals = True
         results = self.dispatcher.dispatch(self.session, act)
         self.assertEqual(results[0].kind, "file")
@@ -286,7 +286,7 @@ class TestDispatcherPatch(unittest.TestCase):
     # ─── T-111-39 ──────────────────────────────────────────
     def test_T111_39_empty_patch_body(self):
         # 마커가 전혀 없는 빈 본문
-        act = "```patch:a.txt\n\n```\n"
+        act = "@@@patch:a.txt\n\n@@@\n"
         self.session.bypass_approvals = True
         results = self.dispatcher.dispatch(self.session, act)
         self.assertEqual(len(results), 1)

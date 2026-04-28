@@ -30,9 +30,9 @@ class TestResponseParser(unittest.TestCase):
         """단일 파일 추출 테스트"""
         response = """
 Here is the code:
-```filename:test.py
+@@@filename:test.py
 print('hello')
-```
+@@@
 """
         saved = self.parser.parse_and_save(response)
         
@@ -47,14 +47,14 @@ print('hello')
         """여러 파일 추출 테스트"""
         response = """
 File 1:
-```filename:file1.py
+@@@filename:file1.py
 code1
-```
+@@@
 
 File 2:
-```filename:src/file2.js
+@@@filename:src/file2.js
 code2
-```
+@@@
 """
         saved = self.parser.parse_and_save(response)
         
@@ -69,7 +69,7 @@ code2
         """중첩된 코드 블록 처리 테스트"""
         response = """
 Markdown file with code block:
-```filename:README.md
+@@@filename:README.md
 Here is some python code:
 
 ## python code 1
@@ -93,7 +93,7 @@ $> python -version
 ```
 
 End of file.
-```
+@@@
 """
         saved = self.parser.parse_and_save(response)
         
@@ -134,11 +134,11 @@ End of file."""
         (self.temp_dir / "test.txt").write_text("old", encoding='utf-8')
         
         response = """
-```filename:test.txt
+@@@filename:test.txt
 new
-```
+@@@
 """
-        saved = self.parser.parse_and_save(response)
+        saved = self.parser.parse_and_save(response, auto_overwrite=True)
         
         content = (self.temp_dir / "test.txt").read_text(encoding='utf-8')
         self.assertEqual(content, "new")
@@ -151,9 +151,9 @@ new
         (self.temp_dir / "test.txt").write_text("old", encoding='utf-8')
         
         response = """
-```filename:test.txt
+@@@filename:test.txt
 new
-```
+@@@
 """
         saved = self.parser.parse_and_save(response)
         
@@ -164,7 +164,7 @@ new
     def test_parse_untagged_code_block(self):
         """언어 태그 없는 ``` 코드 블록 처리 테스트"""
         response = (
-            "```filename:doc.md\n"
+            "@@@filename:doc.md\n"
             "# Title\n"
             "\n"
             "```\n"
@@ -172,7 +172,7 @@ new
             "```\n"
             "\n"
             "End.\n"
-            "```"
+            "@@@"
         )
         saved = self.parser.parse_and_save(response)
 
@@ -184,7 +184,7 @@ new
     def test_parse_multiple_untagged_code_blocks(self):
         """다중 언어 태그 없는 코드 블록 처리 테스트"""
         response = (
-            "```filename:multi.md\n"
+            "@@@filename:multi.md\n"
             "# Title\n"
             "\n"
             "```\n"
@@ -198,7 +198,7 @@ new
             "```\n"
             "\n"
             "End.\n"
-            "```"
+            "@@@"
         )
         saved = self.parser.parse_and_save(response)
 
@@ -212,7 +212,7 @@ new
     def test_parse_mixed_tagged_untagged_blocks(self):
         """언어 태그 있는/없는 코드 블록이 혼합된 마크다운 테스트"""
         response = (
-            "```filename:mixed.md\n"
+            "@@@filename:mixed.md\n"
             "## 상세 설계서\n"
             "\n"
             "### SQL Section\n"
@@ -238,7 +238,7 @@ new
             "* Item 1\n"
             "* Item 2\n"
             "\n"
-            "```"
+            "@@@"
         )
         saved = self.parser.parse_and_save(response)
 
@@ -254,7 +254,7 @@ new
     def test_parse_complex_markdown_full(self):
         """사용자 예시: 복잡한 마크다운 (SQL + tree + 테이블) 전체 저장 테스트"""
         response = (
-            "```filename:md_excel2/IF_XXXX.md\n"
+            "@@@filename:md_excel2/IF_XXXX.md\n"
             "\n"
             "## 📂 IF_XXXX: 상세 설계서\n"
             "\n"
@@ -298,7 +298,7 @@ new
             "\n"
             "* **API Endpoint**: `https://api.example.com`\n"
             "\n"
-            "```"
+            "@@@"
         )
         saved = self.parser.parse_and_save(response)
 
@@ -318,7 +318,7 @@ new
         response = (
             "답변입니다.\n"
             "\n"
-            "```filename:file_a.md\n"
+            "@@@filename:file_a.md\n"
             "# File A\n"
             "\n"
             "```\n"
@@ -326,9 +326,9 @@ new
             "```\n"
             "\n"
             "End A.\n"
-            "```\n"
+            "@@@\n"
             "\n"
-            "```filename:file_b.md\n"
+            "@@@filename:file_b.md\n"
             "# File B\n"
             "\n"
             "```python\n"
@@ -336,7 +336,7 @@ new
             "```\n"
             "\n"
             "End B.\n"
-            "```"
+            "@@@"
         )
         saved = self.parser.parse_and_save(response)
 

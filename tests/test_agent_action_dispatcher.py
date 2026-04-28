@@ -111,7 +111,7 @@ class TestDispatcherBasic(unittest.TestCase):
 
     def test_T107_09_single_filename_block(self):
         """T-107-09: 단독 filename 블록 → file 1건, code 0건."""
-        act = "```filename:a.py\ndef foo(): pass\n```"
+        act = "@@@filename:a.py\ndef foo(): pass\n@@@"
         self.d._runner.response_parser.parse_and_save.return_value = ["a.py"]
         results = self.d.dispatch(self.session, act)
         files = [r for r in results if r.kind == "file"]
@@ -143,7 +143,7 @@ class TestDispatcherBasic(unittest.TestCase):
         act = (
             '```python\nprint("step1")\n```\n\n'
             '$ echo step2\n\n'
-            '```filename:src/foo.py\ndef foo(): ...\n```'
+            '@@@filename:src/foo.py\ndef foo(): ...\n@@@'
         )
         self.d._runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
         results = self.d.dispatch(self.session, act)
@@ -158,14 +158,14 @@ class TestDispatcherBasic(unittest.TestCase):
         """T-107-13: 멀티 filename 블록 → file 2건, code 0건, shell 0건."""
         act = """
 File 1:
-```filename:file1.py
+@@@filename:file1.py
 code1
-```
+@@@
 
 File 2:
-```filename:src/file2.js
+@@@filename:src/file2.js
 code2
-```
+@@@
 """
         results = self.d.dispatch(self.session, act)
         files = [r for r in results if r.kind == "file"]
@@ -218,11 +218,11 @@ $ Write-Host "hello2"
         """T-107-15: file, code, shell 블록 → file 1건, code 1건, shell 1건."""
         act = """
 # file1
-```filename:file1.md
+@@@filename:file1.md
 ## introduce
 - number1
 - number2
-```
+@@@
 
 # code2
 ```python
@@ -244,7 +244,7 @@ $ Write-Host "hello2"
         """T-107-16:복잡한 file 마크다운(code+shell) → file 1건, code 0건, shell 0건."""
         act = """
 # file1
-```filename:file1.md
+@@@filename:file1.md
 
 ## introduce
 - number1
@@ -279,7 +279,7 @@ $ Write-Host "hello2"
         """T-107-16:복잡한 file 마크다운(not code+shell) → file 1건, code 0건, shell 0건."""
         act = """
 # file1
-```filename:file1.py
+@@@filename:file1.py
 
 ## introduce
 - number1
@@ -295,7 +295,7 @@ root
     └── child2
 ```
 
-```
+@@@
 """
         results = self.d.dispatch(self.session, act)
         files = [r for r in results if r.kind == "file"]
@@ -309,7 +309,7 @@ root
         """T-107-16:복잡한 멀티 file 마크다운(not code+shell) → file 2건, code 0건, shell 0건."""
         act = """
 # file1
-```filename:file1.py
+@@@filename:file1.py
 
 ## introduce1
 - number1
@@ -325,10 +325,10 @@ root
     └── child2
 ```
 
-```
+@@@
 
 # file2
-```filename:file2.py
+@@@filename:file2.py
 
 ## introduce2
 - number1
@@ -344,7 +344,7 @@ root
     └── child2
 ```
 
-```
+@@@
 """
         results = self.d.dispatch(self.session, act)
         files = [r for r in results if r.kind == "file"]
@@ -358,7 +358,7 @@ root
         """T-107-17:복잡 file 마크다운(code+shell) + code + shell → file 1건, code 2건, shell 1건."""
         act = """
 # file1
-```filename:file1.md
+@@@filename:file1.md
 
 ## introduce
 - number1
@@ -377,7 +377,7 @@ console.log("hello");
 # shell3
 $ Write-Host "hello2"
 
-```
+@@@
 
 # code2-1
 ```python
@@ -631,16 +631,16 @@ class TestDispatcherPatch(unittest.TestCase):
     def test_T107_27_patch_and_filename_same_file_filename_wins(self):
         """T-107-27: 동일 파일 filename + patch → filename 우선, patch 는 건너뜀 보고 (FR-111-25)."""
         act = (
-            "```filename:src/foo.py\n"
+            "@@@filename:src/foo.py\n"
             "def new(): pass\n"
-            "```\n\n"
-            "```patch:src/foo.py\n"
+            "@@@\n\n"
+            "@@@patch:src/foo.py\n"
             "<<<<<<< SEARCH\n"
             "old\n"
             "=======\n"
             "new\n"
             ">>>>>>> REPLACE\n"
-            "```"
+            "@@@"
         )
         self.d._runner.response_parser.parse_and_save.return_value = ["src/foo.py"]
 
@@ -720,7 +720,7 @@ class TestDispatcherActionTagsExplicit(unittest.TestCase):
     def test_T107_32_action_file_tag_sets_explicit_tag(self):
         """T-107-32: [ACTION:file] 태그 포함 → filename 블록 explicit_tag=True."""
         d = _make_dispatcher()
-        act = "[ACTION:file]\n```filename:src/foo.py\ndef bar(): pass\n```"
+        act = "[ACTION:file]\n@@@filename:src/foo.py\ndef bar(): pass\n@@@"
         actions = d._parse(act)
         files = [a for a in actions if a.kind == "file"]
         self.assertEqual(len(files), 1)

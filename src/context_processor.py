@@ -19,18 +19,18 @@ class ContextProcessor:
     
     def normalize_backtick_blocks(self, text: str) -> str:
         """
-        AI 응답의 ``` 블록을 정렬한다.
+        AI 응답의 @@@ 블록을 정렬한다.
 
-        1. ``` 블록이 줄 시작에 오도록 정규화:
-           ``` 앞에 \\n이 없는 경우(문자열 시작 제외) \\n을 삽입
-        2. 언밸런스 ``` 보정:
-           ``` 개수가 홀수면 닫히지 않은 블록이므로 \\n``` 를 말미에 추가
+        1. @@@ 블록이 줄 시작에 오도록 정규화:
+           @@@ 앞에 \\n이 없는 경우(문자열 시작 제외) \\n을 삽입
+        2. 언밸런스 @@@ 보정:
+           @@@ 개수가 홀수면 닫히지 않은 블록이므로 \\n@@@ 를 말미에 추가
         """
-        text = re.sub(r'(?<=[^\n])(```)', r'\n\1', text)
-        if text.count("```") % 2 != 0:
+        text = re.sub(r'(?<=[^\n])(@@@)', r'\n\1', text)
+        if text.count("@@@") % 2 != 0:
             if not text.endswith("\n"):
                 text += "\n"
-            text += "```"
+            text += "@@@"
         return text
 
     def __init__(self, assistant, file_manager, streaming: bool = True,
@@ -226,7 +226,7 @@ class ContextProcessor:
                 print("✓ QC 결과: 변경 없음")
                 break
             if status == "rejected_filename":
-                print("⚠️  QC 응답에 ```filename:``` 펜스 — 거부 (patch 만 허용)")
+                print("⚠️  QC 응답에 @@@filename:``` 펜스 — 거부 (patch 만 허용)")
                 break  # filename 응답은 재시도해도 같은 결과일 가능성 큼
             if status == "patch_failed":
                 if attempt <= self.qc_max_retries:
@@ -283,7 +283,7 @@ class ContextProcessor:
             f"{content}\n"
             f"--- END ---\n\n"
             f"위 파일을 system prompt 의 검사 항목에 따라 검토하고,\n"
-            f"수정이 필요한 부분만 ```patch:{rel_path}``` 펜스로 출력하세요.\n"
+            f"수정이 필요한 부분만 @@@patch:{rel_path}@@@ 펜스로 출력하세요.\n"
             f"수정사항이 없으면 \"품질 양호 — 수정사항 없음\" 한 줄만 출력하세요."
         )
 
@@ -297,16 +297,16 @@ class ContextProcessor:
             status ∈ {"applied", "no_changes", "rejected_filename", "patch_failed"}
         """
         # 1) "수정사항 없음" 단축 응답
-        if "품질 양호" in response and "```patch:" not in response:
+        if "품질 양호" in response and "@@@patch:" not in response:
             return ("no_changes", 0, 0)
 
-        # 2) ```filename:``` 펜스 — 정책 위반: QC 는 patch 만 허용
-        has_filename = bool(re.search(r"^`{3,}filename:", response, re.MULTILINE))
-        has_patch = bool(re.search(r"^`{3,}patch:", response, re.MULTILINE))
+        # 2) @@@filename:<path>@@@ 펜스 — 정책 위반: QC 는 patch 만 허용
+        has_filename = bool(re.search(r"^@{3,}filename:", response, re.MULTILINE))
+        has_patch = bool(re.search(r"^@{3,}patch:", response, re.MULTILINE))
         if has_filename and not has_patch:
             return ("rejected_filename", 0, 0)
 
-        # 3) ```patch:<path>``` 펜스 추출
+        # 3) @@@patch:<path>@@@ 펜스 추출
         blocks = self._extract_patch_fences(response)
         if not blocks:
             return ("no_changes", 0, 0)
@@ -334,7 +334,7 @@ class ContextProcessor:
 
     def _extract_patch_fences(self, response: str) -> List[Tuple[str, str]]:
         """
-        응답에서 ```patch:<path> ... ``` 펜스를 추출.
+        응답에서 @@@patch:<path> ... @@@ 펜스를 추출.
 
         FSD v1.0.123 § A.4.5
 
@@ -345,7 +345,7 @@ class ContextProcessor:
         lines = response.splitlines()
         i = 0
         while i < len(lines):
-            m = re.match(r"^(`{3,})patch:(.+)$", lines[i].strip())
+            m = re.match(r"^(@{3,})patch:(.+)$", lines[i].strip())
             if not m:
                 i += 1
                 continue
@@ -373,7 +373,7 @@ class ContextProcessor:
 
     def _auto_save_files(self, response: str) -> List[str]:
         """
-        AI 응답에서 ```filename: 블록을 추출하여 자동 저장
+        AI 응답에서 @@@filename: 블록을 추출하여 자동 저장
         (확인 프롬프트 없이 자동 덮어쓰기)
 
         중첩 코드 블록 처리:
@@ -397,7 +397,7 @@ class ContextProcessor:
             stripped = line.strip()
 
             if not collecting:
-                match = re.match(r"^(`{3,})filename:(.+)$", stripped)
+                match = re.match(r"^(@{3,})filename:(.+)$", stripped)
                 if match:
                     delimiter = match.group(1)
                     current_path = match.group(2).strip()
@@ -426,11 +426,11 @@ class ContextProcessor:
                     next_idx = idx + 1
                     if next_idx < len(lines):
                         next_stripped = lines[next_idx].strip()
-                        # 다음 줄이 비어있지 않고, ``` 또는 ```filename:이 아니면
+                        # 다음 줄이 비어있지 않고, ``` 또는 @@@filename:이 아니면
                         # 이것은 언어 태그 없는 내부 코드 블록 시작
                         is_next_delimiter = next_stripped == delimiter
                         is_next_filename = re.match(
-                            r"^`{3,}filename:.+$", next_stripped
+                            r"^@{3,}filename:.+$", next_stripped
                         )
                         if (
                             next_stripped

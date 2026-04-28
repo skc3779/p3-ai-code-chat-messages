@@ -14,7 +14,7 @@ class ResponseParser:
 
     def parse_and_save(self, response: str, *, auto_overwrite: bool = False) -> List[str]:
         """
-        AI 응답에서 ``filename:`` 로 시작하는 파일 블록을 추출하여 저장합니다.
+        AI 응답에서 `@@@filename:` 로 시작하는 파일 블록을 추출하여 저장합니다.
         파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
         올바르게 전체 내용을 캡처하도록 라인 기반 파서를 사용합니다.
 
@@ -38,7 +38,7 @@ class ResponseParser:
         current_path: str = ""                 # 현재 파일의 상대 경로
         current_content: List[str] = []        # 현재 파일에 쓸 내용 라인들
         
-        delimiter: str = "```"                 # 현재 파일 블록의 닫는 구분자 (동적 감지)
+        delimiter: str = "@@@"                 # 현재 파일 블록의 닫는 구분자 (동적 감지)
         in_nested_block: bool = False          # 내부 코드 블록이 열려있는지 여부
 
         for idx, line in enumerate(lines):
@@ -47,8 +47,8 @@ class ResponseParser:
             # ── 파일 블록 시작 ──
             # (수집 중이 아닐 때)
             if not collecting:
-                # ```filename: 또는 ````filename: 등 감지
-                match = re.match(r"^(`{3,})filename:(.+)$", stripped)
+                # @@@filename: 또는 @@@@filename: 등 감지
+                match = re.match(r"^(@{3,})filename:(.+)$", stripped)
                 if match:
                     delimiter = match.group(1)
                     current_path = match.group(2).strip()
@@ -73,16 +73,16 @@ class ResponseParser:
                         current_content.append(line)
                         continue
 
-                    # 2-b) 내부 블록이 닫혀있는 상태에서 ``` 발견
+                    # 2-b) 내부 블록이 닫혀있는 상태에서 @@@ 발견
                     #      → 다음 줄을 확인하여 내부 코드 블록 시작인지 판별
                     next_idx = idx + 1
                     if next_idx < len(lines):
                         next_stripped = lines[next_idx].strip()
-                        # 다음 줄이 비어있지 않고, ``` 또는 ```filename:이 아니면
+                        # 다음 줄이 비어있지 않고, @@@ 또는 @@@filename:이 아니면
                         # 이것은 언어 태그 없는 내부 코드 블록 시작
                         is_next_delimiter = next_stripped == delimiter
                         is_next_filename = re.match(
-                            r"^`{3,}filename:.+$", next_stripped
+                            r"^@{3,}filename:.+$", next_stripped
                         )
                         if (
                             next_stripped

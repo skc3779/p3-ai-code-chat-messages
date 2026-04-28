@@ -67,7 +67,7 @@ class TestContextProcessorQC(unittest.TestCase):
         """TC-QC-01: quality_check=False 이면 2차 호출 없음"""
         proc, assistant, _ = self._make_processor(quality_check=False)
         assistant.set_responses([
-            "```filename:test.py\nprint('hello')\n```"
+            "@@@filename:test.py\nprint('hello')\n@@@"
         ])
 
         with patch.object(Path, 'relative_to', return_value=Path("test.py")):
@@ -87,11 +87,11 @@ class TestContextProcessorQC(unittest.TestCase):
         self.assertEqual(status, "no_changes")
         self.assertEqual(applied, 0)
 
-    # ─── TC-QC-03: ```filename:``` 펜스 거부 ─────────────────
+    # ─── TC-QC-03: @@@filename:@@@ 펜스 거부 ─────────────────
     def test_qc_rejects_filename_fence(self):
         """TC-QC-03: QC 가 filename 펜스만 보내면 rejected"""
         proc, _, _ = self._make_processor()
-        response = "여기를 수정합니다:\n```filename:test.py\nprint('world')\n```"
+        response = "여기를 수정합니다:\n@@@filename:test.py\nprint('world')\n@@@"
         status, _, _ = proc._apply_qc_patches(response, "test.py")
         self.assertEqual(status, "rejected_filename")
 
@@ -101,13 +101,13 @@ class TestContextProcessorQC(unittest.TestCase):
         proc, _, _ = self._make_processor()
         response = (
             "수정:\n"
-            "```patch:src/test.py\n"
+            "@@@patch:src/test.py\n"
             "<<<<<<< SEARCH\n"
             "old_line\n"
             "=======\n"
             "new_line\n"
             ">>>>>>> REPLACE\n"
-            "```"
+            "@@@"
         )
         pairs = proc._extract_patch_fences(response)
         self.assertEqual(len(pairs), 1)

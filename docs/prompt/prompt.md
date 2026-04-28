@@ -1439,4 +1439,24 @@ src\code_executor.py 파일에 버그 개선사항에 대한 tests\test_code_exe
 
 1,2 기능에 대해 `docs/requirements` 폴더에 `FSD v1.0.123` 문서로 작성한다.
 
+---
 
+AI 모델의 응답 개선을 위해 기존 "``` -> @@@" 패턴을 아래와 같이 개선하려고 합니다.
+`agent_runner.py` 의 _build_system_prompt 메소드의 시스템 프롬프트에 적용된 수정된 패턴 입니다.
+
+- 기존 :
+"```filename:경로/파일명.확장자\n코드 내용 ...\n```\n"
+"```patch:경로/파일명.확장자\n코드 내용 ...\n```\n"
+
+- 개선 :
+"@@@filename:경로/파일명.확장자\n코드 내용 ...\n@@@\n"
+"@@@patch:경로/파일명.확장자\n코드 내용 ...\n@@@\n"
+
+
+- 테스트 케이스에 대한 테스트 정상 ok 될수 있도록  `agent_action_dispatcher.py` 검토 및 개선 바랍니다.
+```powershell
+python -m unittest tests.test_agent_action_dispatcher -v
+python -m unittest tests.test_agent_dispatcher_patch -v
+```
+
+- 완료 후 docs/releases 폴더에 `RELEASE-v1.0.141` 문서로 작성해줘.

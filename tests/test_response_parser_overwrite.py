@@ -22,9 +22,9 @@ from src.file_manager import FileManager
 
 
 SINGLE_FILE_RESPONSE = """\
-```filename:target.py
+@@@filename:target.py
 new_content = 42
-```
+@@@
 """
 
 

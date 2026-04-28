@@ -39,7 +39,13 @@
       "Bash(python -m pytest tests/test_os_utils_and_agent_prompt.py -q)",
       "Bash(python -m pytest tests/test_os_utils_and_agent_prompt.py tests/test_agent_runner.py tests/test_agent_action_dispatcher.py tests/test_agent_patch_applier.py tests/test_agent_dispatcher_patch.py tests/test_agent_system_prompt_v111.py tests/test_agent_chain_danger.py tests/test_response_parser.py tests/test_response_parser_overwrite.py tests/test_bypass_approvals.py tests/test_agents_flags.py tests/test_agent_session_store.py tests/test_agent_input_listener.py -q)",
       "Bash(python -m pytest tests/test_agent_action_dispatcher.py::TestDispatcherBasic::test_T107_16_nested_code_shell_in_filename_block tests/test_agent_action_dispatcher.py::TestDispatcherBasic::test_T107_16_nested_not_code_shell_in_filename_block tests/test_agent_action_dispatcher.py::TestDispatcherBasic::test_T107_16_nested_not_code_shell_in_multi_filename_block -v)",
-      "Bash(python -m pytest tests/test_agent_action_dispatcher.py -v)"
+      "Bash(python -m pytest tests/test_agent_action_dispatcher.py -v)",
+      "Bash(python -m unittest tests.test_agent_action_dispatcher -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m unittest tests.test_agent_action_dispatcher -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m unittest tests.test_agent_dispatcher_patch -v)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m unittest tests.test_agent_dispatcher_patch)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m unittest tests.test_response_parser tests.test_response_parser_overwrite)",
+      "Bash(PYTHONIOENCODING=utf-8 python -m unittest tests.test_agent_action_dispatcher tests.test_agent_dispatcher_patch tests.test_response_parser tests.test_response_parser_overwrite)"
     ]
   }
 }

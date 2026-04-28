@@ -115,7 +115,8 @@ class AgentActionDispatcher:
         return results
 
     # ─── 파싱 ──────────────────────────────────────────────────
-    _RE_FENCE_LINE = re.compile(r'^[ \t]*(`{3,})(\S*)[ \t]*$')
+    # v1.0.141 — `@@@` 도 펜스 마커로 인식 (filename:/patch: 전용 신규 패턴)
+    _RE_FENCE_LINE = re.compile(r'^[ \t]*(`{3,}|@{3,})(\S*)[ \t]*$')
 
     def _parse(self, act_text: str) -> List[_ParsedAction]:
         """act_text 를 파싱하여 _ParsedAction 리스트를 반환.
@@ -123,6 +124,9 @@ class AgentActionDispatcher:
         라인 단위 depth-counting 방식으로 펜스 블록을 파싱한다.
         filename:/patch: 블록 내부에 중첩된 코드 펜스가 있어도 올바르게
         바깥 블록의 닫힘 위치를 탐색한다 (BUG v1.0.121).
+
+        v1.0.141: 펜스 마커로 백틱(```) 외에 `@@@` 도 허용. 두 종류의
+        마커는 길이 비교만 수행하므로 상호 호환된다.
         """
         actions: List[_ParsedAction] = []
         lines = act_text.split('\n')
@@ -246,7 +250,7 @@ class AgentActionDispatcher:
     # ─── 실행 어댑터 ──────────────────────────────────────────
     def _exec_file(self, session, a: _ParsedAction) -> list:
         """파일 저장 — AgentRunner._save_file_blocks() 위임."""
-        fake = f"```filename:{a.filepath}\n{a.payload}\n```"
+        fake = f"@@@filename:{a.filepath}\n{a.payload}\n@@@"
         return self._runner._save_file_blocks(session, fake)
 
     def _exec_code(self, a: _ParsedAction):

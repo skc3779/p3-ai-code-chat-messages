@@ -69,9 +69,15 @@ class GenAICodeAssistant:
 
 [필수] 코드나 파일을 생성할 때는 반드시 아래 형식을 정확히 따르세요:
 
-```filename:경로/파일명.확장자
+@@@filename:경로/파일명.확장자
 코드 내용
-```
+@@@
+
+- 예시:
+@@@filename:src/utils.py
+def add(a, b):
+    return a + b
+@@@
 
 [필수] 파일 시스템 조작, Git 작업, 패키지 확인이 필요한 경우 제공된 도구(Tools)를 사용하세요.
 
@@ -101,11 +107,12 @@ class GenAICodeAssistant:
 {"name": "read_file", "input": {"path": "src/main.py"}}
 ```
 
-주의사항:
-- 반드시 ```filename: 형식을 사용하세요 (```python, ```javascript 등 언어 식별자 사용 금지)
-- 여러 파일은 각각 별도의 코드 블록으로 작성하세요
-- 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
-- 문서작성 시 이모지(Emoji) 사용을 하지 마세요
+- 주의사항:
+    - 파일 생성 요청이 있으면 코드블럭은 반드시 `@@@filename:경로/파일명.확장자` 시작하고 `@@@` 으로 끝나야함
+    - `@@@filename:` 뒤에 공백 없이 바로 경로 및 파일명을 작성하세요.
+    - 여러 파일은 각각 별도의 코드 블록으로 작성하세요
+    - 파일 경로는 프로젝트 루트 기준 상대 경로를 사용하세요
+    - 문서작성 시 이모지(Emoji) 사용을 하지 마세요
 
 [실행 환경]
 """ + _get_os_shell_hint() + """
@@ -423,7 +430,7 @@ class GenAICodeAssistant:
 
     def extract_and_save_files(self, response: str) -> List[str]:
         """
-        AI 응답에서 ````filename:```` 로 시작하는 파일 블록을 추출하여 저장합니다.
+        AI 응답에서 @@@filename:@@@ 로 시작하는 파일 블록을 추출하여 저장합니다.
         파일 내용에 내부 코드 블록(```python, ``` 등)이 포함되어 있어도
         올바르게 전체 내용을 캡처하도록 라인 기반 파서를 사용합니다.
         """

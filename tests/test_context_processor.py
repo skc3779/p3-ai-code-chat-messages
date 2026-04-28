@@ -37,9 +37,9 @@ class TestContextProcessor(unittest.TestCase):
         # AI 응답에 filename: 블록 포함
         self.mock_assistant.chat.return_value = (
             "번역 결과입니다.\n"
-            "```filename:output/file1.md\n"
+            "@@@filename:output/file1.md\n"
             "번역된 내용\n"
-            "```"
+            "@@@"
         )
 
         processor = ContextProcessor(
@@ -62,8 +62,8 @@ class TestContextProcessor(unittest.TestCase):
     def test_process_multiple_files(self):
         """여러 파일 순차 처리 테스트"""
         self.mock_assistant.chat.side_effect = [
-            "```filename:output/file1.md\n번역1\n```",
-            "```filename:output/file2.md\n번역2\n```",
+            "@@@filename:output/file1.md\n번역1\n@@@",
+            "@@@filename:output/file2.md\n번역2\n@@@",
         ]
 
         processor = ContextProcessor(
@@ -85,8 +85,8 @@ class TestContextProcessor(unittest.TestCase):
     def test_multiple_output_files_per_input(self):
         """1개 입력 → 다중 출력 파일 테스트"""
         self.mock_assistant.chat.return_value = (
-            "```filename:src/service.java\nclass Service {}\n```\n"
-            "```filename:src/interface.java\ninterface IService {}\n```"
+            "@@@filename:src/service.java\nclass Service {}\n@@@\n"
+            "@@@filename:src/interface.java\ninterface IService {}\n@@@"
         )
 
         processor = ContextProcessor(
@@ -139,7 +139,7 @@ class TestContextProcessor(unittest.TestCase):
             file_manager=self.file_manager,
         )
 
-        response = "```filename:deep/nested/dir/file.txt\n내용\n```"
+        response = "@@@filename:deep/nested/dir/file.txt\n내용\n@@@"
         saved = processor._auto_save_files(response)
 
         self.assertEqual(len(saved), 1)
@@ -155,7 +155,7 @@ class TestContextProcessor(unittest.TestCase):
             file_manager=self.file_manager,
         )
 
-        response = "```filename:existing.txt\nnew content\n```"
+        response = "@@@filename:existing.txt\nnew content\n@@@"
         saved = processor._auto_save_files(response)
 
         self.assertEqual(len(saved), 1)
@@ -169,13 +169,13 @@ class TestContextProcessor(unittest.TestCase):
         )
 
         response = (
-            "```filename:README.md\n"
+            "@@@filename:README.md\n"
             "# Hello\n"
             "```python\n"
             "print('hello')\n"
             "```\n"
             "End.\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -186,7 +186,7 @@ class TestContextProcessor(unittest.TestCase):
 
     def test_file_read_failure_continues(self):
         """파일 읽기 실패 시 다음 파일로 계속"""
-        self.mock_assistant.chat.return_value = "```filename:out.md\n결과\n```"
+        self.mock_assistant.chat.return_value = "@@@filename:out.md\n결과\n@@@"
 
         processor = ContextProcessor(
             assistant=self.mock_assistant,
@@ -212,7 +212,7 @@ class TestContextProcessor(unittest.TestCase):
         )
 
         response = (
-            "```filename:doc.md\n"
+            "@@@filename:doc.md\n"
             "# Title\n"
             "\n"
             "```\n"
@@ -220,7 +220,7 @@ class TestContextProcessor(unittest.TestCase):
             "```\n"
             "\n"
             "End.\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -237,7 +237,7 @@ class TestContextProcessor(unittest.TestCase):
         )
 
         response = (
-            "```filename:multi.md\n"
+            "@@@filename:multi.md\n"
             "# Title\n"
             "\n"
             "```\n"
@@ -251,7 +251,7 @@ class TestContextProcessor(unittest.TestCase):
             "```\n"
             "\n"
             "End.\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -270,7 +270,7 @@ class TestContextProcessor(unittest.TestCase):
         )
 
         response = (
-            "```filename:mixed.md\n"
+            "@@@filename:mixed.md\n"
             "## 상세 설계서\n"
             "\n"
             "### SQL Section\n"
@@ -296,7 +296,7 @@ class TestContextProcessor(unittest.TestCase):
             "* Item 1\n"
             "* Item 2\n"
             "\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -317,7 +317,7 @@ class TestContextProcessor(unittest.TestCase):
         )
 
         response = (
-            "```filename:md_excel2/IF_XXXX.md\n"
+            "@@@filename:md_excel2/IF_XXXX.md\n"
             "\n"
             "## 📂 IF_XXXX: 상세 설계서\n"
             "\n"
@@ -361,7 +361,7 @@ class TestContextProcessor(unittest.TestCase):
             "\n"
             "* **API Endpoint**: `https://api.example.com`\n"
             "\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -387,7 +387,7 @@ class TestContextProcessor(unittest.TestCase):
         response = (
             "답변입니다.\n"
             "\n"
-            "```filename:file_a.md\n"
+            "@@@filename:file_a.md\n"
             "# File A\n"
             "\n"
             "```\n"
@@ -395,9 +395,9 @@ class TestContextProcessor(unittest.TestCase):
             "```\n"
             "\n"
             "End A.\n"
-            "```\n"
+            "@@@\n"
             "\n"
-            "```filename:file_b.md\n"
+            "@@@filename:file_b.md\n"
             "# File B\n"
             "\n"
             "```python\n"
@@ -405,7 +405,7 @@ class TestContextProcessor(unittest.TestCase):
             "```\n"
             "\n"
             "End B.\n"
-            "```"
+            "@@@"
         )
         saved = processor._auto_save_files(response)
 
@@ -422,14 +422,14 @@ class TestContextProcessor(unittest.TestCase):
     # ──────────────────────────────────────────────────────────────────────
 
     def test_process_single_file_no_newline_before_backtick(self):
-        """단일 파일 처리: ```filename: 앞과 닫는 ``` 앞에 \n 없는 경우"""
+        """단일 파일 처리: @@@filename: 앞과 닫는 ``` 앞에 \n 없는 경우"""
         self.mock_assistant.chat.return_value = (
             "번역 결과입니다."
-            "```filename:output/file1.md\n"
+            "@@@filename:output/file1.md\n"
             "번역된 내용"
-            "```"
+            "@@@"
         )
-        # 실제 전달 문자열: "번역 결과입니다.```filename:output/file1.md\n번역된 내용```"
+        # 실제 전달 문자열: "번역 결과입니다.@@@filename:output/file1.md\n번역된 내용@@@"
 
         processor = ContextProcessor(
             assistant=self.mock_assistant,
@@ -451,8 +451,8 @@ class TestContextProcessor(unittest.TestCase):
     def test_process_multiple_files_no_newline_before_backtick(self):
         """여러 파일 순차 처리: 닫는 ``` 앞에 \n 없는 경우"""
         self.mock_assistant.chat.side_effect = [
-            "```filename:output/file1.md\n번역1```",
-            "```filename:output/file2.md\n번역2```",
+            "@@@filename:output/file1.md\n번역1@@@",
+            "@@@filename:output/file2.md\n번역2@@@",
         ]
 
         processor = ContextProcessor(
@@ -479,10 +479,10 @@ class TestContextProcessor(unittest.TestCase):
         )
 
     def test_multiple_output_files_no_newline_before_backtick(self):
-        """1개 입력 → 다중 출력: 닫는 ``` 앞에 \n 없는 경우"""
+        """1개 입력 → 다중 출력: 닫는 @@@ 앞에 \n 없는 경우"""
         self.mock_assistant.chat.return_value = (
-            "```filename:src/service.java\nclass Service {}```\n"
-            "```filename:src/interface.java\ninterface IService {}```"
+            "@@@filename:src/service.java\nclass Service {}@@@\n"
+            "@@@filename:src/interface.java\ninterface IService {}@@@"
         )
 
         processor = ContextProcessor(
