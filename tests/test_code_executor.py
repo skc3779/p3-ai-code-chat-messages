@@ -125,13 +125,13 @@ code2
 
         self.assertIn('bash', executor.SUPPORTED_LANGUAGES)
         lang_config = executor.SUPPORTED_LANGUAGES['bash']
-        self.assertEqual(lang_config['cmd'], 'powershell.exe')
+        self.assertEqual(lang_config['cmd'], 'pwsh.exe')
         self.assertEqual(lang_config['ext'], '.ps1')
         self.assertIn('-File', lang_config['args'])
 
         self.assertIn('powershell', executor.SUPPORTED_LANGUAGES)
-        self.assertEqual(executor.SUPPORTED_LANGUAGES['powershell']['cmd'], 'powershell.exe')
-        self.assertEqual(executor.SUPPORTED_LANGUAGES['ps1']['cmd'], 'powershell.exe')
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['powershell']['cmd'], 'pwsh.exe')
+        self.assertEqual(executor.SUPPORTED_LANGUAGES['ps1']['cmd'], 'pwsh.exe')
 
     @patch.object(TerminalExecutor, 'get_shell_type', return_value='Linux')
     def test_shell_config_linux(self, _mock):

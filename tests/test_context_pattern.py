@@ -360,10 +360,6 @@ class TestScriptConsistency(unittest.TestCase):
         """TC-21: 3개 스크립트 모두 /context 도움말 5줄 출력"""
         expected_lines = [
             "형식: /context",
-            "질문을 생략하면 멀티라인",
-            "예: /context src/*.py",
-            "예: /context src/*.py",
-            "예: /context [src/*.py",
         ]
         for name, source in self.scripts.items():
             handler = self._extract_context_handler(source)

@@ -59,7 +59,7 @@ class TestSystemPromptV111(unittest.TestCase):
 
     # ─── T-111-41 ──────────────────────────────────────────
     def test_T111_41_patch_marker_documented(self):
-        self.assertIn("```patch:<상대경로>", self.prompt)
+        self.assertIn("@@@patch:경로/파일명.확장자", self.prompt)
         self.assertIn("<<<<<<< SEARCH", self.prompt)
         self.assertIn(">>>>>>> REPLACE", self.prompt)
 
@@ -85,7 +85,7 @@ class TestSystemPromptV111(unittest.TestCase):
     def test_filename_a1_documented(self):
         # FR-111-19 — 신규 파일은 ```filename:``` 사용 권장 명시
         self.assertIn("선택지 A-1", self.prompt)
-        self.assertIn("```filename:", self.prompt)
+        self.assertIn("@@@filename:", self.prompt)
 
     def test_no_os_call_in_code_warning(self):
         # FR-111-20 — 코드(B) 안에서 OS 호출 금지 안내

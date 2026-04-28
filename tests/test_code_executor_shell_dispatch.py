@@ -27,7 +27,7 @@ class TestShellLangConfig(unittest.TestCase):
     # T-110-20
     def test_powershell_cmd(self):
         cfg = CodeExecutor._shell_lang_config("Windows PowerShell")
-        self.assertEqual(cfg["cmd"], "powershell.exe")
+        self.assertEqual(cfg["cmd"], "pwsh.exe")
         self.assertEqual(cfg["ext"], ".ps1")
 
     # T-110-21
@@ -55,7 +55,7 @@ class TestBuildSupportedLanguages(unittest.TestCase):
         langs = CodeExecutor._build_supported_languages("Windows PowerShell")
         for key in ("bash", "sh", "shell", "powershell", "ps1"):
             with self.subTest(key=key):
-                self.assertEqual(langs[key]["cmd"], "powershell.exe")
+                self.assertEqual(langs[key]["cmd"], "pwsh.exe")
                 self.assertEqual(langs[key]["ext"], ".ps1")
 
     def test_native_languages_always_present(self):

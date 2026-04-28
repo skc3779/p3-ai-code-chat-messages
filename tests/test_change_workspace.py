@@ -211,9 +211,9 @@ class TestGeminiChangeWorkspace(TestChangeWorkspaceBase):
         assistant.change_workspace(str(self.target_workspace))
 
         response = """
-```filename:src/app.py
+@@@filename:src/app.py
 print('saved to target workspace')
-```
+@@@
 """
         saved = assistant.extract_and_save_files(response)
 
@@ -354,9 +354,9 @@ class TestGenAIChangeWorkspace(TestChangeWorkspaceBase):
         assistant.change_workspace(str(self.target_workspace))
 
         response = """
-```filename:lib/utils.js
+@@@filename:lib/utils.js
 console.log('hello');
-```
+@@@
 """
         saved = assistant.extract_and_save_files(response)
 

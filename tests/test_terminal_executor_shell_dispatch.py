@@ -20,7 +20,7 @@ class TestComposeArgv(unittest.TestCase):
     # T-110-10
     def test_powershell_argv(self):
         argv, shell_flag = TerminalExecutor._compose_argv("Windows PowerShell", "Get-ChildItem")
-        self.assertEqual(argv[0], "powershell.exe")
+        self.assertEqual(argv[0], "pwsh.exe")
         self.assertIn("-Command", argv)
         self.assertFalse(shell_flag)
 
@@ -108,7 +108,7 @@ class TestExecuteShellDispatch(unittest.TestCase):
         call = self._run_with_shell("Windows PowerShell", "Get-ChildItem")
         argv = call[0][0]
         shell_flag = call[1]["shell"]
-        self.assertEqual(argv[0], "powershell.exe")
+        self.assertEqual(argv[0], "pwsh.exe")
         self.assertIn("-Command", argv)
         self.assertFalse(shell_flag)
 
