@@ -140,8 +140,8 @@ class TestRunMaxIterationsOverride(unittest.TestCase):
         def fake_chat(*_args, **_kwargs):
             call_count["n"] += 1
             if call_count["n"] >= done_after:
-                return "[REASON] done\n[ACT] nothing\n[OBSERVE] ok\n[AGENT_DONE]"
-            return "[REASON] working\n[ACT] nothing\n[OBSERVE] in progress"
+                return "[REASON] done\n[ACTION] nothing\n[OBSERVE] ok\n[AGENT_DONE]"
+            return "[REASON] working\n[ACTION] nothing\n[OBSERVE] in progress"
 
         assistant = MagicMock()
         assistant.conversation_history = []
@@ -152,7 +152,7 @@ class TestRunMaxIterationsOverride(unittest.TestCase):
     def test_T101_08_loop_respects_override(self):
         """T-101-08: max_iterations_override=3 이면 최대 3회 후 종료"""
         runner = _make_runner(AGENT_MAX_ITERATIONS="10")
-        runner.assistant.chat.return_value = "[REASON] r\n[ACT] a\n[OBSERVE] o"
+        runner.assistant.chat.return_value = "[REASON] r\n[ACTION] a\n[OBSERVE] o"
         runner._ask_continue = MagicMock(return_value=('c', None))
         runner._input_listener = MagicMock()
         runner._input_listener.enabled = False
@@ -167,7 +167,7 @@ class TestRunMaxIterationsOverride(unittest.TestCase):
     def test_T101_09_instance_max_iterations_unchanged(self):
         """T-101-09: run() 후 runner.max_iterations 는 변경 없음"""
         runner = _make_runner(AGENT_MAX_ITERATIONS="10")
-        runner.assistant.chat.return_value = "[REASON] r\n[ACT] a\n[OBSERVE] o"
+        runner.assistant.chat.return_value = "[REASON] r\n[ACTION] a\n[OBSERVE] o"
 
         with patch("src.agent_session_store.AgentSessionStore"):
             runner.run(goal="test", max_iterations_override=3)
@@ -260,7 +260,7 @@ class TestResumeResetsEffectiveMax(unittest.TestCase):
     def test_T101_15_reset_on_resume(self):
         """T-101-15: resume 된 세션의 effective_max_iterations 는 run() 초기에 None → 재계산"""
         runner = _make_runner(AGENT_MAX_ITERATIONS="10")
-        runner.assistant.chat.return_value = "[REASON] r\n[ACT] a\n[OBSERVE] o"
+        runner.assistant.chat.return_value = "[REASON] r\n[ACTION] a\n[OBSERVE] o"
 
         # 이전 실행에서 20으로 설정된 세션을 resume
         prev_session = AgentSession(goal="prev")

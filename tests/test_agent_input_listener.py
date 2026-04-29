@@ -168,7 +168,7 @@ class TestRunnerAsyncStop(unittest.TestCase):
         # 첫 번째 호출에서 stop 요청
         fake.is_stop_requested.return_value = True
 
-        runner.assistant.chat.return_value = "[REASON]r[ACT]a[OBSERVE]o"
+        runner.assistant.chat.return_value = "[REASON]r[ACTION]a[OBSERVE]o"
 
         session = AgentSession(goal="g", plan="p")
         # resume_session 경로로 진입하여 PLAN 호출 없이 바로 루프로
@@ -186,7 +186,7 @@ class TestRunnerAsyncStop(unittest.TestCase):
         fake.is_stop_requested.side_effect = [False, True]
 
         def fake_chat(prompt, streaming, include_context):
-            return "[REASON]이유[ACT]행동[OBSERVE]관찰"
+            return "[REASON]이유[ACTION]행동[OBSERVE]관찰"
         runner.assistant.chat.side_effect = fake_chat
 
         session = AgentSession(goal="g", plan="p")
@@ -204,7 +204,7 @@ class TestRunnerAsyncStop(unittest.TestCase):
 
         # cp1=False, cp2=False, cp3=True
         fake.is_stop_requested.side_effect = [False, False, True]
-        runner.assistant.chat.return_value = "[REASON]r[ACT]a[OBSERVE]o"
+        runner.assistant.chat.return_value = "[REASON]r[ACTION]a[OBSERVE]o"
 
         session = AgentSession(goal="g", plan="p")
         result = runner.run(resume_session=session)
@@ -219,7 +219,7 @@ class TestRunnerAsyncStop(unittest.TestCase):
         fake = self._patch_listener(runner)
         fake.is_stop_requested.return_value = False
 
-        runner.assistant.chat.return_value = "[REASON]r[ACT]a[OBSERVE]o"
+        runner.assistant.chat.return_value = "[REASON]r[ACTION]a[OBSERVE]o"
 
         # _ask_continue 을 's' 로 즉시 중단 — 한 번만 호출되도록
         runner._ask_continue = MagicMock(return_value=('s', None))

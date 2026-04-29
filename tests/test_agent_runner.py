@@ -70,10 +70,10 @@ class TestParseBlocks(unittest.TestCase):
         self.runner = _make_runner()
 
     def test_T01_all_blocks_extracted(self):
-        """T-01: [REASON]/[ACT]/[OBSERVE] 세 블록 모두 추출"""
+        """T-01: [REASON]/[ACTION]/[OBSERVE] 세 블록 모두 추출"""
         response = (
             "[REASON]\n분석 내용입니다\n\n"
-            "[ACT]\n코드 작성\n\n"
+            "[ACTION]\n코드 작성\n\n"
             "[OBSERVE]\n예상 결과"
         )
         reason, act, obs = self.runner._parse_blocks(response)
@@ -83,7 +83,7 @@ class TestParseBlocks(unittest.TestCase):
 
     def test_T02_missing_observe_returns_empty(self):
         """T-02: [OBSERVE] 없으면 obs == ''"""
-        response = "[REASON]\n이유\n\n[ACT]\n행동"
+        response = "[REASON]\n이유\n\n[ACTION]\n행동"
         reason, act, obs = self.runner._parse_blocks(response)
         self.assertIn("이유", reason)
         self.assertIn("행동", act)
@@ -111,7 +111,7 @@ class TestParseBlocks(unittest.TestCase):
 
     def test_T04c_agent_done_stops_act_parsing(self):
         """T-04c: [AGENT_DONE] 이후 내용은 act 에 포함되지 않음"""
-        response = "[REASON]\n이유\n\n[ACT]\n행동\n\n[OBSERVE]\n관찰\n\n[AGENT_DONE]"
+        response = "[REASON]\n이유\n\n[ACTION]\n행동\n\n[OBSERVE]\n관찰\n\n[AGENT_DONE]"
         reason, act, obs = self.runner._parse_blocks(response)
         self.assertIn("행동", act)
         self.assertNotIn("[AGENT_DONE]", act)
