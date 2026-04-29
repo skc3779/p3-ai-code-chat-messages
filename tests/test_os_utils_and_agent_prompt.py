@@ -130,14 +130,14 @@ class TestBuildSystemPrompt107(unittest.TestCase):
 
     @patch(_SHELL_TYPE_PATCH, return_value="Windows PowerShell")
     def test_T107_02_forbidden_patterns_section(self, _m):
-        """T-107-02 (v1.0.115 update): 프롬프트에 ❌ 자주 하는 실수 가이드 존재.
+        """T-107-02 (v1.0.115 update): 프롬프트에 자주 하는 실수 가이드 존재.
 
-        v1.0.111 부터 [❌ 금지 패턴] 섹션은 선택지 A-2 의 "❌ 자주 하는 실수"
+        v1.0.111 부터 [금지 패턴] 섹션은 선택지 A-2 의 "자주 하는 실수"
         목록으로 재구성되었다.
         """
         runner = _make_runner()
         prompt = runner._build_system_prompt()
-        self.assertIn("❌ 자주 하는 실수", prompt)
+        self.assertIn("자주 하는 실수", prompt)
 
     @patch(_SHELL_TYPE_PATCH, return_value="Windows PowerShell")
     def test_T107_03_shell_brief_header(self, _m):

@@ -1,18 +1,19 @@
 """
-GenAIApiLogger 단위 테스트
+ApiLogger 단위 테스트 (공통)
 
-FSD v1.0.062 테스트 케이스:
-- TC-062-001: GEN_AI_LOG_ENABLED=true일 때 Request 로그 생성
-- TC-062-002: GEN_AI_LOG_ENABLED=true일 때 Response 로그 생성
-- TC-062-003: GEN_AI_LOG_ENABLED=false일 때 로그 미생성
+FSD v1.0.062 / REQ-064-001~006 테스트 케이스:
+- 환경변수 TEST_PROVIDER를 통해 claude, gemini, gen-ai 중 하나를 선택하여 테스트
+- TC-062-001: 활성화 시 Request 로그 생성
+- TC-062-002: 활성화 시 Response 로그 생성
+- TC-062-003: 비활성화 시 로그 미생성
 - TC-062-004: 환경변수 미설정 시 기본값 false
 - TC-062-005: Request-Response 쌍 UUID 동일
 - TC-062-006: Secret 헤더 마스킹
-- TC-062-007: logs/gen-ai/ 폴더 자동 생성
+- TC-062-007: 지정된 폴더 자동 생성
 - TC-062-008: 스트리밍 응답 chunk_count 기록
 - TC-062-009: elapsed_ms 기록
 - TC-062-010: JSON 형식 검증
-- TC-062-011: 파일명 패턴 검증 (gen-ai-{UUID}-request/response-{TS}.json)
+- TC-062-011: 파일명 패턴 검증
 """
 
 import json
@@ -24,9 +25,18 @@ from unittest.mock import patch
 
 from src.api_logger import ApiLogger
 
+# 테스트할 제공자(provider) 선택: "claude", "gemini", "gen-ai"
+# 환경변수 TEST_PROVIDER를 통해 주입받으며 기본값은 "gen-ai"
+PROVIDER_NAME = os.getenv("TEST_PROVIDER", "gen-ai")
 
-class TestGenAIApiLogger(unittest.TestCase):
-    """GenAIApiLogger 단위 테스트"""
+if PROVIDER_NAME == "gen-ai":
+    LOG_ENV_KEY = "GEN_AI_LOG_ENABLED"
+else:
+    LOG_ENV_KEY = f"{PROVIDER_NAME.replace('-', '_').upper()}_AI_LOG_ENABLED"
+
+
+class TestApiLogger(unittest.TestCase):
+    """ApiLogger 공통 단위 테스트"""
 
     def setUp(self):
         """테스트용 임시 디렉토리 생성"""
@@ -38,8 +48,8 @@ class TestGenAIApiLogger(unittest.TestCase):
 
     def _make_logger(self, enabled: str = "true"):
         """테스트용 로거 생성 (환경변수 mock)"""
-        with patch.dict(os.environ, {"GEN_AI_LOG_ENABLED": enabled}):
-            return ApiLogger(provider="gen-ai", workspace_dir=self.test_dir)
+        with patch.dict(os.environ, {LOG_ENV_KEY: enabled}):
+            return ApiLogger(provider=PROVIDER_NAME, workspace_dir=self.test_dir)
 
     def _sample_headers(self):
         return {
@@ -60,7 +70,7 @@ class TestGenAIApiLogger(unittest.TestCase):
     # ── TC-062-001: Request 로그 생성 ──
 
     def test_log_request_creates_file(self):
-        """GEN_AI_LOG_ENABLED=true일 때 Request 로그 파일 생성"""
+        """활성화 시 Request 로그 파일 생성"""
         logger = self._make_logger("true")
         log_id = logger.log_request(
             api_url="https://example.com/api",
@@ -71,14 +81,14 @@ class TestGenAIApiLogger(unittest.TestCase):
         )
 
         # 파일이 생성되었는지 확인
-        log_files = list(logger.log_dir.glob("gen-ai-*-request-*.json"))
+        log_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-*-request.json"))
         self.assertEqual(len(log_files), 1)
         self.assertIn(log_id, log_files[0].name)
 
     # ── TC-062-002: Response 로그 생성 ──
 
     def test_log_response_creates_file(self):
-        """GEN_AI_LOG_ENABLED=true일 때 Response 로그 파일 생성"""
+        """활성화 시 Response 로그 파일 생성"""
         logger = self._make_logger("true")
         log_id = logger.log_request(
             api_url="https://example.com/api",
@@ -95,14 +105,14 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=1000
         )
 
-        log_files = list(logger.log_dir.glob("gen-ai-*-response-*.json"))
+        log_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-*-response.json"))
         self.assertEqual(len(log_files), 1)
         self.assertIn(log_id, log_files[0].name)
 
-    # ── TC-062-003: GEN_AI_LOG_ENABLED=false ──
+    # ── TC-062-003: 로그 미생성 ──
 
     def test_disabled_no_files(self):
-        """GEN_AI_LOG_ENABLED=false일 때 파일 미생성"""
+        """비활성화 시 파일 미생성"""
         logger = self._make_logger("false")
         log_id = logger.log_request(
             api_url="https://example.com/api",
@@ -131,10 +141,10 @@ class TestGenAIApiLogger(unittest.TestCase):
     def test_default_disabled(self):
         """환경변수 미설정 시 disabled"""
         with patch.dict(os.environ, {}, clear=True):
-            # GEN_AI_LOG_ENABLED가 없으므로 기본값 false
-            if "GEN_AI_LOG_ENABLED" in os.environ:
-                del os.environ["GEN_AI_LOG_ENABLED"]
-            logger = ApiLogger(provider="gen-ai", workspace_dir=self.test_dir)
+            # LOG_ENV_KEY가 없으므로 기본값 false
+            if LOG_ENV_KEY in os.environ:
+                del os.environ[LOG_ENV_KEY]
+            logger = ApiLogger(provider=PROVIDER_NAME, workspace_dir=self.test_dir)
             self.assertFalse(logger.enabled)
 
     # ── TC-062-005: Request-Response UUID 동일 ──
@@ -158,8 +168,8 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=100
         )
 
-        req_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-request-*.json"))
-        resp_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-response-*.json"))
+        req_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-request.json"))
+        resp_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-response.json"))
         self.assertEqual(len(req_files), 1)
         self.assertEqual(len(resp_files), 1)
 
@@ -176,7 +186,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             model_id="test-model"
         )
 
-        req_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-request-*.json"))
+        req_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-request.json"))
         with open(req_files[0], "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -186,7 +196,7 @@ class TestGenAIApiLogger(unittest.TestCase):
     # ── TC-062-007: 폴더 자동 생성 ──
 
     def test_log_dir_auto_created(self):
-        """logs/gen-ai/ 폴더 자동 생성"""
+        """logs/{provider}/ 폴더 자동 생성"""
         logger = self._make_logger("true")
         self.assertTrue(logger.log_dir.exists())
         self.assertTrue(logger.log_dir.is_dir())
@@ -206,7 +216,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=5000
         )
 
-        resp_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-response-*.json"))
+        resp_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-response.json"))
         with open(resp_files[0], "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -228,7 +238,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=3250
         )
 
-        resp_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-response-*.json"))
+        resp_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-response.json"))
         with open(resp_files[0], "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -247,7 +257,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             model_id="test-model"
         )
 
-        req_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-request-*.json"))
+        req_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-request.json"))
         content = req_files[0].read_text(encoding="utf-8")
 
         # indent=2 확인 (들여쓰기 존재)
@@ -263,7 +273,7 @@ class TestGenAIApiLogger(unittest.TestCase):
     # ── TC-062-011: 파일명 패턴 검증 ──
 
     def test_filename_pattern(self):
-        """파일명이 gen-ai-{UUID}-request/response-{TS}.json 패턴"""
+        """파일명이 {provider}-{UUID}-request/response.json 패턴인지 검증"""
         logger = self._make_logger("true")
         log_id = logger.log_request(
             api_url="https://example.com/api",
@@ -281,16 +291,16 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=100
         )
 
-        req_files = list(logger.log_dir.glob("gen-ai-*-request-*.json"))
-        resp_files = list(logger.log_dir.glob("gen-ai-*-response-*.json"))
+        req_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-*-request.json"))
+        resp_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-*-response.json"))
 
         # 파일명에 UUID가 request/response 앞에 위치
         req_name = req_files[0].name
-        self.assertTrue(req_name.startswith(f"gen-ai-{log_id}-request-"))
+        self.assertTrue(req_name.startswith(f"{PROVIDER_NAME}-{log_id}-request"))
         self.assertTrue(req_name.endswith(".json"))
 
         resp_name = resp_files[0].name
-        self.assertTrue(resp_name.startswith(f"gen-ai-{log_id}-response-"))
+        self.assertTrue(resp_name.startswith(f"{PROVIDER_NAME}-{log_id}-response"))
         self.assertTrue(resp_name.endswith(".json"))
 
     # ── TC-062-012: Request 로그 내용 검증 ──
@@ -306,7 +316,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             model_id="gpt-oss-120B-medium"
         )
 
-        req_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-request-*.json"))
+        req_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-request.json"))
         with open(req_files[0], "r", encoding="utf-8") as f:
             data = json.load(f)
 
@@ -334,7 +344,7 @@ class TestGenAIApiLogger(unittest.TestCase):
             elapsed_ms=2000
         )
 
-        resp_files = list(logger.log_dir.glob(f"gen-ai-{log_id}-response-*.json"))
+        resp_files = list(logger.log_dir.glob(f"{PROVIDER_NAME}-{log_id}-response.json"))
         with open(resp_files[0], "r", encoding="utf-8") as f:
             data = json.load(f)
 

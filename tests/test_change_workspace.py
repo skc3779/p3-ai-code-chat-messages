@@ -49,9 +49,9 @@ class TestResponseParserWorkspaceSync(TestChangeWorkspaceBase):
         parser = ResponseParser(fm)
 
         response = """
-```filename:src/hello.py
+@@@filename:src/hello.py
 print('hello')
-```
+@@@
 """
         saved = parser.parse_and_save(response)
 
@@ -71,9 +71,9 @@ print('hello')
         parser.file_manager = new_fm
 
         response = """
-```filename:src/hello.py
+@@@filename:src/hello.py
 print('hello from target')
-```
+@@@
 """
         saved = parser.parse_and_save(response)
 
@@ -95,9 +95,9 @@ print('hello from target')
             parser = ResponseParser(fm)
 
             response_a = """
-```filename:file_a.txt
+@@@filename:file_a.txt
 content_a
-```
+@@@
 """
             # 1차: original workspace에 저장
             saved_a = parser.parse_and_save(response_a)
@@ -106,9 +106,9 @@ content_a
             # 2차: target workspace로 변경 후 저장
             parser.file_manager = FileManager(str(self.target_workspace))
             response_b = """
-```filename:file_b.txt
+@@@filename:file_b.txt
 content_b
-```
+@@@
 """
             saved_b = parser.parse_and_save(response_b)
             self.assertTrue((self.target_workspace / "file_b.txt").exists())
@@ -117,9 +117,9 @@ content_b
             # 3차: third workspace로 변경 후 저장
             parser.file_manager = FileManager(str(third_workspace))
             response_c = """
-```filename:file_c.txt
+@@@filename:file_c.txt
 content_c
-```
+@@@
 """
             saved_c = parser.parse_and_save(response_c)
             self.assertTrue((third_workspace / "file_c.txt").exists())
@@ -289,9 +289,9 @@ class TestClaudeChangeWorkspace(TestChangeWorkspaceBase):
         assistant.change_workspace(str(self.target_workspace))
 
         response = """
-```filename:views/index.html
+@@@filename:views/index.html
 <h1>Hello</h1>
-```
+@@@
 """
         saved = assistant.extract_and_save_files(response)
 
