@@ -1,7 +1,7 @@
 """
 AgentActionDispatcher (FSD v1.0.107)
 
-[ACT] 블록을 분석해 단일 경로로만 실행되도록 라우팅한다.
+[ACTION] 블록을 분석해 단일 경로로만 실행되도록 라우팅한다.
 - 쉘 계열 코드 블록의 `$ ...` 라인은 쉘로 자동 라우팅
 - 다중라인 스크립트는 CodeExecutor 로 라우팅
 - 위험 명령 검사는 모든 shell action 에 일원 적용
@@ -24,7 +24,7 @@ class _ParsedAction:
 
 
 class AgentActionDispatcher:
-    """[ACT] 블록 → 단일 경로 라우팅 디스패처.
+    """[ACTION] 블록 → 단일 경로 라우팅 디스패처.
 
     기존 AgentRunner._execute_actions() 가 세 파서를 독립 호출하던 방식을
     단일 진입점(dispatch)으로 교체한다. 쉘 블록 분류기, 중복 제거,
@@ -40,7 +40,7 @@ class AgentActionDispatcher:
         r"^\s*\[ACTION:(file|code|shell)\]\s*$", re.MULTILINE | re.IGNORECASE,
     )
 
-    SHELL_LANGS = {"bash", "sh", "shell", "powershell", "ps1"}
+    SHELL_LANGS = {"powershell", "ps1", "bash", "sh", "shell"}
     CODE_LANGS = {"python", "py", "javascript", "js"}
 
     # 쉘 스크립트(라인 분해 금지) 시그널
