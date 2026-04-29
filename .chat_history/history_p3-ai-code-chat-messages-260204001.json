@@ -1,0 +1,21 @@
+{
+  "version": "1.0",
+  "type": "claude",
+  "created_at": "2026-02-04T23:08:29.463720",
+  "model_id": "claude-3-5-haiku-latest",
+  "messages": [
+    {
+      "role": "user",
+      "content": "두 소스코드의 차이점을 간단히 설명해줘"
+    },
+    {
+      "role": "assistant",
+      "content": [
+        {
+          "type": "text",
+          "text": "GenAI Assistant와 Claude Assistant의 주요 차이점은 다음과 같습니다:\n\n1. API 호출 방식\n- GenAI: 커스텀 GenAI API\n  - 엔드포인트: `/openapi/chat/v1/messages`\n  - 헤더: `X-Lego-Client-Id`, `X-Lego-Client-Secret`\n  - 요청 바디: `modelIds`, `contents`, `llmConfig`, `isStream`\n\n- Claude: Anthropic Claude API\n  - 엔드포인트: `/v1/messages`\n  - 헤더: `x-api-key`, `anthropic-version`\n  - 요청 바디: `model`, `messages`, `max_tokens`, `system`, `tools`, `stream`\n\n2. 히스토리 관리\n- GenAI: 문자열 리스트 (`List[str]`)\n- Claude: 메시지 딕셔너리 리스트 (`List[Dict]`)\n  - 메시지에 `role`, `content` 포함\n  - 멀티모달 컨텐츠 지원 (텍스트, 도구 사용 등)\n\n3. 스트리밍 처리\n- 두 모듈 모두 스트리밍 지원\n- Claude 버전이 더 복잡한 Tool Use 처리 로직 구현\n  - 도구 호출, JSON 파싱, 재귀적 후속 요청 등\n\n4. 도구(Tool) 실행\n- GenAI: 단순한 도구 실행 방식\n- Claude: Tool Use API 지원\n  - 도구 정의와 실행 결과를 API에 포함\n  - 도구 실행 후 자동 후속 호출\n\n5. 기타 차이점\n- GenAI: LLM 언어 설정 메서드 포함\n- Claude: FILESYSTEM_TOOLS 미리 정의\n\n공통점:\n- 파일 관리, 컨텍스트 빌더, 코드 실행기 등 유사한 도구 활용\n- 히스토리 저장 및 로드 메서드 유사\n- 시스템 프롬프트 관리 기능"
+        }
+      ]
+    }
+  ]
+}

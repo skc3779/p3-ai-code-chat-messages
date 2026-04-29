@@ -1,0 +1,30 @@
+
+============================================================
+  TC-054-007: GenAI 하위 호환 (tools 없이)
+============================================================
+  Status: 502
+  Error: {"detail": {"error": {"message": "Provider error: All connection attempts failed", "type": "proxy_error", "code": 502}}}
+
+============================================================
+  TC-054-001: GenAI tool call (에뮬레이션)
+============================================================
+  Status: 502
+  Error: {"detail": {"error": {"message": "Provider error: All connection attempts failed", "type": "proxy_error", "code": 502}}}
+
+============================================================
+  TC-054-001b: GenAI write tool call
+============================================================
+  Status: 502
+  Error: {"detail": {"error": {"message": "Provider error: All connection attempts failed", "type": "proxy_error", "code": 502}}}
+
+============================================================
+  비교: Gemini tool call
+============================================================
+  Status: 200
+  content: None
+  tool_calls: [{'id': 'function-call-13100357260115206390', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{"city":"Seoul"}'}}]
+  finish_reason: tool_calls
+
+============================================================
+  테스트 완료
+============================================================

@@ -1,0 +1,40 @@
+{
+  "version": "1.0",
+  "type": "gemini",
+  "created_at": "2026-03-06T22:26:28.890549",
+  "model_id": "gemini-3-pro-preview",
+  "messages": [
+    {
+      "role": "user",
+      "content": "1+1은?"
+    },
+    {
+      "role": "model",
+      "content": "2입니다."
+    },
+    {
+      "role": "user",
+      "content": "2+2는?"
+    },
+    {
+      "role": "model",
+      "content": "4입니다."
+    },
+    {
+      "role": "user",
+      "content": "3+3은?"
+    },
+    {
+      "role": "model",
+      "content": "6입니다."
+    },
+    {
+      "role": "user",
+      "content": "4+4는?"
+    },
+    {
+      "role": "model",
+      "content": "8입니다."
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+
+Traceback (most recent call last):
+============================================================
+  TC-053-008: 하위 호환 (tools 없이)
+============================================================
+  Status: 200
+  content: Hello.
+  tool_calls: None
+  finish_reason: stop
+
+============================================================
+  TC-053-001: Gemini tool call
+============================================================
+  Status: 200
+  content: None
+  tool_calls: [{'id': 'function-call-5094324250703517831', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{"city":"서울"}'}}]
+  finish_reason: tool_calls
+
+============================================================
+  TC-053-003: Claude tool call
+============================================================
+  Status: 200
+  content: 서울의 현재 날씨를 확인해드리겠습니다.
+  tool_calls: [{'id': 'toolu_01SMSZy9vfgDMSct7MZ3Mf7h', 'type': 'function', 'function': {'name': 'get_weather', 'arguments': '{"city": "Seoul"}'}}]
+  finish_reason: tool_calls
+
+============================================================
+  TC-053-007: GenAI tool call (미지원)
+============================================================
+  Status: 400
+  Error: {"detail": {"error": {"message": "GenAI (SCI Portal) does not support tool calling. Use gemini/ or claude/ provider for tool_calls.", "type": "proxy_error", "code": 400}}}
+  File "C:\03_sources\skc3779_srcs\p3-ai-code-chat-messages\ai-proxy\test_toolcall.py", line 74, in <module>
+    print("\n\u2705 테스트 완료")
+UnicodeEncodeError: 'cp949' codec can't encode character '\u2705' in position 2: illegal multibyte sequence

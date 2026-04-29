@@ -1,0 +1,671 @@
+#!/usr/bin/env python3
+"""
+Gemini Code Assistant - AI 코딩 어시스턴트
+
+모듈화된 버전: src/ 패키지에서 클래스들을 import합니다.
+Google Gemini API를 REST API로 직접 호출합니다.
+"""
+
+import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+# src/ 패키지에서 클래스 import
+from src import (
+    FileManager,
+    ContextBuilder,
+    TokenManager,
+    FileWatcher,
+    FilePatternMatcher,
+    CLIInputHandler,
+    DiffViewer,
+)
+from src.gemini_assistant import GeminiCodeAssistant
+from src.command_registry import print_menu
+from src.cli_input import parse_command_options
+
+_MENU_TITLE = "Gemini Code Assistant - AI 코딩 어시스턴트"
+
+
+def load_environment():
+    """실행 파일 위치 또는 스크립트 위치를 기반으로 .env 파일을 읽어 os.environ에 반영합니다."""
+    import sys
+    if getattr(sys, 'frozen', False):
+        # PyInstaller로 빌드된 경우, 실행 파일(.exe)이 있는 폴더에서 .env를 찾음
+        base_path = Path(sys.executable).parent
+    else:
+        # 일반 파이썬 스크립트로 실행되는 경우, 현재 파일의 부모 폴더에서 찾음
+        base_path = Path(__file__).resolve().parent
+
+    env_path = base_path / ".env"
+    
+    if env_path.exists():
+        load_dotenv(dotenv_path=env_path, override=True)
+    else:
+        print(f"⚠️ 경고: {env_path} 파일을 찾을 수 없습니다. 기본 설정으로 동작합니다.")
+
+
+def _supports_color() -> bool:
+    """현재 터미널이 ANSI 컬러를 지원하는지 확인하고 Windows에서는 ANSI 모드를 활성화"""
+    import sys
+    # NO_COLOR 환경변수 확인 (표준 no-color.org 규약)
+    if os.environ.get('NO_COLOR'):
+        return False
+    # stdout이 TTY인지 확인 (파이프 출력 시 색상 코드 제거)
+    if not hasattr(sys.stdout, 'isatty') or not sys.stdout.isatty():
+        return False
+    # Windows: ANSI 가상 터미널 처리 활성화 시도
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            kernel32 = ctypes.windll.kernel32
+            # ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
+            kernel32.SetConsoleMode(kernel32.GetStdHandle(-11), 7)
+            return True
+        except Exception:
+            return False
+    return True
+
+
+def _should_print_banner() -> bool:
+    """`PRINT_BANNER` 환경 변수로 배너 출력 여부 결정. 미설정 시 True."""
+    raw = os.getenv("PRINT_BANNER", "").strip().lower()
+    if raw in ("false", "0", "no", "off"):
+        return False
+    return True
+
+
+def print_banner():
+    """ANSI Art 배너 출력 - >> GEMINI AI CODE CHAT <<"""
+    use_color = _supports_color()
+
+    # ANSI 컬러 정의
+    C  = '\033[96m' if use_color else ''   # Bright Cyan
+    M  = '\033[95m' if use_color else ''   # Bright Magenta
+    G  = '\033[92m' if use_color else ''   # Bright Green
+    Y  = '\033[93m' if use_color else ''   # Bright Yellow
+    B  = '\033[94m' if use_color else ''   # Blue
+    BD = '\033[1m'  if use_color else ''   # Bold
+    R  = '\033[0m'  if use_color else ''   # Reset
+    
+    # REQ-067-002: 버전 정보를 환경변수에서 로드 (기본값 v1.0.040)
+    version = os.getenv("AI_VERSION", "v1.0.040")
+    version_str = f"v{version}" if not str(version).startswith("v") else str(version)
+    
+    # 우측 테두리 정렬을 위한 패딩 계산 (기존 "v1.0.065" 기준 폭 고려)
+    # "🤖  AI-Powered Code Assistant  ·  " 길이에 맞춰 나머지 공백 계산
+    base_text_len = 34 + len(version_str) # 🤖 이모지 포함 눈에 보이는 대략적인 길이
+    target_len = 73 
+    padding = " " * max(0, target_len - base_text_len - 4)
+
+    banner = f"""
+{C}╔══════════════════════════════════════════════════════════════════════════════╗{R}
+{C}║{R}                                                                              {C}║{R}
+{C}║{R}        {M}{BD} ██████╗ ███████╗███╗   ██╗      █████╗ ██╗{R}                           {C}║{R}
+{C}║{R}        {M}{BD}██╔════╝ ██╔════╝████╗  ██║     ██╔══██╗██║{R}                           {C}║{R}
+{C}║{R}        {G}{BD}██║  ███╗█████╗  ██╔██╗ ██║     ███████║██║{R}                           {C}║{R}
+{C}║{R}        {G}{BD}██║   ██║██╔══╝  ██║╚██╗██║     ██╔══██║██║{R}                           {C}║{R}
+{C}║{R}        {Y}{BD}╚██████╔╝███████╗██║ ╚████║     ██║  ██║██║{R}                           {C}║{R}
+{C}║{R}        {Y}{BD} ╚═════╝ ╚══════╝╚═╝  ╚═══╝     ╚═╝  ╚═╝╚═╝{R}                           {C}║{R}
+{C}║{R}                                                                              {C}║{R}
+{C}║{R}         {B}{BD}>> GEMINI AI CODE CHAT <<!{R}                                           {C}║{R}
+{C}║{R}         {G}🤖  AI-Powered Code Assistant  ·  {version_str}{R}{padding}{C}║{R}
+{C}║{R}                                                                              {C}║{R}
+{C}╚══════════════════════════════════════════════════════════════════════════════╝{R}
+"""
+    print(banner)
+
+
+
+
+def main():
+    # 환경변수 로드
+    load_environment()
+
+    # TokenManager 설정값 반영
+    TokenManager.reload_from_env()
+
+    # Gemini API 설정값 (환경변수에서 로드)
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-3.0-flash")
+    GEMINI_API_ENDPOINT = os.getenv("GEMINI_API_ENDPOINT", "https://aiplatform.googleapis.com/v1/publishers/google/")
+
+    if not GEMINI_API_KEY:
+        print("❌ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
+        print("💡 .env 파일에 GEMINI_API_KEY=your_api_key 를 추가하세요.")
+        return
+
+    # 작업 디렉토리 설정
+    workspace = os.getcwd()
+
+    # Gemini 어시스턴트 초기화
+    assistant = GeminiCodeAssistant(
+        api_key=GEMINI_API_KEY,
+        model_id=GEMINI_MODEL_ID,
+        endpoint_url=GEMINI_API_ENDPOINT,
+        workspace_dir=workspace
+    )
+
+    # DiffViewer 초기화
+    diff_viewer = DiffViewer()
+
+    # CLI 입력 핸들러 초기화 (Gemini CLI 스타일 TUI)
+    cli_handler = CLIInputHandler(
+        workspace=workspace,
+        model_name=GEMINI_MODEL_ID,
+        streaming_mode=True
+    )
+
+    # FileWatcher 초기화
+    file_watcher = FileWatcher(workspace)
+
+    # 메뉴 출력
+    if _should_print_banner():
+        print_banner()
+    print(f"\n📂 작업 디렉토리: {workspace}")
+    print(f"🤖 모델: {GEMINI_MODEL_ID}")
+
+    streaming = True
+    last_response = ""
+
+    while True:
+        try:
+            user_input = cli_handler.get_input("> ")
+
+            if not user_input:
+                continue
+
+            # 멀티라인 모드 처리
+            if user_input.lower() == '/multiline':
+                user_input = cli_handler.get_multiline()
+                if not user_input:
+                    continue
+
+            # 명령어 처리
+            if user_input.startswith('/'):
+                parts = user_input.split(maxsplit=1)
+                command = parts[0].lower()
+                args = parts[1] if len(parts) > 1 else ""
+
+                if command == '/quit':
+                    file_watcher.stop()
+                    print("👋 종료합니다.")
+                    break
+
+                elif command == '/help':
+                    print_menu(_MENU_TITLE)
+
+                elif command == '/files':
+                    extensions = args.split() if args else None
+                    files = assistant.file_manager.list_files(extensions=extensions)
+                    print(f"\n📁 파일 목록 ({len(files)}개):")
+                    for f in files[:50]:
+                        print(f"  - {f.relative_to(assistant.file_manager.workspace_dir)}")
+                    if len(files) > 50:
+                        print(f"  ... 외 {len(files) - 50}개")
+
+                elif command == '/tree':
+                    tree = assistant.context_builder.build_file_tree()
+                    print(f"\n🌳 프로젝트 구조:\n{tree}")
+
+                elif command == '/read':
+                    if not args:
+                        print("❌ 파일 패턴을 지정하세요.")
+                        print("예: /read src/*.py")
+                        print("예: /read [src/*.py, docs/*.md]")
+                        continue
+
+                    # 패턴 파싱: [p1, p2] 또는 공백 구분 단일/다중 패턴
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            file_patterns = [p.strip() for p in args[1:end_idx].split(',') if p.strip()]
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        file_patterns = args.split()
+
+                    # ContextBuilder를 통해 파일 컨텍스트 구성 (트리 제외)
+                    context = assistant.context_builder.build_context(
+                        include_tree=False,
+                        file_patterns=file_patterns
+                    )
+
+                    if context.strip():
+                        print(context)
+                        assistant.conversation_history.append({
+                            "role": "user",
+                            "content": f"[파일 읽음: {args}]\n{context}"
+                        })
+                    else:
+                        print(f"❌ 패턴 '{args}'에 해당하는 파일이 없습니다.")
+
+                elif command == '/context':
+                    if not args:
+                        print("❌ 형식: /context [-nt] <파일패턴> [질문]")
+                        print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
+                        print("예: /context src/*.py")
+                        print("예: /context src/*.py 이 코드를 리팩토링해줘")
+                        print("예: /context -nt [src/*.py, docs/*.md] README 작성해줘")
+                        continue
+
+                    # FSD v1.0.123: -nt 옵션 파싱
+                    _NT_ALIASES = {"-nt": "no_tree", "--no-tree": "no_tree"}
+                    try:
+                        options, args = parse_command_options(args, _NT_ALIASES)
+                    except ValueError as e:
+                        print(f"❌ {e}")
+                        continue
+                    no_tree = "no_tree" in options
+
+                    file_patterns = []
+                    question = ""
+
+                    # [pattern1, pattern2] 형식 확인
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            patterns_str = args[1:end_idx]
+                            file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
+                            question = args[end_idx+1:].strip()
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        # 기존 단일 패턴 지원
+                        parts = args.split(maxsplit=1)
+                        file_patterns = [parts[0]]
+                        question = parts[1] if len(parts) >= 2 else ""
+
+                    # 질문이 없는 경우 멀티라인 입력
+                    if not question:
+                        question = cli_handler.get_multiline()
+                        if not question.strip():
+                            print("❌ 질문을 입력하세요.")
+                            continue
+
+                    last_response = assistant.chat(
+                        question, streaming=streaming,
+                        include_context=True, file_patterns=file_patterns,
+                        include_tree=not no_tree,
+                    )
+
+                elif command == '/auto_context':
+                    if not args:
+                        print("❌ 형식: /auto_context [-qc] <파일패턴> [질문]")
+                        print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
+                        print("예: /auto_context src/*.py")
+                        print("예: /auto_context -qc src/*.py 이 코드를 리팩토링해줘")
+                        print("예: /auto_context [src/*.py, docs/*.md] README 작성해줘")
+                        continue
+
+                    # FSD v1.0.123: -qc 옵션 파싱
+                    _QC_ALIASES = {"-qc": "quality_check", "--quality-check": "quality_check"}
+                    try:
+                        options, args = parse_command_options(args, _QC_ALIASES)
+                    except ValueError as e:
+                        print(f"❌ {e}")
+                        continue
+                    quality_check = "quality_check" in options
+
+                    file_patterns = []
+                    question = ""
+
+                    # [pattern1, pattern2] 형식 확인
+                    if args.startswith('['):
+                        try:
+                            end_idx = args.index(']')
+                            patterns_str = args[1:end_idx]
+                            file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
+                            question = args[end_idx+1:].strip()
+                        except ValueError:
+                            print("❌ 닫는 대괄호 ']'가 없습니다.")
+                            continue
+                    else:
+                        # 단일 패턴 지원
+                        parts = args.split(maxsplit=1)
+                        file_patterns = [parts[0]]
+                        question = parts[1] if len(parts) >= 2 else ""
+
+                    # 질문이 없는 경우 멀티라인 입력
+                    if not question:
+                        question = cli_handler.get_multiline()
+                        if not question.strip():
+                            print("❌ 질문을 입력하세요.")
+                            continue
+
+                    # 파일 매칭
+                    matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
+                    all_files = assistant.file_manager.list_files()
+                    matched_files = matcher.filter_files(all_files, file_patterns)
+
+                    if not matched_files:
+                        print(f"❌ 패턴 {file_patterns}에 해당하는 파일이 없습니다.")
+                        continue
+
+                    # 매칭 파일 목록 표시
+                    print(f"\n📂 매칭된 파일 {len(matched_files)}개:")
+                    for i, f in enumerate(matched_files, 1):
+                        rel = f.relative_to(assistant.file_manager.workspace_dir)
+                        print(f"  {i}. {rel}")
+
+                    # 사용자 확인
+                    try:
+                        confirm = input("\n▶ 자동 처리를 시작하시겠습니까? (Y/n): ").strip().lower()
+                        if confirm == 'n':
+                            print("⏭️  취소됨")
+                            continue
+                    except (EOFError, KeyboardInterrupt):
+                        continue
+
+                    # 자동 처리 실행
+                    from src.context_processor import ContextProcessor
+                    processor = ContextProcessor(
+                        assistant=assistant,
+                        file_manager=assistant.file_manager,
+                        streaming=streaming,
+                        quality_check=quality_check,
+                    )
+                    processor.process_files(matched_files, question)
+
+                elif command == '/agents':
+                    from src.agents_command import handle_agents_command
+                    handle_agents_command(
+                        assistant=assistant,
+                        cli_handler=cli_handler,
+                        streaming=streaming,
+                        args=args,
+                        assistant_role="model",
+                    )
+                    last_response = ""
+
+                elif command == '/save':
+                    if last_response:
+                        saved = assistant.extract_and_save_files(last_response)
+                        if saved:
+                            print(f"✅ {len(saved)}개 파일 저장됨:")
+                            for f in saved:
+                                print(f"  - {f}")
+                        else:
+                            print("💡 저장할 파일 블록이 없습니다.")
+                    else:
+                        print("💡 저장할 응답이 없습니다.")
+
+                elif command == '/workspace':
+                    if args:
+                        new_workspace = Path(args).resolve()
+                        if assistant.change_workspace(str(new_workspace)):
+                            file_watcher.stop()
+                            file_watcher = FileWatcher(str(new_workspace))
+                            workspace = str(new_workspace)
+                            cli_handler.update_workspace(workspace)
+                            print(f"✅ 작업 디렉토리 변경: {new_workspace}")
+                        else:
+                            print(f"❌ 유효하지 않은 디렉토리: {args}")
+                    else:
+                        print(f"📂 현재 작업 디렉토리: {assistant.file_manager.workspace_dir}")
+
+                elif command == '/stream':
+                    streaming = True
+                    cli_handler.update_streaming_mode(True)
+                    print("✅ 스트리밍 모드 활성화")
+
+                elif command == '/nostream':
+                    streaming = False
+                    cli_handler.update_streaming_mode(False)
+                    print("✅ 논스트리밍 모드 활성화")
+
+                elif command == '/history':
+                    if not args:
+                        if assistant.conversation_history:
+                            print("\n📜 대화 히스토리:")
+                            for i, msg in enumerate(assistant.conversation_history):
+                                role = "🧑" if msg["role"] == "user" else "🤖"
+                                content = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
+                                print(f"  {i + 1}. {role} {content}")
+                        else:
+                            print("📭 대화 히스토리가 비어있습니다.")
+                    elif args.startswith('--remove') or args.startswith('-r'):
+                        parts = args.split()
+                        if len(parts) < 2:
+                            print("❌ 삭제할 개수는 1 이상의 정수여야 합니다. 예: /history --remove 5")
+                        else:
+                            try:
+                                n = int(parts[1])
+                            except ValueError:
+                                n = None
+                            if n is None or n <= 0:
+                                print("❌ 삭제할 개수는 1 이상의 정수여야 합니다. 예: /history --remove 5")
+                            else:
+                                total = len(assistant.conversation_history)
+                                if total == 0:
+                                    print("📭 대화 히스토리가 비어있습니다.")
+                                elif n > total:
+                                    print(f"❌ history 목록수({total})보다 숫자({n})가 더 많아 삭제가 불가능합니다.")
+                                else:
+                                    del assistant.conversation_history[:n]
+                                    remaining = len(assistant.conversation_history)
+                                    print(f"✅ 히스토리 {n}개를 삭제했습니다. (남은 항목: {remaining}개)")
+                    elif args.startswith('--delete') or args.startswith('-d'):
+                        parts = args.split()
+                        if len(parts) < 2:
+                            print("❌ 인덱스는 1 이상의 정수여야 합니다. 예: /history --delete 3")
+                        else:
+                            try:
+                                idx = int(parts[1])
+                            except ValueError:
+                                idx = None
+                            if idx is None:
+                                print("❌ 인덱스는 1 이상의 정수여야 합니다. 예: /history --delete 3")
+                            else:
+                                total = len(assistant.conversation_history)
+                                if total == 0:
+                                    print("📭 대화 히스토리가 비어있습니다.")
+                                elif idx < 1 or idx > total:
+                                    print(f"❌ 유효하지 않은 인덱스입니다. (1 ~ {total} 범위)")
+                                else:
+                                    del assistant.conversation_history[idx - 1]
+                                    remaining = len(assistant.conversation_history)
+                                    print(f"✅ 히스토리 {idx}번 항목을 삭제했습니다. (남은 항목: {remaining}개)")
+                                    if assistant.conversation_history:
+                                        print("\n📜 대화 히스토리:")
+                                        for i, msg in enumerate(assistant.conversation_history):
+                                            role = "🧑" if msg["role"] == "user" else "🤖"
+                                            content = msg["content"][:100] + "..." if len(msg["content"]) > 100 else msg["content"]
+                                            print(f"  {i + 1}. {role} {content}")
+                                    else:
+                                        print("📭 대화 히스토리가 비어있습니다.")
+                    else:
+                        print("❌ 알 수 없는 /history 옵션입니다. 예: /history --remove 5")
+
+                elif command == '/clear':
+                    assistant.conversation_history = []
+                    print("✅ 대화 히스토리 초기화")
+
+                elif command == '/save_history':
+                    filepath = assistant.save_history(args if args else None)
+                    print(f"✅ 히스토리 저장됨: {filepath}")
+
+                elif command == '/load_history':
+                    if not args:
+                        print("❌ 사용법: /load_history <파일명>")
+                        continue
+                    if assistant.load_history(args):
+                        print(f"✅ 히스토리 로드됨: {args}")
+                    else:
+                        print(f"❌ 히스토리 로드 실패: {args}")
+
+                elif command == '/list_history':
+                    files = assistant.list_history()
+                    print(f"\n📂 저장된 히스토리 ({len(files)}개):")
+                    for f in files:
+                        print(f"  - {f}")
+
+                elif command == '/run':
+                    if last_response:
+                        lang = args if args else 'python'
+                        # 코드 블록 추출
+                        import re
+                        code_blocks = re.findall(r'```(?:\w+)?\n(.*?)```', last_response, re.DOTALL)
+                        if code_blocks:
+                            code = code_blocks[-1]
+                            print(f"\n⚡ 코드 실행 ({lang}):")
+                            result = assistant.code_executor.execute(code, language=lang)
+                            if result['success']:
+                                print(f"✅ 성공:\n{result['stdout']}")
+                            else:
+                                print(f"❌ 오류:\n{result['stderr']}")
+                        else:
+                            print("💡 실행할 코드 블록이 없습니다.")
+                    else:
+                        print("💡 실행할 응답이 없습니다.")
+
+                elif command == '/diff':
+                    if last_response:
+                        suggestions = diff_viewer.extract_code_suggestions(last_response)
+                        if suggestions:
+                            for suggestion in suggestions:
+                                filepath = suggestion['filepath']
+                                new_content = suggestion['content']
+                                diff_output = diff_viewer.generate_diff_for_file(
+                                    filepath, new_content, assistant.file_manager
+                                )
+                                print(diff_output)
+                                print()
+                        else:
+                            print("💡 표시할 코드 제안이 없습니다.")
+                    else:
+                        print("💡 Diff를 생성할 응답이 없습니다.")
+
+                elif command == '/apply':
+                    success, message = diff_viewer.apply_diff(assistant.file_manager)
+                    print(message)
+                    if success:
+                        print("💡 다른 변경사항이 있다면 /diff로 다시 확인하세요.")
+
+                elif command == '/tokens':
+                    stats = TokenManager.get_token_stats(
+                        assistant.conversation_history,
+                        TokenManager.MAX_TOKENS_GEMINI
+                    )
+                    print(f"\n📊 토큰 사용량:")
+                    print(f"  - 현재: {stats['current']:,} / {stats['max']:,} ({stats['usage_percent']}%)")
+                    print(f"  - 메시지 수: {stats['message_count']}")
+                    print(f"  - 남은 토큰: {stats['remaining']:,}")
+
+                elif command == '/shell' or command == '/shell!':
+                    if args in ('--help', '-h'):
+                        print(assistant.terminal_executor.shell_help())
+                        continue
+                    if not args:
+                        print("❌ 실행할 명령어를 입력하세요.")
+                        print("💡 도움말: /shell --help")
+                        continue
+
+                    allow_unsafe = command == '/shell!'
+
+                    if allow_unsafe:
+                        print("⚠️  위험 모드: 모든 명령어가 허용됩니다.")
+                        confirm = input("▶️  정말 실행하시겠습니까? (y/N): ").strip().lower()
+                        if confirm != 'y':
+                            print("⏭️  취소됨")
+                            continue
+
+                    print(f"\n💻 명령어 실행: {args}")
+                    result = assistant.terminal_executor.execute(args, allow_unsafe=allow_unsafe)
+
+                    if result.get('success'):
+                        print(f"\n✅ 실행 성공 (return code: {result.get('returncode', 0)})")
+                        if result.get('stdout'):
+                            print(f"\n📤 출력:")
+                            print(result['stdout'])
+                    else:
+                        print(f"\n❌ 실행 실패")
+                        if result.get('error'):
+                            print(f"   {result['error']}")
+                        if result.get('hint'):
+                            print(f"💡 {result['hint']}")
+                        if result.get('use_unsafe'):
+                            print(f"🔓 {result['use_unsafe']}")
+                        if result.get('stderr'):
+                            print(f"\n🔴 오류 출력:")
+                            print(result['stderr'])
+
+                    user_content = f"[쉘 명령 실행: {command} {args}]"
+                    if result.get('success'):
+                        assistant_content = f"[실행 성공 (returncode={result.get('returncode', 0)})]\n{result.get('stdout', '')}"
+                    else:
+                        assistant_content = (
+                            f"[실행 실패]\n"
+                            f"오류: {result.get('error', '')}\n"
+                            f"stderr: {result.get('stderr', '')}"
+                        ).strip()
+                    assistant.conversation_history.append({"role": "user", "content": user_content})
+                    assistant.conversation_history.append({"role": "assistant", "content": assistant_content})
+
+                elif command == '/template':
+                    if not args:
+                        print("❌ 사용법: /template <템플릿명>")
+                        continue
+                    if assistant.set_system_prompt_from_template(args):
+                        print(f"✅ 템플릿 적용됨: {args}")
+                    else:
+                        print(f"❌ 템플릿을 찾을 수 없습니다: {args}")
+
+                elif command == '/template_list':
+                    templates = assistant.list_templates()
+                    print(f"\n📋 사용 가능한 템플릿 ({len(templates)}개):")
+                    for t in templates:
+                        print(f"  - {t['name']}: {t['description']}")
+
+                elif command == '/template_reset':
+                    assistant.reset_system_prompt()
+                    print("✅ 기본 시스템 프롬프트로 복귀")
+
+                elif command == '/watch':
+                    if not args:
+                        print("❌ 사용법: /watch <패턴>")
+                        continue
+                    if file_watcher.add_watch(args):
+                        print(f"✅ 파일 감시 시작: {args}")
+                    else:
+                        print("❌ 파일 감시 시작 실패 (watchdog 설치 필요)")
+
+                elif command == '/unwatch':
+                    if not args:
+                        print("❌ 사용법: /unwatch <패턴>")
+                        continue
+                    if file_watcher.remove_watch(args):
+                        print(f"✅ 파일 감시 중지: {args}")
+                    else:
+                        print(f"❌ 감시 중인 패턴이 아닙니다: {args}")
+
+                elif command == '/watch_list':
+                    patterns = file_watcher.get_watched_patterns()
+                    if patterns:
+                        print(f"\n👁️ 감시 중인 패턴 ({len(patterns)}개):")
+                        for p in patterns:
+                            print(f"  - {p}")
+                    else:
+                        print("💡 감시 중인 패턴이 없습니다.")
+
+                else:
+                    print(f"❌ 알 수 없는 명령어: {command}")
+                    print("💡 /help로 사용 가능한 명령어를 확인하세요.")
+
+            else:
+                # 일반 채팅
+                last_response = assistant.chat(user_input, streaming=streaming)
+
+        except KeyboardInterrupt:
+            file_watcher.stop()
+            print("\n👋 종료합니다.")
+            break
+        except Exception as e:
+            print(f"\n❌ 오류 발생: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()
