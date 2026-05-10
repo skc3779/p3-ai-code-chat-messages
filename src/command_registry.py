@@ -93,8 +93,10 @@ class CommandRegistry:
                         '/llm_config <lang>',                'llm_config Java'),
             CommandInfo('/template',      '시스템 프롬프트 템플릿 변경',
                         '/template <name>',                  'template code-review'),
-            CommandInfo('/template_list', '사용 가능한 템플릿 목록 보기',
+            CommandInfo('/template_list', '사용 가능한 템플릿 목록 보기 (assistant_type 자동 필터)',
                         '/template_list',                    ''),
+            CommandInfo('/template_show', '현재 적용 중인 템플릿 정보 보기 (FSD v1.0.161)',
+                        '/template_show',                    ''),
             CommandInfo('/template_reset','시스템 프롬프트를 기본값으로 초기화',
                         '/template_reset',                   ''),
             # ── 기타 ─────────────────────────────────────────────────────────

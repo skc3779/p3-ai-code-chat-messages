@@ -4,11 +4,13 @@ GeminiCodeAssistant - Google Gemini API 코딩 어시스턴트 모듈
 """
 
 import json
+import os
 import re
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 import requests
+# pyrefly: ignore [missing-import]
 import sseclient
 
 from .os_utils import get_os_shell_hint as _get_os_shell_hint
@@ -23,43 +25,14 @@ from .api_logger import ApiLogger
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
+from .prompt_renderer import PromptRenderer
 from .spinner import WaitSpinner
 from .response_parser import ResponseParser
 
 
-class GeminiCodeAssistant:
-    """Google Gemini API 코딩 어시스턴트 (REST API 직접 호출)"""
-    
-    def __init__(
-        self, 
-        api_key: str, 
-        model_id: str = "gemini-3.0-flash",
-        workspace_dir: str = ".",
-        endpoint_url: str = "https://aiplatform.googleapis.com/v1/publishers/google/models/"
-    ):
-        self.api_key = api_key
-        self.endpoint_url = endpoint_url
-        self.model_id = model_id
-        self.headers = {
-            "Content-Type": "application/json"
-        }
-        
-        # API 로거 초기화 (Provider 명시)
-        self.api_logger = ApiLogger("gemini", workspace_dir)
-        self.conversation_history: List[Dict] = []
-        
-        # 공용 모듈 초기화 (Claude/GenAI와 동일)
-        self.file_manager = FileManager(workspace_dir)
-        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GEMINI)
-        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
-        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
-        self.git_manager = GitManager(self.file_manager.workspace_dir)
-        self.package_manager = PackageManager(self.file_manager.workspace_dir)
-        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
-        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
-        self.response_parser = ResponseParser(self.file_manager)
-        
-        self.default_system_prompt = """당신은 Google의 최첨단 AI 모델인 Gemini를 기반으로 한, 세계 최고 수준의 전문 소프트웨어 엔지니어 및 코딩 어시스턴트입니다.
+# FSD v1.0.161: `.system_prompts/gemini-system-prompt.yaml` 미존재 시의 비상용 fallback.
+# 정상 경로는 YAML 자산이며, 본 상수는 빌드물에 자산이 동봉되지 않은 경우의 안전망.
+_BUILTIN_FALLBACK_GEMINI = """당신은 Google의 최첨단 AI 모델인 Gemini를 기반으로 한, 세계 최고 수준의 전문 소프트웨어 엔지니어 및 코딩 어시스턴트입니다.
 
 [역할 및 태도]
 - 사용자의 코딩 문제를 해결하고, 프로젝트 구조를 분석하며, 최적의 솔루션을 제안합니다.
@@ -97,28 +70,107 @@ def add(a, b):
 - 이모지(Emoji)와 같은 기호는 사용하지 말고, 전문적인 어조를 유지합니다.
 
 [실행 환경]
-""" + _get_os_shell_hint() + """
+{{os_shell_hint}}
 
 이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
 """
 
+
+class GeminiCodeAssistant:
+    """Google Gemini API 코딩 어시스턴트 (REST API 직접 호출)"""
+    
+    def __init__(
+        self, 
+        api_key: str, 
+        model_id: str = "gemini-3.0-flash",
+        workspace_dir: str = ".",
+        endpoint_url: str = "https://aiplatform.googleapis.com/v1/publishers/google/models/"
+    ):
+        self.api_key = api_key
+        self.endpoint_url = endpoint_url
+        self.model_id = model_id
+        self.headers = {
+            "Content-Type": "application/json"
+        }
+        
+        # API 로거 초기화 (Provider 명시)
+        self.api_logger = ApiLogger("gemini", workspace_dir)
+        self.conversation_history: List[Dict] = []
+        
+        # 공용 모듈 초기화 (Claude/GenAI와 동일)
+        self.file_manager = FileManager(workspace_dir)
+        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GEMINI)
+        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
+        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
+        self.git_manager = GitManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
+        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
+        self.response_parser = ResponseParser(self.file_manager)
+
+        # FSD v1.0.161: 기본 시스템 프롬프트를 .system_prompts YAML 에서 로드
+        default_name = os.getenv("DEFAULT_GEMINI_TEMPLATE") or "gemini-system-prompt"
+        self._default_template_name = default_name
+        # FSD v1.0.161 [ADD]: /template_show 용 — 현재 적용 중인 템플릿 이름 추적
+        self._active_template_name = default_name
+        raw = self.template_manager.resolve_default_template(default_name, "gemini")
+        if raw is None:
+            print(f"⚠️ 기본 템플릿 '{default_name}' 을 찾지 못해 내장 fallback 을 사용합니다.")
+            raw = _BUILTIN_FALLBACK_GEMINI
+        self._raw_system_prompt = raw
+        self._active_raw_system_prompt = raw
+
+        self.default_system_prompt = self._render_system_prompt(raw)
         self.system_prompt = self.default_system_prompt
 
+    def _build_template_context(self) -> Dict[str, str]:
+        """렌더 컨텍스트 — 현재는 os_shell_hint 만 제공.
+        향후 변수 추가는 이 메서드에 한 줄씩 추가하면 된다."""
+        return {
+            "os_shell_hint": _get_os_shell_hint(),
+        }
+
+    def _render_system_prompt(self, raw: Optional[str] = None) -> str:
+        """현재 컨텍스트로 raw 프롬프트의 {{변수}} 를 치환한 최종 본문을 반환."""
+        if raw is None:
+            raw = getattr(self, "_active_raw_system_prompt", None) or getattr(self, "system_prompt", "")
+        ctx = self._build_template_context()
+        return PromptRenderer.render(raw, ctx, on_missing="keep")
+
     def set_system_prompt_from_template(self, template_name: str) -> bool:
-        """템플릿으로 시스템 프롬프트 변경"""
-        prompt = self.template_manager.get_system_prompt(template_name, "gemini")
-        if prompt:
-            self.system_prompt = prompt
-            return True
-        return False
+        """템플릿으로 시스템 프롬프트 변경 (FSD v1.0.161: 변수 치환 적용)"""
+        raw = self.template_manager.get_system_prompt(template_name, "gemini")
+        if raw is None:
+            return False
+        self._active_raw_system_prompt = raw
+        self._active_template_name = template_name  # FSD v1.0.161 [ADD]
+        self.system_prompt = self._render_system_prompt(raw)
+        return True
 
     def reset_system_prompt(self) -> None:
         """기본 시스템 프롬프트로 복원"""
+        self._active_raw_system_prompt = self._raw_system_prompt
+        self._active_template_name = self._default_template_name  # FSD v1.0.161 [ADD]
         self.system_prompt = self.default_system_prompt
 
     def list_templates(self) -> List[Dict[str, str]]:
-        """사용 가능한 템플릿 목록"""
-        return self.template_manager.list_templates()
+        """사용 가능한 템플릿 목록 (FSD v1.0.161 [ADD]: assistant_type 으로 필터링)"""
+        return self.template_manager.list_templates(assistant_type="gemini")
+
+    def get_active_template_info(self) -> Dict[str, str]:
+        """
+        FSD v1.0.161 [ADD]: 현재 적용 중인 템플릿의 메타정보를 반환한다.
+        반환 키: name, description, assistant_type. 메타가 없으면 fallback 표시.
+        """
+        name = getattr(self, "_active_template_name", "(unknown)")
+        info = self.template_manager.get_template_info(name)
+        if info:
+            return info
+        return {
+            "name": name,
+            "description": "(메타정보를 찾을 수 없음 — 빌트인 fallback 사용 중일 수 있음)",
+            "assistant_type": "gemini",
+        }
 
     def chat(
         self, 
@@ -188,6 +240,8 @@ def add(a, b):
         """스트리밍 모드 채팅 (SSE)"""
         import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:streamGenerateContent?alt=sse&key={self.api_key}"
+        # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
+        self.system_prompt = self._render_system_prompt()
         body = self._build_request_body(user_message)
         
         # REQ-064-006: Request 로그 저장
@@ -270,6 +324,8 @@ def add(a, b):
         """논스트리밍 모드 채팅"""
         import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:generateContent?key={self.api_key}"
+        # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
+        self.system_prompt = self._render_system_prompt()
         body = self._build_request_body(user_message)
         
         # REQ-064-006: Request 로그 저장

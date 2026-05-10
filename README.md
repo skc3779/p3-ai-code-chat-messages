@@ -82,7 +82,44 @@ ENDPOINT_URL=https://your-genai-endpoint.com
 YOUR_CLIENT_KEY=your-client-id
 YOUR_CLIENT_SECRET=your-client-secret
 YOUR_MODEL_ID=your-model-id
+
+# 기본 시스템 프롬프트 템플릿 (FSD v1.0.161)
+# 값은 .system_prompts/<filename>.yaml 의 파일명 stem
+DEFAULT_CLAUDE_TEMPLATE=claude-system-prompt
+DEFAULT_GEMINI_TEMPLATE=gemini-system-prompt
+DEFAULT_GENAI_TEMPLATE=genai-system-prompt
 ```
+
+### 4. 기본 시스템 프롬프트 (FSD v1.0.161)
+
+세 어시스턴트의 기본 시스템 프롬프트는 [.system_prompts/](./.system_prompts/) 디렉토리의 YAML 파일에서 로드됩니다. 어떤 파일을 기본값으로 쓸지는 위 `.env` 의 `DEFAULT_*_TEMPLATE` 변수로 지정합니다 (값은 파일명 stem, `.yaml` 생략).
+
+- 변수를 설정하지 않으면 어시스턴트 타입별 기본 파일명(`claude-system-prompt`, `gemini-system-prompt`, `genai-system-prompt`)을 사용합니다.
+- 런타임에 [/template &lt;name&gt;](#주요-명령어) 으로 다른 템플릿으로 교체할 수 있고, `/template_reset` 으로 위 기본값으로 복귀합니다 (FSD v1.0.020).
+- 템플릿 본문에는 `{{os_shell_hint}}` 같은 자리표시자를 쓸 수 있으며, LLM 호출 직전마다 현재 OS/셸에 맞춰 자동 치환됩니다. 새로운 변수가 필요하면 어시스턴트의 `_build_template_context()` 에 한 줄을 추가하면 됩니다.
+
+#### 슬래시 명령어 (FSD v1.0.020 + v1.0.161 보강)
+
+| 명령어 | 동작 |
+|---|---|
+| `/template <name>` | 시스템 프롬프트를 지정 템플릿으로 변경 |
+| `/template_list` | 현재 어시스턴트와 호환되는 템플릿 목록 표시. 각 항목 옆에 `[claude]`/`[gemini]`/`[genai]`/`[공용]` 태그가 표시됨. `assistant_type` 필드가 없는 YAML 은 모든 타입에 노출 |
+| `/template_show` | 현재 적용 중인 템플릿의 `name`, `description`, `assistant_type` 메타정보 출력 |
+| `/template_reset` | `.env` 의 `DEFAULT_*_TEMPLATE` 으로 지정된 기본 템플릿으로 복귀 |
+
+**`.system_prompts/` YAML 작성 가이드**
+
+```yaml
+name: my-template                  # 템플릿 식별 이름 (파일명 stem 권장)
+description: 한 줄 설명             # /template_list, /template_show 에 표시
+assistant_type: claude              # claude | gemini | genai. 생략 시 공용
+system_prompt: |
+    당신은 ...
+    [실행 환경]
+    {{os_shell_hint}}
+```
+
+`assistant_type` 을 생략하면 `/template_list` 에서 모든 어시스턴트의 목록에 노출되는 **공용** 템플릿이 됩니다.
 
 ---
 
@@ -160,6 +197,10 @@ python -m ai_cli --type genai \
 | `/shell! <명령어>` | 쉘 명령어 실행 (모든 명령 허용) | `/shell! rm temp.txt` |
 | `/save` | AI 응답의 코드 블록을 파일로 저장 | `/save` |
 | `/files [확장자]` | 파일 목록 확인 | `/files .py` |
+| `/template <name>` | 시스템 프롬프트 템플릿 변경 | `/template code-review` |
+| `/template_list` | 호환 템플릿 목록 (assistant_type 자동 필터) | `/template_list` |
+| `/template_show` | 현재 적용 중인 템플릿 정보 표시 | `/template_show` |
+| `/template_reset` | `.env` 의 기본 템플릿으로 복귀 | `/template_reset` |
 | `/tree` | 프로젝트 디렉토리 트리 확인 | `/tree` |
 | `/read <패턴>` | 파일 내용 읽기 | `/read requirements.txt` |
 | `/watch <패턴>` | 파일 변경 감시 시작 | `/watch *.py` |
@@ -197,7 +238,8 @@ python -m ai_cli --type genai \
 │   ├── token_manager.py      # 토큰 사용량 관리
 │   ├── api_retry.py          # API 재시도 로직 (지수 백오프)
 │   ├── history_manager.py    # 대화 히스토리 저장/로드
-│   ├── template_manager.py   # 시스템 프롬프트 템플릿
+│   ├── template_manager.py   # 시스템 프롬프트 템플릿 로딩 (.system_prompts/*.yaml)
+│   ├── prompt_renderer.py    # {{변수}} 자리표시자 치환 (FSD v1.0.161)
 │   └── tree_builder.py       # 디렉토리 트리 시각화
 ├── tests/
 │   ├── __init__.py           # 테스트 패키지 초기화

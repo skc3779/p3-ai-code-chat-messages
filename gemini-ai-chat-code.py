@@ -633,9 +633,18 @@ def main():
 
                 elif command == '/template_list':
                     templates = assistant.list_templates()
-                    print(f"\n📋 사용 가능한 템플릿 ({len(templates)}개):")
+                    print(f"\n📋 사용 가능한 템플릿 ({len(templates)}개) (gemini):")
                     for t in templates:
-                        print(f"  - {t['name']}: {t['description']}")
+                        tpl_type = t.get('assistant_type') or '공용'
+                        print(f"  - {t['name']} [{tpl_type}]: {t['description']}")
+
+                elif command == '/template_show':
+                    # FSD v1.0.161 [ADD]: 현재 적용 중인 템플릿 정보 표시
+                    info = assistant.get_active_template_info()
+                    print("\n📌 현재 적용 중인 템플릿:")
+                    print(f"   - name           : {info.get('name', '')}")
+                    print(f"   - description    : {info.get('description', '')}")
+                    print(f"   - assistant_type : {info.get('assistant_type', '') or '(공용)'}")
 
                 elif command == '/template_reset':
                     assistant.reset_system_prompt()

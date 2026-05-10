@@ -3,7 +3,8 @@
 > **문서 버전**: v1.0.020  
 > **작성일**: 2026-01-25  
 > **상태**: ✅ Implemented  
-> **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md
+> **관련 SRS**: SRS_Claude_Code_Assistant_Improvements_v1.0.016.md  
+> **후속 FSD**: [FSD v1.0.161 — 기본 시스템 프롬프트의 YAML 외부화 및 `{{변수}}` 치환](FSD_v1.0.161_default-system-prompt-from-yaml.md)
 
 ---
 
@@ -21,7 +22,7 @@
 ## 2. 기능 요구사항
 
 ### 2.1 템플릿 관리
-* `.system-prompts/` 디렉토리에 YAML 형식으로 템플릿 파일 저장.
+* `.system_prompts/` 디렉토리에 YAML 형식으로 템플릿 파일 저장.
 * 각 템플릿은 이름, 설명, 시스템 프롬프트 내용을 포함.
 
 ### 2.2 사용자 명령어
@@ -37,7 +38,7 @@
 
 ### 3.1 템플릿 파일 구조 (예시)
 ```yaml
-# .system-prompts/code-review.yaml
+# .system_prompts/code-review.yaml
 name: code-review
 description: 시니어 개발자 관점의 코드 리뷰
 system_prompt: |
@@ -58,7 +59,7 @@ system_prompt: |
 
 ### 3.3 템플릿 파일 예시
 ```yaml
-# .system-prompts/code-review.yaml
+# .system_prompts/code-review.yaml
 name: code-review
 description: 코드 리뷰 모드
 # Claude용 프롬프트

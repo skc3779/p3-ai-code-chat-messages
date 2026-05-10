@@ -4,6 +4,7 @@ GenAICodeAssistant - GenAI API 코딩 어시스턴트 모듈
 """
 
 import json
+import os
 import re
 import time as _time
 from typing import List, Dict, Optional
@@ -25,45 +26,15 @@ from .api_logger import ApiLogger
 from .api_retry import APIRetry
 from .history_manager import HistoryManager
 from .template_manager import TemplateManager
+from .prompt_renderer import PromptRenderer
 from .response_parser import ResponseParser
 from .sensitive_filter import SensitiveWordFilter
 from .spinner import WaitSpinner
 
-class GenAICodeAssistant:
-    """GenAI API 코딩 어시스턴트 (커스텀 API)"""
 
-    def __init__(self, endpoint_url: str, client_key: str, client_secret: str,
-                 model_id: str, workspace_dir: str = "."):
-        self.endpoint_url = endpoint_url
-        self.headers = {
-            "X-Lego-Client-Id": client_key,
-            "X-Lego-Client-Secret": client_secret,
-            "Content-Type": "application/json"
-        }
-        self.model_id = model_id
-        self.conversation_history: List[Dict] = []
-
-        self.file_manager = FileManager(workspace_dir)
-        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GENAI)
-        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
-        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
-        self.git_manager = GitManager(self.file_manager.workspace_dir)
-        self.package_manager = PackageManager(self.file_manager.workspace_dir)
-        self.package_manager = PackageManager(self.file_manager.workspace_dir)
-        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
-        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
-        self.response_parser = ResponseParser(self.file_manager)
-
-        # REQ-058-001: 민감 단어 필터 초기화
-        self.sensitive_filter = SensitiveWordFilter()
-
-        # REQ-064-001: API 로거 초기화
-        self.api_logger = ApiLogger("gen-ai", workspace_dir)
-
-        # LLM 언어 설정 (기본값 없음)
-        self.llm_config = LLMConfigProvider()
-
-        self.default_system_prompt = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
+# FSD v1.0.161: `.system_prompts/genai-system-prompt.yaml` 미존재 시의 비상용 fallback.
+# 정상 경로는 YAML 자산이며, 본 상수는 빌드물에 자산이 동봉되지 않은 경우의 안전망.
+_BUILTIN_FALLBACK_GENAI = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 
 사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
 
@@ -115,28 +86,108 @@ def add(a, b):
     - 문서작성 시 이모지(Emoji) 사용을 하지 마세요
 
 [실행 환경]
-""" + _get_os_shell_hint() + """
+{{os_shell_hint}}
 
 이제 사용자의 요청을 듣고 최고의 코딩 지원을 제공하세요.
 """
 
+class GenAICodeAssistant:
+    """GenAI API 코딩 어시스턴트 (커스텀 API)"""
+
+    def __init__(self, endpoint_url: str, client_key: str, client_secret: str,
+                 model_id: str, workspace_dir: str = "."):
+        self.endpoint_url = endpoint_url
+        self.headers = {
+            "X-Lego-Client-Id": client_key,
+            "X-Lego-Client-Secret": client_secret,
+            "Content-Type": "application/json"
+        }
+        self.model_id = model_id
+        self.conversation_history: List[Dict] = []
+
+        self.file_manager = FileManager(workspace_dir)
+        self.context_builder = ContextBuilder(self.file_manager, max_tokens=TokenManager.MAX_TOKENS_GENAI)
+        self.code_executor = CodeExecutor(self.file_manager.workspace_dir)
+        self.terminal_executor = TerminalExecutor(self.file_manager.workspace_dir)
+        self.git_manager = GitManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.package_manager = PackageManager(self.file_manager.workspace_dir)
+        self.history_manager = HistoryManager(self.file_manager.workspace_dir)
+        self.template_manager = TemplateManager(self.file_manager.workspace_dir)
+        self.response_parser = ResponseParser(self.file_manager)
+
+        # REQ-058-001: 민감 단어 필터 초기화
+        self.sensitive_filter = SensitiveWordFilter()
+
+        # REQ-064-001: API 로거 초기화
+        self.api_logger = ApiLogger("gen-ai", workspace_dir)
+
+        # LLM 언어 설정 (기본값 없음)
+        self.llm_config = LLMConfigProvider()
+
+        # FSD v1.0.161: 기본 시스템 프롬프트를 .system_prompts YAML 에서 로드
+        default_name = os.getenv("DEFAULT_GENAI_TEMPLATE") or "genai-system-prompt"
+        self._default_template_name = default_name
+        # FSD v1.0.161 [ADD]: /template_show 용 — 현재 적용 중인 템플릿 이름 추적
+        self._active_template_name = default_name
+        raw = self.template_manager.resolve_default_template(default_name, "genai")
+        if raw is None:
+            print(f"⚠️ 기본 템플릿 '{default_name}' 을 찾지 못해 내장 fallback 을 사용합니다.")
+            raw = _BUILTIN_FALLBACK_GENAI
+        self._raw_system_prompt = raw
+        self._active_raw_system_prompt = raw
+
+        self.default_system_prompt = self._render_system_prompt(raw)
         self.system_prompt = self.default_system_prompt
 
+    def _build_template_context(self) -> Dict[str, str]:
+        """렌더 컨텍스트 — 현재는 os_shell_hint 만 제공.
+        향후 변수 추가는 이 메서드에 한 줄씩 추가하면 된다."""
+        return {
+            "os_shell_hint": _get_os_shell_hint(),
+        }
+
+    def _render_system_prompt(self, raw: Optional[str] = None) -> str:
+        """현재 컨텍스트로 raw 프롬프트의 {{변수}} 를 치환한 최종 본문을 반환."""
+        if raw is None:
+            raw = getattr(self, "_active_raw_system_prompt", None) or getattr(self, "system_prompt", "")
+        ctx = self._build_template_context()
+        return PromptRenderer.render(raw, ctx, on_missing="keep")
+
     def set_system_prompt_from_template(self, template_name: str) -> bool:
-        """템플릿으로 시스템 프롬프트 변경"""
-        prompt = self.template_manager.get_system_prompt(template_name, "genai")
-        if prompt:
-            self.system_prompt = prompt
-            return True
-        return False
+        """템플릿으로 시스템 프롬프트 변경 (FSD v1.0.161: 변수 치환 적용)"""
+        raw = self.template_manager.get_system_prompt(template_name, "genai")
+        if raw is None:
+            return False
+        self._active_raw_system_prompt = raw
+        self._active_template_name = template_name  # FSD v1.0.161 [ADD]
+        self.system_prompt = self._render_system_prompt(raw)
+        return True
 
     def reset_system_prompt(self) -> None:
         """기본 시스템 프롬프트로 복원"""
+        self._active_raw_system_prompt = self._raw_system_prompt
+        self._active_template_name = self._default_template_name  # FSD v1.0.161 [ADD]
         self.system_prompt = self.default_system_prompt
 
     def list_templates(self) -> List[Dict[str, str]]:
-        """사용 가능한 템플릿 목록"""
-        return self.template_manager.list_templates()
+        """사용 가능한 템플릿 목록 (FSD v1.0.161 [ADD]: assistant_type 으로 필터링)"""
+        return self.template_manager.list_templates(assistant_type="genai")
+
+    def get_active_template_info(self) -> Dict[str, str]:
+        """
+        FSD v1.0.161 [ADD]: 현재 적용 중인 템플릿의 메타정보를 반환한다.
+        반환 키: name, description, assistant_type. 메타가 없으면 fallback 표시.
+        """
+        name = getattr(self, "_active_template_name", "(unknown)")
+        info = self.template_manager.get_template_info(name)
+        if info:
+            return info
+        return {
+            "name": name,
+            "description": "(메타정보를 찾을 수 없음 — 빌트인 fallback 사용 중일 수 있음)",
+            "assistant_type": "genai",
+        }
 
     # --------------------------------------------------------------------- #
     # LLM 설정 관련 메서드
@@ -246,6 +297,9 @@ def add(a, b):
         # API 호출 - GenAI API 형식 (contents: List[str])
         contents = [msg["content"] for msg in self.conversation_history]
         contents.append(full_message)
+
+        # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
+        self.system_prompt = self._render_system_prompt()
 
         # REQ-058-002: 민감 단어 치환 (GenAI 전송 전)
         masked_contents = self.sensitive_filter.mask_contents(contents)

@@ -683,12 +683,21 @@ def main():
                 elif command == '/template_list':
                     templates = assistant.list_templates()
                     if templates:
-                        print("\n📋 사용 가능한 프롬프트 템플릿:")
+                        print("\n📋 사용 가능한 프롬프트 템플릿 (claude):")
                         for t in templates:
-                            print(f"   - {t['name']}: {t['description']}")
+                            tpl_type = t.get('assistant_type') or '공용'
+                            print(f"   - {t['name']} [{tpl_type}]: {t['description']}")
                     else:
                         print("📭 사용 가능한 템플릿이 없습니다.")
-                        print(f"💡 {assistant.file_manager.workspace_dir / '.system-prompts'} 폴더에 YAML 파일을 추가하세요.")
+                        print(f"💡 {assistant.file_manager.workspace_dir / '.system_prompts'} 폴더에 YAML 파일을 추가하세요.")
+
+                elif command == '/template_show':
+                    # FSD v1.0.161 [ADD]: 현재 적용 중인 템플릿 정보 표시
+                    info = assistant.get_active_template_info()
+                    print("\n📌 현재 적용 중인 템플릿:")
+                    print(f"   - name           : {info.get('name', '')}")
+                    print(f"   - description    : {info.get('description', '')}")
+                    print(f"   - assistant_type : {info.get('assistant_type', '') or '(공용)'}")
 
                 elif command == '/template_reset':
                     assistant.reset_system_prompt()
