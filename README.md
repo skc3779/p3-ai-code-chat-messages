@@ -127,7 +127,7 @@ python /path/to/p3-ai-code-chat-messages/claude-ai-chat-code01.py
 | `/read <패턴>` | 파일 내용 읽기 | `/read requirements.txt` |
 | `/watch <패턴>` | 파일 변경 감시 시작 | `/watch *.py` |
 | `/history` | 대화 기록 확인 | `/history` |
-| `/tokens` | 토큰 사용량 확인 | `/tokens` |
+| `/tokens` | 토큰 사용량 확인 · 메시지 보관 한도 수정 | `/tokens [-k <number\|default>]` |
 | `/help` | 전체 명령어 도움말 | `/help` |
 | `/quit` | 종료 | `/quit` |
 

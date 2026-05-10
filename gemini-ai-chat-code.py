@@ -9,6 +9,7 @@ Google Gemini API를 REST API로 직접 호출합니다.
 import os
 from pathlib import Path
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 # src/ 패키지에서 클래스 import
@@ -546,14 +547,30 @@ def main():
                         print("💡 다른 변경사항이 있다면 /diff로 다시 확인하세요.")
 
                 elif command == '/tokens':
-                    stats = TokenManager.get_token_stats(
+                    if args.strip().startswith('-k'):
+                        parts = args.strip().split()
+                        if len(parts) < 2:
+                            print("❌ 사용법: /tokens -k <number> 또는 /tokens -k default")
+                            continue
+                        value_str = parts[1]
+                        if value_str == 'default':
+                            TokenManager.reset_max_messages()
+                            print(f"✅ MAX_MESSAGES_TO_KEEP 이 기본값({TokenManager.MAX_MESSAGES_TO_KEEP})으로 복원되었습니다.")
+                        else:
+                            try:
+                                value = int(value_str)
+                                TokenManager.set_max_messages(value)
+                                print(f"✅ MAX_MESSAGES_TO_KEEP 이 {value} 로 변경되었습니다.")
+                            except ValueError:
+                                print(f"❌ 유효하지 않은 값: {value_str} (1 이상의 정수 또는 'default')")
+                                continue
+                    
+                    report = TokenManager.format_token_report(
                         assistant.conversation_history,
-                        TokenManager.MAX_TOKENS_GEMINI
+                        max_tokens=TokenManager.MAX_TOKENS_GEMINI,
+                        platform="Gemini",
                     )
-                    print(f"\n📊 토큰 사용량:")
-                    print(f"  - 현재: {stats['current']:,} / {stats['max']:,} ({stats['usage_percent']}%)")
-                    print(f"  - 메시지 수: {stats['message_count']}")
-                    print(f"  - 남은 토큰: {stats['remaining']:,}")
+                    print(report)
 
                 elif command == '/shell' or command == '/shell!':
                     if args in ('--help', '-h'):

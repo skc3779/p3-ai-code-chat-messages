@@ -87,8 +87,8 @@ class CommandRegistry:
             CommandInfo('/watch_list',    '현재 감시 중인 패턴 목록 보기',
                         '/watch_list',                       ''),
             # ── 설정 ─────────────────────────────────────────────────────────
-            CommandInfo('/tokens',        '현재 대화의 토큰 사용량 확인',
-                        '/tokens',                           ''),
+            CommandInfo('/tokens',        '토큰 사용량 확인 · 메시지 한도 변경',
+                        '/tokens [-k <number|default>]',     '-k 50'),
             CommandInfo('/llm_config',    '언어별 LLM 파라미터 설정',
                         '/llm_config <lang>',                'llm_config Java'),
             CommandInfo('/template',      '시스템 프롬프트 템플릿 변경',

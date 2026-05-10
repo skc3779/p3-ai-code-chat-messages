@@ -1460,3 +1460,37 @@ python -m unittest tests.test_agent_dispatcher_patch -v
 ```
 
 - 완료 후 docs/releases 폴더에 `RELEASE-v1.0.141` 문서로 작성해줘.
+
+
+---
+
+아래 조건에 맞게 FSD 문서를 작성해줘.
+- `MAX_MESSAGES_TO_KEEP` 설정은 현재 `.env` 파일에서 제어 하도록 되어 있는데, `/tokens` 명령어 실행 시 수정이 가능하도록 개선한다.
+  - `/tokens -k <number>`: 메시지 수를 `<number>`개로 설정
+  - `/tokens -k default`: 기본값으로 복원
+- `/tokens` 출력결과가 claude-ai-chat-code.py, gemini-ai-chat-code.py, gen-ai-chat-code.py 파일에 동일하게 표시되도록 개선한다.
+  - `메시지 수: 0 / 30` 으로 `MAX_MESSAGES_TO_KEEP` 도 표시 되도록 한다.
+- 또한 `/tokens` 실행시 현재 `token_manager.py` 에 정의된 토큰 한계수치 설정값들도 함께 출력해 주도록 한다.
+- docs/requiremnets 폴더에 FSD v1.0.156 문서로 작성해줘.
+  - FSD 문서에는 아래 문구를 포함시킨다.
+  - FSD 구현 완료 후 `docs/releases` 폴더에 `RELEASE-v1.0.156` 문서 작성을 지시한다.
+  - README.md 파일 업데이트를 지시한다.
+
+
+---
+
+아래 조건에 맞게 FSD 문서를 작성해줘.
+- `/auto_context` 명령어를 프로그램 실행 파라메터 방식으로 실행하고 완료시 자동종료가 가능하도록 기능을 개선한다.
+- `claude-ai-chat-code.py`, `gemini-ai-chat-code.py`, `gen-ai-chat-code.py` 파일에 동일하게 적용한다. 
+- `python -m input-cli -t <claude/gemini/genai> -wp <workspace path> -c auto_context <pattern> -p <명령 프롬프트 파일>` 
+   명령어로 실행 시 `auto_context` 가 실행되고, 실행 완료후 `input-cli` 가 종료 되도록 한다.
+- `-t <claude/gemini/genai>, --type <claude/gemini/genai>` 옵션은 사용할 LLM을 지정한다.
+- `-wp <filename>, --workspace <filename>` 옵션은 작업공간 경로를 지정한다.
+- `-c auto_context <pattern>, --command auto_context <pattern>` 옵션은 자동 컨텍스트 파일패턴을 지정한다. <pattern>은 와일드카드 패턴이다.
+- `-p <filename>, --prompt <filename>` 옵션은 명령 프롬프트 파일 옵션이다.
+- `docs/requiremnets` 폴더에 FSD v1.0.157 문서로 작성해줘.
+  - FSD 문서에는 아래 문구를 포함시킨다.
+  - FSD 구현 완료 후 `docs/releases` 폴더에 `RELEASE-v1.0.157` 문서 작성을 지시한다.
+  - README.md 파일 업데이트를 지시한다.
+
+---
