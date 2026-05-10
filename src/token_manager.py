@@ -86,12 +86,12 @@ class TokenManager:
         """MAX_MESSAGES_TO_KEEP 을 런타임에 변경한다.
 
         Args:
-            value: 1 이상의 정수
+            value: 0 이상의 정수
         Raises:
-            ValueError: value < 1
+            ValueError: value < 0
         """
-        if value < 1:
-            raise ValueError("MAX_MESSAGES_TO_KEEP 은 1 이상이어야 합니다.")
+        if value < 0:
+            raise ValueError("MAX_MESSAGES_TO_KEEP 은 0 이상이어야 합니다.")
         cls.MAX_MESSAGES_TO_KEEP = value
 
     @classmethod
