@@ -111,6 +111,43 @@ cd /path/to/your/project
 python /path/to/p3-ai-code-chat-messages/claude-ai-chat-code01.py
 ```
 
+### 배치 실행 (자동 종료) — `python -m ai_cli`
+
+REPL 진입 없이 `/auto_context` 를 한 번 실행하고 완료 시 종료하는 배치 모드입니다 (FSD v1.0.157).
+
+```bash
+python -m ai_cli -t <claude|gemini|genai> \
+                 -wp <workspace path> \
+                 -c auto_context <pattern> \
+                 -p <prompt file>
+```
+
+| 옵션 | 별칭 | 설명 |
+|---|---|---|
+| `-t`  | `--type`      | 사용할 LLM (`claude` / `gemini` / `genai`) |
+| `-wp` | `--workspace` | 작업 디렉토리 경로 |
+| `-c`  | `--command`   | 실행 명령. 현재 `auto_context <pattern>` 만 지원. `<pattern>` 은 와일드카드 |
+| `-p`  | `--prompt`    | 프롬프트(질문) 파일 경로 (UTF-8 / UTF-8 BOM 허용) |
+
+종료 코드: `0` 정상, `1` 입력 오류, `2` 미지원 명령, `3` 처리 예외, `130` 사용자 중단.
+
+```bash
+# Claude · 단일 패턴
+python -m ai_cli -t claude -wp ./ -c auto_context "src/*.py" -p prompt.txt
+
+# Gemini · 다중 패턴 (대괄호 형식)
+python -m ai_cli -t gemini -wp /work \
+    -c auto_context "[src/*.py, docs/*.md]" -p prompts/translate.txt
+
+# GenAI · 절대 경로 워크스페이스
+python -m ai_cli --type genai \
+    --workspace "C:\proj" \
+    --command auto_context "tests/*.py" \
+    --prompt prompts/refactor.txt
+```
+
+> 셸 글롭을 막기 위해 와일드카드는 **반드시 따옴표** 로 감쌉니다.
+
 ### 주요 명령어
 
 | 명령어 | 설명 | 예시 |
@@ -191,6 +228,12 @@ python -m unittest tests.test_response_parser -v
 python -m unittest tests.test_response_parser.TestResponseParser.test_parse_untagged_code_block -v
 ```
 > **참고**: `tests/` 폴더 내의 테스트 파일들은 `src` 패키지를 import하기 위해 `sys.path` 설정을 포함하고 있습니다. 모듈 방식으로 실행하려면 `tests/` 디렉토리에 `__init__.py`가 존재해야 합니다.
+
+
+```bash
+# FSD_v1.0.157_ai-cli-batch-auto-context.md 단위테스트
+python -m pytest tests/test_ai_cli_batch.py
+```
 
 ---
 
