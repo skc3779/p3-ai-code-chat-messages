@@ -9,6 +9,7 @@ Google Gemini API를 REST API로 직접 호출합니다.
 import os
 from pathlib import Path
 
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 
 # src/ 패키지에서 클래스 import
@@ -546,14 +547,30 @@ def main():
                         print("💡 다른 변경사항이 있다면 /diff로 다시 확인하세요.")
 
                 elif command == '/tokens':
-                    stats = TokenManager.get_token_stats(
+                    if args.strip().startswith('-k'):
+                        parts = args.strip().split()
+                        if len(parts) < 2:
+                            print("❌ 사용법: /tokens -k <number> 또는 /tokens -k default")
+                            continue
+                        value_str = parts[1]
+                        if value_str == 'default':
+                            TokenManager.reset_max_messages()
+                            print(f"✅ MAX_MESSAGES_TO_KEEP 이 기본값({TokenManager.MAX_MESSAGES_TO_KEEP})으로 복원되었습니다.")
+                        else:
+                            try:
+                                value = int(value_str)
+                                TokenManager.set_max_messages(value)
+                                print(f"✅ MAX_MESSAGES_TO_KEEP 이 {value} 로 변경되었습니다.")
+                            except ValueError:
+                                print(f"❌ 유효하지 않은 값: {value_str} (1 이상의 정수 또는 'default')")
+                                continue
+                    
+                    report = TokenManager.format_token_report(
                         assistant.conversation_history,
-                        TokenManager.MAX_TOKENS_GEMINI
+                        max_tokens=TokenManager.MAX_TOKENS_GEMINI,
+                        platform="Gemini",
                     )
-                    print(f"\n📊 토큰 사용량:")
-                    print(f"  - 현재: {stats['current']:,} / {stats['max']:,} ({stats['usage_percent']}%)")
-                    print(f"  - 메시지 수: {stats['message_count']}")
-                    print(f"  - 남은 토큰: {stats['remaining']:,}")
+                    print(report)
 
                 elif command == '/shell' or command == '/shell!':
                     if args in ('--help', '-h'):
@@ -616,9 +633,18 @@ def main():
 
                 elif command == '/template_list':
                     templates = assistant.list_templates()
-                    print(f"\n📋 사용 가능한 템플릿 ({len(templates)}개):")
+                    print(f"\n📋 사용 가능한 템플릿 ({len(templates)}개) (gemini):")
                     for t in templates:
-                        print(f"  - {t['name']}: {t['description']}")
+                        tpl_type = t.get('assistant_type') or '공용'
+                        print(f"  - {t['name']} [{tpl_type}]: {t['description']}")
+
+                elif command == '/template_show':
+                    # FSD v1.0.161 [ADD]: 현재 적용 중인 템플릿 정보 표시
+                    info = assistant.get_active_template_info()
+                    print("\n📌 현재 적용 중인 템플릿:")
+                    print(f"   - name           : {info.get('name', '')}")
+                    print(f"   - description    : {info.get('description', '')}")
+                    print(f"   - assistant_type : {info.get('assistant_type', '') or '(공용)'}")
 
                 elif command == '/template_reset':
                     assistant.reset_system_prompt()
@@ -665,6 +691,115 @@ def main():
             break
         except Exception as e:
             print(f"\n❌ 오류 발생: {str(e)}")
+
+
+def _parse_auto_context_args(args: str):
+    """`/auto_context` 인자 문자열을 파싱한다.
+
+    Returns:
+        (quality_check: bool, file_patterns: list[str], inline_question: str)
+    """
+    _QC_ALIASES = {"-qc": "quality_check", "--quality-check": "quality_check"}
+    options, args = parse_command_options(args, _QC_ALIASES)
+    quality_check = "quality_check" in options
+
+    file_patterns: list[str] = []
+    question = ""
+    if args.startswith('['):
+        try:
+            end_idx = args.index(']')
+        except ValueError:
+            raise ValueError("닫는 대괄호 ']'가 없습니다.")
+        patterns_str = args[1:end_idx]
+        file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
+        question = args[end_idx + 1:].strip()
+    else:
+        parts = args.split(maxsplit=1)
+        if parts:
+            file_patterns = [parts[0]]
+            question = parts[1] if len(parts) >= 2 else ""
+    return quality_check, file_patterns, question
+
+
+def main_batch(workspace: str, command: str, command_args: str, prompt: str) -> int:
+    """배치 모드 실행 — REPL 진입 없이 단일 명령을 실행하고 종료한다.
+
+    FSD v1.0.157 § 3.2.2
+
+    Args:
+        workspace:     작업 디렉토리 경로 (-wp)
+        command:       실행할 명령. 'auto_context' 만 허용
+        command_args:  명령 인자 (pattern 문자열)
+        prompt:        프롬프트 파일에서 읽어들인 본문 (-p)
+
+    Returns:
+        0 — 정상 종료 / 1 — 입력 오류 / 2 — 명령 미지원 / 3 — 처리 예외
+    """
+    if command != "auto_context":
+        print(f"❌ 지원하지 않는 명령: {command} (현재는 'auto_context' 만 지원)")
+        return 2
+
+    load_environment()
+    TokenManager.reload_from_env()
+
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL_ID = os.getenv("GEMINI_MODEL_ID", "gemini-3.0-flash")
+    GEMINI_API_ENDPOINT = os.getenv(
+        "GEMINI_API_ENDPOINT",
+        "https://aiplatform.googleapis.com/v1/publishers/google/",
+    )
+    if not GEMINI_API_KEY:
+        print("❌ GEMINI_API_KEY 환경변수가 설정되지 않았습니다.")
+        return 3
+
+    assistant = GeminiCodeAssistant(
+        api_key=GEMINI_API_KEY,
+        model_id=GEMINI_MODEL_ID,
+        endpoint_url=GEMINI_API_ENDPOINT,
+        workspace_dir=workspace,
+    )
+
+    try:
+        quality_check, file_patterns, _inline_q = _parse_auto_context_args(command_args)
+    except ValueError as exc:
+        print(f"❌ {exc}")
+        return 1
+    if not file_patterns:
+        print("❌ 패턴이 누락되었습니다. 예: -c auto_context src/*.py")
+        return 1
+
+    question = (prompt or "").strip()
+    if not question:
+        print("❌ 프롬프트가 비어있습니다.")
+        return 1
+
+    matcher = FilePatternMatcher(assistant.file_manager.workspace_dir)
+    all_files = assistant.file_manager.list_files()
+    matched_files = matcher.filter_files(all_files, file_patterns)
+    if not matched_files:
+        print(f"❌ 패턴 {file_patterns}에 해당하는 파일이 없습니다.")
+        return 1
+
+    print(f"\n📂 매칭된 파일 {len(matched_files)}개 (배치 모드 — 자동 진행):")
+    for i, f in enumerate(matched_files, 1):
+        rel = f.relative_to(assistant.file_manager.workspace_dir)
+        print(f"  {i}. {rel}")
+
+    from src.context_processor import ContextProcessor
+    processor = ContextProcessor(
+        assistant=assistant,
+        file_manager=assistant.file_manager,
+        streaming=True,
+        quality_check=quality_check,
+    )
+    try:
+        processor.process_files(matched_files, question)
+    except Exception as exc:
+        import traceback as _tb
+        print(f"❌ 처리 실패: {exc}")
+        _tb.print_exc()
+        return 3
+    return 0
 
 
 if __name__ == "__main__":

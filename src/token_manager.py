@@ -31,6 +31,9 @@ class TokenManager:
     # 최대 유지할 메시지 수 (.env에서 설정 가능, 기본값 30)
     MAX_MESSAGES_TO_KEEP = _env_int("MAX_MESSAGES_TO_KEEP", 30)
     
+    # 기본값 (복원 시 사용)
+    DEFAULT_MAX_MESSAGES_TO_KEEP = _env_int("MAX_MESSAGES_TO_KEEP", 30)
+    
     # 토큰 추정 비율 (평균적으로 1토큰 ≈ 4자, 한글은 약 2-3자)
     CHARS_PER_TOKEN = 3.5
     
@@ -76,6 +79,67 @@ class TokenManager:
         cls.MAX_TOKENS_GEMINI = _env_int("MAX_TOKENS_GEMINI", 786000)
         cls.DEFAULT_MAX_TOKENS = cls.MAX_TOKENS_CLAUDE
         cls.MAX_MESSAGES_TO_KEEP = _env_int("MAX_MESSAGES_TO_KEEP", 30)
+        cls.DEFAULT_MAX_MESSAGES_TO_KEEP = cls.MAX_MESSAGES_TO_KEEP
+
+    @classmethod
+    def set_max_messages(cls, value: int) -> None:
+        """MAX_MESSAGES_TO_KEEP 을 런타임에 변경한다.
+
+        Args:
+            value: 0 이상의 정수
+        Raises:
+            ValueError: value < 0
+        """
+        if value < 0:
+            raise ValueError("MAX_MESSAGES_TO_KEEP 은 0 이상이어야 합니다.")
+        cls.MAX_MESSAGES_TO_KEEP = value
+
+    @classmethod
+    def reset_max_messages(cls) -> None:
+        """MAX_MESSAGES_TO_KEEP 을 .env 기본값으로 복원한다."""
+        cls.MAX_MESSAGES_TO_KEEP = cls.DEFAULT_MAX_MESSAGES_TO_KEEP
+
+    @classmethod
+    def format_token_report(
+        cls,
+        conversation_history: List[Dict],
+        max_tokens: int = None,
+        platform: str = "Claude",
+    ) -> str:
+        """통일된 /tokens 출력 문자열을 생성한다.
+
+        Args:
+            conversation_history: 대화 히스토리 리스트
+            max_tokens: 현재 플랫폼의 최대 토큰 수
+            platform: 플랫폼 이름 ("Claude", "GenAI", "Gemini")
+
+        Returns:
+            출력용 포맷팅된 문자열
+        """
+        if max_tokens is None:
+            max_tokens = cls.DEFAULT_MAX_TOKENS
+
+        stats = cls.get_token_stats(conversation_history, max_tokens)
+
+        lines = [
+            "\n📊 토큰 사용량:",
+            f"   현재 토큰:  {stats['current']:,} / {stats['max']:,} ({stats['usage_percent']}%)",
+            f"   메시지 수:  {stats['message_count']} / {cls.MAX_MESSAGES_TO_KEEP}",
+            f"   남은 토큰:  {stats['remaining']:,}",
+            "",
+            "⚙️ 토큰 한계 설정:",
+        ]
+
+        platforms = [
+            ("Claude", cls.MAX_TOKENS_CLAUDE),
+            ("GenAI",  cls.MAX_TOKENS_GENAI),
+            ("Gemini", cls.MAX_TOKENS_GEMINI),
+        ]
+        for name, limit in platforms:
+            marker = " (현재)" if name == platform else ""
+            lines.append(f"   {name + ':':9s}{limit:,}{marker}")
+
+        return "\n".join(lines)
 
     @classmethod
     def auto_trim_history(

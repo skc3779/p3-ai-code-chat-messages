@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m pytest tests/test_template_filter_and_show.py tests/test_prompt_renderer.py tests/test_default_template_loading.py -v)",
+      "Bash(python -m pytest tests/ -q --ignore=tests/test_ai_cli_batch.py --ignore=tests/test_tokens_command.py)",
+      "Bash(python -m pytest tests/test_template_filter_and_show.py tests/test_prompt_renderer.py tests/test_default_template_loading.py -q)"
+    ]
+  }
+}
