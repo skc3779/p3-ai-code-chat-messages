@@ -90,4 +90,8 @@ logs/
 target/
 build_output/
 
+### OMC OMX ###
+.omc/
+.omx/
+
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,pycharm+iml
