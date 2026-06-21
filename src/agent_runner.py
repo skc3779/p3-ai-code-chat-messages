@@ -88,6 +88,9 @@ class AgentSession:
     acceptance_criteria: List[AcceptanceCriterion] = field(default_factory=list)
     eval_reject_count: int = 0
     criteria_reprompted: bool = False
+    # FSD v1.1.034 — truncation / continuation state
+    continuation_count: int = 0
+    pending_truncated_file: Optional[str] = None
 
 
 class AgentRunner:
@@ -146,6 +149,9 @@ class AgentRunner:
         self.eval_report_path = os.getenv(
             "AGENT_EVAL_REPORT_PATH", "docs/완료보고서.md"
         )[:4096]
+        # FSD v1.1.034 — max continuation iterations before aborting
+        _mc = bounded_env_int("AGENT_MAX_CONTINUATIONS", 3, 1, 20)
+        self.max_continuations: int = _mc if _mc is not None else 3
         # FSD v1.0.100 bypass 안전장치
         self.bypass_timeout_sec       = int(os.getenv("AGENT_BYPASS_TIMEOUT", "1800"))
         self.bypass_stagnation_window = int(os.getenv("AGENT_BYPASS_STAGNATION_N", "3"))
@@ -278,20 +284,46 @@ class AgentRunner:
 
         try:
             completed = False
+            plan_was_truncated = False
             # ── Step 0. PLAN (신규 세션만) ──────────────────
             if resume_session is None:
                 plan_prompt = self._build_initial_prompt(goal, file_context)
                 plan_response = self._call_model(session, plan_prompt)
-                session.plan = plan_response
-                self._print_block("📋", " PLAN", plan_response)
+                # FSD v1.1.034: classify PLAN response (FR-034-01/03/05)
+                plan_class = self._classify_response(plan_response)
+                if plan_class == "TRUNCATED":
+                    clean_plan, pending_file = self._handle_truncated_response(
+                        session, plan_response
+                    )
+                    session.plan = clean_plan
+                    session.pending_truncated_file = pending_file
+                    session.continuation_count += 1
+                    plan_was_truncated = True
+                    self._print_block("📋", " PLAN (잘림 감지 — 이어받기 예정)", clean_plan)
+                    print(
+                        f"\n⚠️  PLAN 응답이 잘렸습니다 "
+                        f"(잘린 파일: {pending_file or '미확인'}). "
+                        f"다음 iteration에서 이어받습니다."
+                    )
+                else:
+                    session.plan = plan_response
+                    self._print_block("📋", " PLAN", plan_response)
 
             if self.eval_gate_enabled:
-                if not self._initialize_acceptance_criteria(
+                criteria_ok = self._initialize_acceptance_criteria(
                     session, is_resume=resume_session is not None
-                ):
-                    session.stop_reason = AgentStopReason.GOAL_UNVERIFIED
-                    print("\n⛔ 검증 가능한 완료 기준을 확정하지 못했습니다.")
-                    completed = True
+                )
+                if not criteria_ok:
+                    if plan_was_truncated:
+                        # FR-034-05: PLAN 잘림 → 0-iteration 즉시 종료 억제
+                        print(
+                            "\n⚠️  PLAN이 잘려 완료 기준을 확정하지 못했습니다. "
+                            "이어받기 후 재시도합니다."
+                        )
+                    else:
+                        session.stop_reason = AgentStopReason.GOAL_UNVERIFIED
+                        print("\n⛔ 검증 가능한 완료 기준을 확정하지 못했습니다.")
+                        completed = True
                 elif resume_session is not None:
                     # Refresh evidence, but an unmet stale criterion does not
                     # terminate a resumed loop before a new claim or cap.
@@ -310,7 +342,21 @@ class AgentRunner:
 
                 self._print_header(session, i)
 
-                prompt = self._build_iteration_prompt(session, feedback)
+                # FSD v1.1.034 — FR-034-06: 최대 이어받기 횟수 초과 검사
+                if session.continuation_count > self.max_continuations:
+                    print(
+                        f"\n⛔ 최대 이어받기 횟수 ({self.max_continuations}) 초과 — 종료합니다."
+                    )
+                    session.stop_reason = AgentStopReason.MAX_ITERATIONS
+                    completed = True
+                    break
+
+                # FSD v1.1.034 — FR-034-04: 잘림 pending 시 이어받기 프롬프트 사용
+                is_continuation = session.pending_truncated_file is not None
+                if is_continuation:
+                    prompt = self._build_continuation_prompt(session)
+                else:
+                    prompt = self._build_iteration_prompt(session, feedback)
                 feedback_used = feedback
                 feedback = None
 
@@ -320,6 +366,49 @@ class AgentRunner:
                 if self._check_async_stop(session):
                     completed = True
                     break
+
+                # FSD v1.1.034 — FR-034-01/02/03: 응답 잘림 분류 및 처리
+                response_class = self._classify_response(response)
+                if response_class == "TRUNCATED":
+                    clean_resp, next_pending = self._handle_truncated_response(
+                        session, response
+                    )
+                    session.pending_truncated_file = next_pending
+                    session.continuation_count += 1
+                    reason_t, act_t, obs_t = self._parse_blocks(clean_resp)
+                    self._print_block("🧠", f" Reason #{i}", reason_t or "(없음)")
+                    self._print_block(
+                        "🔨", f" Action #{i} (잘림 — 완전 블록만 처리)", act_t or "(없음)"
+                    )
+                    actions_t = self._execute_actions(session, act_t)
+                    if self._has_code_failure(actions_t):
+                        corrected_t = self._self_correct_loop(session, actions_t)
+                        if corrected_t:
+                            actions_t = actions_t + corrected_t
+                    observe_text_t = self._format_observe(obs_t, actions_t)
+                    self._print_block("👁", f" Observe #{i}", observe_text_t)
+                    session.iterations.append(IterationRecord(
+                        idx=i, reason_text=reason_t, act_text=act_t,
+                        actions=actions_t, observe_text=observe_text_t,
+                        user_feedback=feedback_used,
+                    ))
+                    if auto_save_interval > 0 and i % auto_save_interval == 0:
+                        self._auto_save(session)
+                    print(
+                        f"\n⚠️  응답 잘림 감지 "
+                        f"({session.continuation_count}/{self.max_continuations}) — "
+                        f"잘린 파일: {next_pending or '미확인'}. 다음 iteration에서 이어받습니다."
+                    )
+                    if session.bypass_approvals:
+                        brk = self._check_bypass_safety(session)
+                        if brk is not None:
+                            session.stop_reason = brk
+                            completed = True
+                            break
+                    continue  # FR-034-06: DONE 게이트 / 사용자 개입 예산 건드리지 않음
+
+                # COMPLETE / EMPTY — 이어받기 상태 초기화
+                session.pending_truncated_file = None
 
                 reason, act, observe_hint = self._parse_blocks(response)
                 self._print_block("🧠", f" Reason #{i}", reason or "(없음)")
@@ -677,6 +766,9 @@ f"{shell_brief}\n\n"
             parts.append(f"[FILE_CONTEXT]\n{file_context}")
         parts.append(
             "이 목표를 달성하기 위한 전체 PLAN 을 번호 매긴 목록으로 제시하세요.\n"
+            "⚠️ 중요(FR-034-07): 이 단계에서는 **계획 목록만** 출력하세요.\n"
+            "   파일 내용 전문(코드, @@@filename: 블록)은 절대 출력하지 마세요.\n"
+            "   파일 생성·수정은 이후 각 iteration 에서 수행합니다.\n"
             "PLAN 은 간결하게, 실행 가능한 단위로 쪼개세요.\n"
             "목표에 객관적 완료 기준을 추가해야 한다면 다음 형식만 사용하세요:\n"
             "@@@criteria\n"
@@ -779,6 +871,110 @@ f"{shell_brief}\n\n"
                 )
         lines.append("증거를 충족하도록 구현을 보완한 뒤 다시 완료를 선언하세요.")
         return "\n".join(lines)
+
+    # ─── FSD v1.1.034: 응답 잘림 분류 / 처리 ────────────────────
+
+    def _classify_response(self, response: str) -> str:
+        """응답을 COMPLETE | TRUNCATED | EMPTY 로 분류한다.
+
+        1순위: Provider 의 finish_reason(max_tokens/MAX_TOKENS/length).
+        2순위(폴백): @@@filename:/patch: 펜스 불균형 휴리스틱.
+        """
+        if not response.strip():
+            return "EMPTY"
+        last_finish = getattr(self.assistant, "last_finish_reason", None)
+        if last_finish in (
+            "max_tokens", "MAX_TOKENS", "length",
+            "MAX_OUTPUT_TOKENS", "STOP_LENGTH", "stop_length",
+        ):
+            return "TRUNCATED"
+        if self._has_unclosed_fence(response):
+            return "TRUNCATED"
+        return "COMPLETE"
+
+    @staticmethod
+    def _has_unclosed_fence(response: str) -> bool:
+        """응답에 닫히지 않은 @@@filename:/patch: 펜스가 있으면 True."""
+        RE_OPEN = re.compile(r'^[ \t]*@{3,}(?:filename:|patch:)\S*\s*$', re.IGNORECASE)
+        RE_CLOSE = re.compile(r'^[ \t]*@{3,}\s*$')
+        depth = 0
+        for line in response.split('\n'):
+            if RE_OPEN.match(line):
+                depth += 1
+            elif RE_CLOSE.match(line) and depth > 0:
+                depth -= 1
+        return depth > 0
+
+    @staticmethod
+    def _strip_incomplete_fence_tail(response: str) -> Tuple[str, Optional[str]]:
+        """마지막으로 열렸으나 닫히지 않은 @@@filename:/patch: 블록을 제거한다.
+
+        Returns:
+            (clean_response, pending_file_path)
+            pending_file_path: 잘린 파일 경로, 없으면 None
+        """
+        RE_OPEN = re.compile(r'^[ \t]*@{3,}(?:filename:|patch:)(\S*)\s*$', re.IGNORECASE)
+        RE_CLOSE = re.compile(r'^[ \t]*@{3,}\s*$')
+        lines = response.split('\n')
+        depth = 0
+        unclosed_idx = -1
+        unclosed_path: Optional[str] = None
+        for idx, line in enumerate(lines):
+            m = RE_OPEN.match(line)
+            if m:
+                depth += 1
+                unclosed_idx = idx
+                unclosed_path = m.group(1).strip() or None
+            elif RE_CLOSE.match(line) and depth > 0:
+                depth -= 1
+                if depth == 0:
+                    unclosed_idx = -1
+                    unclosed_path = None
+        if unclosed_idx < 0:
+            return response, None
+        clean = '\n'.join(lines[:unclosed_idx]).rstrip()
+        return clean, unclosed_path
+
+    def _handle_truncated_response(
+        self, session: AgentSession, response: str
+    ) -> Tuple[str, Optional[str]]:
+        """불완전 펜스 꼬리를 제거하고 agent_history 도 동기화한다.
+
+        Returns:
+            (clean_response, pending_file_path)
+        """
+        clean, pending_file = self._strip_incomplete_fence_tail(response)
+        # agent_history 의 마지막 어시스턴트 메시지에서 불완전 꼬리 제거
+        if session.agent_history:
+            last = session.agent_history[-1]
+            if last.get("role") in ("assistant", "model"):
+                content = last.get("content", "")
+                if isinstance(content, str):
+                    last["content"] = clean
+                elif isinstance(content, list):
+                    for block in content:
+                        if isinstance(block, dict) and block.get("type") == "text":
+                            block["text"] = clean
+                            break
+        return clean, pending_file
+
+    def _build_continuation_prompt(self, session: AgentSession) -> str:
+        """잘림 이후 다음 iteration 에 보낼 이어받기 프롬프트."""
+        pending = session.pending_truncated_file or "(이전 파일)"
+        parts = [f"[GOAL]\n{session.goal}"]
+        if session.plan:
+            parts.append(f"[PLAN]\n{session.plan}")
+        parts.append(
+            f"[CONTINUATION]\n"
+            f"직전 응답이 토큰 한도로 잘렸습니다.\n"
+            f"- 잘린 파일: {pending} (저장되지 않았습니다)\n\n"
+            f"지시:\n"
+            f"1) {pending} 부터 다시 **완전한 @@@filename:...@@@ 블록**으로 출력하세요.\n"
+            f"2) 이미 완성·저장된 파일은 반복하지 마세요.\n"
+            f"3) 한 번에 1~2개 파일만 출력해 응답이 잘리지 않게 하세요.\n"
+            f"4) 파일 출력 후 남은 작업이 있으면 [REASON]/[ACTION]/[OBSERVE] 로 계속하세요."
+        )
+        return "\n\n".join(parts)
 
     def _build_iteration_prompt(
         self, session: AgentSession, feedback: Optional[str]

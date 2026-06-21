@@ -125,6 +125,8 @@ class ClaudeCodeAssistant:
         # 호환을 위한 default_system_prompt — 치환 후 본문 (1회 평가)
         self.default_system_prompt = self._render_system_prompt(raw)
         self.system_prompt = self.default_system_prompt
+        # FSD v1.1.034: truncation detection
+        self.last_finish_reason: Optional[str] = None
 
     def _build_template_context(self) -> Dict[str, str]:
         """렌더 컨텍스트 — 현재는 os_shell_hint 만 제공.
@@ -211,10 +213,14 @@ class ClaudeCodeAssistant:
         # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
         self.system_prompt = internal_system_prompt if internal_system_prompt is not None else self._render_system_prompt()
 
+        # FSD v1.1.034: reset truncation signal before each call
+        self.last_finish_reason = None
+        _max_output_tokens = int(os.getenv("AGENT_MAX_OUTPUT_TOKENS", "4096"))
+
         body = {
             "model": self.model_id,
             "messages": messages,
-            "max_tokens": 4096,
+            "max_tokens": _max_output_tokens,
             "system": self.system_prompt,
             "stream": streaming,
         }
@@ -390,8 +396,9 @@ class ClaudeCodeAssistant:
 
                         elif event_type == 'message_delta':
                             delta = data.get('delta', {})
-                            # stop_reason 확인 가능 (필요 시 처리)
-                            pass
+                            # FSD v1.1.034: capture truncation signal
+                            if delta.get('stop_reason'):
+                                self.last_finish_reason = delta['stop_reason']
 
                         elif event_type == 'message_stop':
                             break
@@ -519,6 +526,8 @@ class ClaudeCodeAssistant:
             return ""
 
         result = response.json()
+        # FSD v1.1.034: capture truncation signal
+        self.last_finish_reason = result.get('stop_reason')
         content_blocks = result.get('content', [])
         
         # 화면 출력 및 텍스트 추출

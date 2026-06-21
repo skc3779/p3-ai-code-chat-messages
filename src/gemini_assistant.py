@@ -125,6 +125,8 @@ class GeminiCodeAssistant:
 
         self.default_system_prompt = self._render_system_prompt(raw)
         self.system_prompt = self.default_system_prompt
+        # FSD v1.1.034: truncation detection
+        self.last_finish_reason: Optional[str] = None
 
     def _build_template_context(self) -> Dict[str, str]:
         """렌더 컨텍스트 — 현재는 os_shell_hint 만 제공.
@@ -205,6 +207,8 @@ class GeminiCodeAssistant:
         )
         
         # API 호출
+        # FSD v1.1.034: reset truncation signal before each call
+        self.last_finish_reason = None
         try:
             previous_error_mode = getattr(self, "_raise_api_errors", False)
             previous_prompt_lock = getattr(self, "_internal_system_prompt_locked", False)
@@ -262,7 +266,7 @@ class GeminiCodeAssistant:
                 "parts": [{"text": self.system_prompt}]
             },
             "generationConfig": {
-                "maxOutputTokens": 8192,
+                "maxOutputTokens": int(os.getenv("AGENT_MAX_OUTPUT_TOKENS", "8192")),
                 "temperature": 0.7
             }
         }
@@ -324,6 +328,10 @@ class GeminiCodeAssistant:
                         # Gemini 응답 구조에서 텍스트 추출
                         candidates = data.get('candidates', [])
                         for candidate in candidates:
+                            # FSD v1.1.034: capture truncation signal
+                            finish_reason = candidate.get('finishReason')
+                            if finish_reason and finish_reason != 'STOP':
+                                self.last_finish_reason = finish_reason
                             content = candidate.get('content', {})
                             parts = content.get('parts', [])
                             for part in parts:
@@ -401,6 +409,10 @@ class GeminiCodeAssistant:
         content = ""
         candidates = result.get('candidates', [])
         for candidate in candidates:
+            # FSD v1.1.034: capture truncation signal
+            finish_reason = candidate.get('finishReason')
+            if finish_reason and finish_reason != 'STOP':
+                self.last_finish_reason = finish_reason
             candidate_content = candidate.get('content', {})
             parts = candidate_content.get('parts', [])
             for part in parts:

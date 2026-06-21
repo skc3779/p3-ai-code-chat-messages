@@ -142,6 +142,8 @@ class GenAICodeAssistant:
 
         self.default_system_prompt = self._render_system_prompt(raw)
         self.system_prompt = self.default_system_prompt
+        # FSD v1.1.034: truncation detection
+        self.last_finish_reason: Optional[str] = None
 
     def _build_template_context(self) -> Dict[str, str]:
         """렌더 컨텍스트 — 현재는 os_shell_hint 만 제공.
@@ -320,6 +322,8 @@ class GenAICodeAssistant:
 
         api_url = f"{self.endpoint_url}/openapi/chat/v1/messages"
 
+        # FSD v1.1.034: reset truncation signal before each call
+        self.last_finish_reason = None
         previous_error_mode = getattr(self, "_raise_api_errors", False)
         self._raise_api_errors = raise_on_error
         try:
