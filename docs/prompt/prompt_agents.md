@@ -441,3 +441,34 @@ docs/requirements/REP_v1.1.033_agents-patch-fuzzy-matching.md
 - 아래 순번데로 처리해줘
     1. `REP_v1.1.032_agents-goal-driven-evaluator-gate.md`를 FSD문서를 검토하고 개선사항이 있으면 체크리스트 포함 문서를 개선한 다음 구현하고 모두 완료했는지 검증해줘.
     2. `REP_v1.1.033_agents-patch-fuzzy-matching.md`는 구현까지 되어 있습니다. FSD문서를 다시한번 검토하고 개선사항이 있으면 체크리스트 포함 개선하고 모두 완료했는지 검증해줘.
+
+---
+
+docs/requirements/FSD_v1.1.032_agents-goal-driven-evaluator-gate.md 
+docs/requirements/FSD_v1.1.033_agents-patch-fuzzy-matching.md 
+docs/requirements/FSD_v1.1.034_agents-truncated-response-continuation.md
+
+위 3개의 문서에서 다음 조건을 만족하도록 개선안 도출해줘
+- AS-IS : 3문서에서 **목표 프롬프트, 완료 기준, 패치 매칭, 잘림 처리, 중복 파일 필터링**가 반영된 전체적인 아키텍처 흐름을 정리하는데
+  핵심 내용을 언급하지 않은 것이 있으면 포함해서 흐름과 개선점을 깔끔하게 정리해줘.
+- TO-BE : Codex cli와 Claude Code 와 같이 사용자에게 진행 상황을 보여주면서 단계별로 사용자 입력을 받으면서(**자율적으로**도 가능) **자율 루프 에이전트**가 동작하는 방식을 구현하기 위한 개선 사항을 문서로 정리해줘.
+- 개선 사항을 문서로 정리할때 AS-IS, TO-BE 내용을 포함하여 FSD 문서를 작성해줘.
+- docs/requirements 폴더에 FSD + v1.1.041 문서로 정리해줘.
+- **검증** 및 **테스트 케이스**도 FSD 문서에 같이 포함하여 작성해줘.
+
+---
+
+docs/requirements/FSD_v1.1.041_agents-interactive-autonomous-loop.md
+
+현재 `/agents` 는 Codex cli와 Claude Code 와 같은 **자율 루프 에이전트**와 같이 동작하지 않아, 사용자에게 진행 상황을 보여주면서 필요에 따라 사용자에 입력을 받으면서 (또는 **자율적으로**) **자율 루프** 내 생성한 코드를 추가 개선 또는 수정 작업을 진행해 가면서 목표를 달성할 수 있도록 기능을 구현하고자 한다.
+- `FSD_v1.1.041_agents-interactive-autonomous-loop.md` 파일에서 해당 부분이 충분이 반영되었는지 검토한다.
+- 개선사항이 있으면 체크리스트 포함 개선하고 모두 완료했는지 검증해줘.
+- `FSD_v1.1.041_agents-interactive-autonomous-loop.md` 파일의 내용을 갱신해줘.
+
+---
+
+codex, gemini, claude와 함께 `FSD_v1.1.041_agents-interactive-autonomous-loop.md` 을 검토하고 검증하며 개선사항이 있으면 체크리스트에 포함해줘.
+- codex 는 비판적으로 판단하고 문제점을 지적한다.
+- gemini 는 중재자 역할을 한다.
+- claude 는 개선 방안을 제시한다.
+- 검증 및 개선사항을 반영하여 `FSD_v1.1.041_agents-interactive-autonomous-loop.md` 파일에 내용을 갱신해줘.
