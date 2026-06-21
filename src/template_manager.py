@@ -169,6 +169,7 @@ class TemplateManager:
 
         # 1) 파일명으로 직접 로드
         file_path = self.prompts_path / f"{stem}.yaml"
+        # print(f"⚠️ Trying to load template from file: {file_path}")
         if file_path.is_file():
             try:
                 with open(file_path, 'r', encoding='utf-8') as f:

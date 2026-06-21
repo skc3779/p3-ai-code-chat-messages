@@ -1603,3 +1603,34 @@ python -m ai_cli -t gemini \
 ```
 - docs/requirements 폴더의 FSD + v1.1.012 + 제목 문서로 작성해줘.
 - 추가 후 검증 및 테스트 케이스도 작성해줘.
+
+
+@docs/requirements/FSD_v1.1.021_ai-cli-batch-context.md
+`FSD_v1.1.0157_ai-cli-batch-context.md` 문서에 기술된 `/context` **단일 실행 명령** 에 대해 다음과 같은 문제가 발견되었으니 수정하고 FSD 문서에 보강해줘.
+- `### FR-08. 자동 종료` 이전에 응답 출력에 대한 파일 저장 여부를 묻는 후속 상호작용 `/save` 와 같은 자동 저장기능이 없다.
+- `ai_cli` 배치 모드에서는 추가 상호작용이 없기 때문에 `/save` 와 같은 후속 상호작용 대신 응답 결과를 자동으로 특정 폴더에 저장하고 종료할 수 있는 기능을 필요하다.
+- docs/requirements 폴더의 FSD + v1.1.021 + 제목 문서에 기능 추가, 검증 및 테스트 케이스도 포함하여 작성해줘.
+
+
+
+@docs/requirements/FSD_v1.1.021_ai-cli-batch-context.md
+`### FR-08. 자동 종료` 의 파일 저장 기능에 대한 잘못 이해가 된거 같다. 나의 요구는 지금과 같이 `-o <dir>` 옵션을 추가하는 것이 아니라, batch 모드에서 추가 상호작용이 없기 때문에 응답 결과물에 있는 ```@@@filename:경로/파일명.확장자\n 코드 내용... \n@@@\n``` 의 모든 `경로/파일명.확장자`를  `/save` 명령어와 같이 자동으로 처리하는 것이다. 현재 기능을 다음과 개선 바랍니다.
+- `-o <dir>` 옵션이 있으면 현재와 같은 방식으로 해당 폴더에 응답출력 결과물을 동일하게 파일로 저장하고 종료
+- `-o <dir>` 옵션이 없으면 모든 응답 결과물에 있는 ```@@@filename:경로/파일명.확장자\n 코드 내용... \n@@@\n``` 모두를 `경로/파일명.확장자` 해당 경로의 파일에 저장, 기존 `/save` 명령어의 로직을 배치 모드에서 사용하면 된다.
+- 또다시 실수를 하지 않기 위해 먼저 변경사항을 확인시켜 주고 승인을 받아 문제가 없으면 검증 및 테스트 케이스를 포함하여 FSD 문서를 작성해줘.
+- docs/requirements 폴더의 FSD + v1.1.021 + 제목 문서로 작성해줘.
+
+
+```powershell
+# 저장 없이 실행
+python -m ai_cli -t claude -wp . -c context -nt "[src/cli_input.py]" -p docs\prompts\smoke.md
+python -m ai_cli -t gemini -wp . -c context -l -nt "[src/cli_input.py]" -p docs\prompts\smoke.md
+python -m ai_cli -t genai  -wp . -c context "[src/cli_input.py]" -p docs\prompts\smoke.md
+
+# 자동 저장 포함 실행
+python -m ai_cli -t claude -wp . -c context -nt "[src/cli_input.py]" -p docs\prompts\smoke.md -o docs\responses
+python -m ai_cli -t gemini -wp . -c context -l -nt "[src/cli_input.py]" -p docs\prompts\smoke.md -o docs\responses
+```
+
+
+@@@

@@ -90,9 +90,13 @@ logs/
 target/
 build_output/
 
+### Tools ###
+.idea/
+
 ### OMC OMX ###
 .omc/
 .omx/
+
 
 # End of https://www.toptal.com/developers/gitignore/api/intellij,visualstudiocode,pycharm+iml
 .large_context_cache/

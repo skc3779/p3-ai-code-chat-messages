@@ -7,6 +7,7 @@ GenAI Code Assistant - AI 코딩 어시스턴트
 """
 
 import os
+import sys
 from pathlib import Path
 
 # pyrefly: ignore [missing-import]
@@ -26,6 +27,7 @@ from src import (
 from src.command_registry import print_menu
 from src.cli_input import parse_command_options, parse_context_command_args
 from src.large_context_processor import LargeContextError, LargeContextProcessor
+from src.batch_context import ContextBatchInputError, prepare_context_batch, run_context_batch
 
 _MENU_TITLE = "GenAI Code Assistant - AI 코딩 어시스턴트"
 
@@ -854,42 +856,83 @@ def _parse_auto_context_args(args: str):
     return quality_check, file_patterns, question
 
 
-def main_batch(workspace: str, command: str, command_args: str, prompt: str) -> int:
+def main_batch(
+    workspace: str,
+    command: str,
+    command_args: str,
+    prompt: str,
+    *,
+    output_dir: str | None = None,
+) -> int:
     """배치 모드 실행 — REPL 진입 없이 단일 명령을 실행하고 종료한다.
 
-    FSD v1.0.157 § 3.2.2
+    FSD v1.0.157 § 3.2.2, FSD v1.1.021 § FR-11
 
     Args:
         workspace:     작업 디렉토리 경로 (-wp)
-        command:       실행할 명령. 'auto_context' 만 허용
+        command:       실행할 명령. 'auto_context' 또는 'context'
         command_args:  명령 인자 (pattern 문자열)
         prompt:        프롬프트 파일에서 읽어들인 본문 (-p)
+        output_dir:    응답 자동 저장 디렉토리 (-o). None 이면 저장하지 않는다.
 
     Returns:
         0 — 정상 종료 / 1 — 입력 오류 / 2 — 명령 미지원 / 3 — 처리 예외
     """
-    if command != "auto_context":
-        print(f"❌ 지원하지 않는 명령: {command} (현재는 'auto_context' 만 지원)")
+    if command not in {"auto_context", "context"}:
+        print(f"❌ 지원하지 않는 명령: {command}")
         return 2
 
-    load_environment()
-    TokenManager.reload_from_env()
+    context_request = None
+    if command == "context":
+        try:
+            context_request = prepare_context_batch(command_args, prompt)
+        except ContextBatchInputError as exc:
+            print(f"❌ {exc}", file=sys.stderr)
+            return exc.exit_code
 
-    ENDPOINT_URL = os.getenv("ENDPOINT_URL")
-    YOUR_CLIENT_KEY = os.getenv("YOUR_CLIENT_KEY")
-    YOUR_CLIENT_SECRET = os.getenv("YOUR_CLIENT_SECRET")
-    YOUR_MODEL_ID = os.getenv("YOUR_MODEL_ID")
-    if not ENDPOINT_URL or not YOUR_CLIENT_KEY or not YOUR_CLIENT_SECRET:
-        print("❌ GenAI API 환경변수가 설정되지 않았습니다.")
+    try:
+        load_environment()
+        TokenManager.reload_from_env()
+
+        ENDPOINT_URL = os.getenv("ENDPOINT_URL")
+        YOUR_CLIENT_KEY = os.getenv("YOUR_CLIENT_KEY")
+        YOUR_CLIENT_SECRET = os.getenv("YOUR_CLIENT_SECRET")
+        YOUR_MODEL_ID = os.getenv("YOUR_MODEL_ID")
+        if not ENDPOINT_URL or not YOUR_CLIENT_KEY or not YOUR_CLIENT_SECRET:
+            print("❌ GenAI API 환경변수가 설정되지 않았습니다.")
+            return 3
+
+        assistant = GenAICodeAssistant(
+            endpoint_url=ENDPOINT_URL,
+            client_key=YOUR_CLIENT_KEY,
+            client_secret=YOUR_CLIENT_SECRET,
+            model_id=YOUR_MODEL_ID,
+            workspace_dir=workspace,
+        )
+    except KeyboardInterrupt:
+        if context_request is None:
+            raise
+        print("\n⏭️  사용자 중단", file=sys.stderr)
+        return 130
+    except Exception:
+        if context_request is None:
+            raise
+        print("❌ context 배치 초기화 실패 (genai)", file=sys.stderr)
         return 3
 
-    assistant = GenAICodeAssistant(
-        endpoint_url=ENDPOINT_URL,
-        client_key=YOUR_CLIENT_KEY,
-        client_secret=YOUR_CLIENT_SECRET,
-        model_id=YOUR_MODEL_ID,
-        workspace_dir=workspace,
-    )
+    if context_request is not None:
+        from pathlib import Path as _Path
+        try:
+            return run_context_batch(
+                assistant=assistant,
+                provider="genai",
+                request=context_request,
+                streaming=True,
+                output_dir=_Path(output_dir) if output_dir else None,
+            )
+        except KeyboardInterrupt:
+            print("\n⏭️  사용자 중단", file=sys.stderr)
+            return 130
 
     try:
         quality_check, file_patterns, _inline_q = _parse_auto_context_args(command_args)

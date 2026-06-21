@@ -1,4 +1,4 @@
-# FSD v1.1.012 — `ai_cli` `/context` 배치 실행 및 자동 종료
+# FSD v1.1.021 — `ai_cli` `/context` 배치 실행 및 자동 종료
 
 ## 문서 정보
 
@@ -6,7 +6,7 @@
 |---|---|
 | 문서 버전 | v1.1.021 |
 | 작성일 | 2026-06-21 |
-| 상태 | 구현 예정 |
+| 상태 | 구현 완료 |
 | 대상 명령 | `python -m ai_cli ... -c context ...` |
 | 선행 문서 | `FSD_v1.0.157_ai-cli-batch-auto-context.md`, `FSD_v1.0.123_auto-context-quality-check-and-context-no-tree.md`, `FSD_v1.1.011_context-large-file-handling.md` |
 | 주요 대상 파일 | [ai_cli.py](../../ai_cli.py), [src/cli_input.py](../../src/cli_input.py), [claude-ai-chat-code.py](../../claude-ai-chat-code.py), [gemini-ai-chat-code.py](../../gemini-ai-chat-code.py), [gen-ai-chat-code.py](../../gen-ai-chat-code.py) |
@@ -111,7 +111,7 @@ if args.command[0] != "auto_context":
 - `get_multiline()` 호출
 - `input()` 호출
 - 처리 후 REPL 루프 진입
-- 파일 저장 여부를 묻는 후속 상호작용
+- 파일 저장 여부를 사용자에게 묻는 후속 상호작용 (배치 모드는 `auto_overwrite=True` 로 대체)
 
 ---
 
@@ -133,7 +133,7 @@ if args.command[0] != "auto_context":
 `ai_cli`는 원시 `argv`에서 `-c` 또는 `--command`의 값을 추출한다.
 
 1. 시작 토큰은 `-c` 또는 `--command`이다.
-2. 종료 지점은 다음에 나타나는 등록된 최상위 옵션 `-t`, `--type`, `-wp`, `--workspace`, `-p`, `--prompt`, `-c`, `--command`이다.
+2. 종료 지점은 다음에 나타나는 등록된 최상위 옵션 `-t`, `--type`, `-wp`, `--workspace`, `-p`, `--prompt`, `-c`, `--command`, `-o`, `--output`이다.
 3. `-l`, `--large`, `-nt`, `--no-tree`는 최상위 옵션이 아니며 명령 토큰에 보존한다.
 4. 명령 구간이 비었거나 `-c`가 두 번 이상이면 사용법 오류로 종료한다.
 5. 최상위 옵션 순서는 고정하지 않되 각 옵션은 한 번만 허용한다.
@@ -225,14 +225,14 @@ API 호출 전에 `FilePatternMatcher` 또는 기존 처리기의 동일한 매�
 
 ### FR-08. 자동 종료
 
-응답 출력 또는 오류 처리가 끝나면 `main_batch()`가 정수 코드를 반환하고 `ai_cli`의 `sys.exit()`가 프로세스를 종료한다. 파일 감시자, 백그라운드 스레드, REPL 루프를 시작하지 않는다.
+응답 출력 및 자동 저장(FR-11) 또는 오류 처리가 끝나면 `main_batch()`가 정수 코드를 반환하고 `ai_cli`의 `sys.exit()`가 프로세스를 종료한다. 파일 감시자, 백그라운드 스레드, REPL 루프를 시작하지 않는다. `/save` 와 같은 후속 상호작용도 시작하지 않는다.
 
 ### FR-09. 종료 코드
 
 | 코드 | 조건 |
 |---:|---|
-| `0` | 응답 처리 및 출력 완료 |
-| `1` | 워크스페이스·프롬프트·패턴·매칭 파일 등 사용자 입력 데이터 오류 |
+| `0` | 응답 처리 및 출력 완료 (저장 포함) |
+| `1` | 워크스페이스·프롬프트·패턴·매칭 파일·저장 디렉토리 등 사용자 입력 데이터 오류 |
 | `2` | argparse 사용법 오류, 미지원 명령, 인라인 질문 충돌 |
 | `3` | 엔트리포인트 로드, 인증, provider API, 컨텍스트 처리 예외 |
 | `130` | `KeyboardInterrupt` |
@@ -244,6 +244,116 @@ API 호출 전에 `FilePatternMatcher` 또는 기존 처리기의 동일한 매�
 - 기존 `python -m ai_cli ... -c auto_context ...` 구문과 종료 코드를 유지한다.
 - 기존 provider 스크립트를 직접 실행했을 때의 REPL `/context` 동작을 유지한다.
 - `/context`의 옵션 별칭, 패턴 파싱, `--large` 캐시 형식은 변경하지 않는다.
+- `-o` 옵션을 지정하지 않으면 자동 저장을 수행하지 않는다. 기존 동작과 동일하다.
+
+### FR-11. 응답 자동 저장
+
+배치 모드에서는 REPL의 `/save` 같은 후속 상호작용이 불가능하다. 따라서 응답 출력 직후 `-o`/`--output` 옵션 유무에 따라 두 가지 방식으로 자동 저장한다.
+
+| 조건 | 동작 |
+|---|---|
+| `-o <dir>` **지정** | 응답 전체를 `<dir>/context_YYYYMMDD_HHMMSS.md` 단일 파일로 저장 |
+| `-o` **미지정** | 응답에서 `@@@filename:경로/파일명.확장자` 블록을 추출해 각 파일 경로에 자동 저장 (`/save` 와 동일 로직) |
+
+#### FR-11.1 CLI 옵션
+
+```powershell
+# -o 지정: 응답 전체를 단일 파일로 저장
+python -m ai_cli -t <type> -wp <workspace> -c context <options> <pattern> -p <prompt> -o <output-dir>
+
+# -o 미지정: @@@filename:... 블록 자동 추출·저장
+python -m ai_cli -t <type> -wp <workspace> -c context <options> <pattern> -p <prompt>
+```
+
+| 옵션 | 별칭 | 의미 |
+|---|---|---|
+| `-o` | `--output` | 응답 전체를 저장할 디렉토리 경로 (선택) |
+
+- 비절대경로는 `-wp` 워크스페이스 기준으로 해석한다.
+- 지정 경로가 존재하지 않으면 `mkdir -p` 방식으로 자동 생성한다.
+- 경로가 존재하지만 파일인 경우 종료 코드 `1`을 반환하고 엔트리포인트를 로드하지 않는다.
+- `-o` 옵션은 최상위 옵션이며 명령 토큰(`-l`, `-nt` 등)과 구분된다.
+
+#### FR-11.2 `-o` 지정 시: 응답 단일 파일 저장
+
+- 파일 이름: `context_YYYYMMDD_HHMMSS.md`
+- 인코딩: UTF-8 (BOM 없음)
+- 헤더(날짜·Provider·패턴)와 응답 본문을 포함한다.
+
+```markdown
+# AI 응답
+
+- 날짜: YYYY-MM-DD HH:MM:SS
+- Provider: <provider>
+- 파일 패턴: <pattern1>, <pattern2>, ...
+
+---
+
+<응답 텍스트>
+```
+
+- 저장 성공 시: `💾 응답 저장: <절대경로>` stdout 출력
+- `OSError` 등 저장 실패 시: stderr 오류 출력 후 종료 코드 `1`
+- 응답이 비어 있으면 파일을 생성하지 않는다.
+
+#### FR-11.3 `-o` 미지정 시: `@@@filename:` 블록 자동 추출·저장
+
+응답에 포함된 아래 형식의 모든 파일 블록을 추출하여 해당 경로에 저장한다.
+
+```
+@@@filename:경로/파일명.확장자
+파일 내용...
+@@@
+```
+
+- REPL `/save` 명령의 `ResponseParser.parse_and_save()` 를 재사용한다.
+- 배치 모드는 `input()` 호출 불가이므로 `auto_overwrite=True` 로 기존 파일을 확인 없이 덮어쓴다.
+- 블록이 있고 저장 성공 시: `✅ 총 N개 파일이 저장되었습니다.` stdout 출력
+- 블록이 없으면 출력 없이 정상 종료(exit `0`)
+- 개별 파일 저장 성공/실패는 `ResponseParser` 내부에서 `✅`/`❌` 출력한다.
+- 일반 모드와 대규모(`--large`) 모드 모두에 적용된다.
+
+#### FR-11.4 모듈 계약
+
+`run_context_batch()` 에 `output_dir: Path | None = None` 파라미터를 사용한다. `ai_cli`는 `output_dir` 을 `main_batch()` 키워드 인자로 전달한다.
+
+```python
+def run_context_batch(
+    *,
+    assistant,
+    provider: str,
+    request: ContextBatchRequest,
+    streaming: bool,
+    output_dir: Path | None = None,
+) -> int: ...
+
+def main_batch(
+    workspace: str,
+    command: str,
+    command_args: str,
+    prompt: str,
+    *,
+    output_dir: str | None = None,
+) -> int: ...
+```
+
+저장 분기 의사코드:
+
+```python
+if output_dir is not None:
+    # -o 지정: 응답 전체를 단일 파일로 저장
+    if response:
+        saved_path = _save_response(response, output_dir, provider, patterns)
+        print(f"💾 응답 저장: {saved_path}")
+else:
+    # -o 미지정: @@@filename:... 블록 자동 추출/저장
+    if response:
+        saved_files = assistant.response_parser.parse_and_save(
+            response, auto_overwrite=True
+        )
+        if saved_files:
+            print(f"✅ 총 {len(saved_files)}개 파일이 저장되었습니다.")
+```
 
 ---
 
@@ -408,6 +518,43 @@ raw argv
 | TC-R05 | 기존 `tests/test_ai_cli_batch.py` 전체 | 모두 통과 |
 | TC-R06 | 기존 context/large-context 테스트 전체 | 모두 통과 |
 
+### 7.7 응답 자동 저장 (FR-11)
+
+#### 7.7.1 CLI 파싱 (`-o` 옵션)
+
+| ID | 시나리오 | 기대 결과 |
+|---|---|---|
+| TC-S01 | `-o <dir>` 옵션 | `args.output == <dir>`, 명령 토큰에 포함되지 않음 |
+| TC-S02 | `--output <dir>` 긴 별칭 | 동일 |
+| TC-S03 | `-o` 옵션을 `-c` 앞에 배치 | 명령 토큰 오염 없이 정상 파싱 |
+| TC-S04 | `-o` 미지정 | `args.output is None` |
+| TC-S05 | `-o` 경로가 존재하지 않는 디렉토리 | 자동 생성 후 정상 진행 |
+| TC-S06 | `-o` 경로가 파일인 경우 | exit `1`, 엔트리포인트 미로드 |
+
+#### 7.7.2 `-o` 지정: 응답 단일 파일 저장
+
+| ID | 시나리오 | 기대 결과 |
+|---|---|---|
+| TC-S07 | 일반 모드, `-o` 지정 | `context_YYYYMMDD_HHMMSS.md` 생성, Provider·패턴·응답 포함 |
+| TC-S08 | 대규모 모드, `-o` 지정 | 동일한 저장 동작 |
+| TC-S09 | 저장 성공 | stdout에 `💾 응답 저장: <절대경로>` 출력 |
+| TC-S10 | `OSError` 발생 시 | exit `1`, stderr에 `응답 저장 실패` 포함 |
+| TC-S11 | 파일명이 `context_YYYYMMDD_HHMMSS.md` 패턴 | 정규식 `context_\d{8}_\d{6}\.md` 일치 |
+
+#### 7.7.3 `-o` 미지정: `@@@filename:` 블록 자동 추출·저장
+
+| ID | 시나리오 | 기대 결과 |
+|---|---|---|
+| TC-S12 | 응답에 블록 있음 | `parse_and_save(response, auto_overwrite=True)` 호출, `✅ 총 N개` 출력 |
+| TC-S13 | 응답에 블록 없음 | `parse_and_save` 호출, 저장 관련 메시지 없이 exit `0` |
+| TC-S14 | `💾` 미출력 확인 | stdout에 `💾` 없음 (단일 파일 저장 아님) |
+
+#### 7.7.4 provider 위임 계약
+
+| ID | 시나리오 | 기대 결과 |
+|---|---|---|
+| TC-S15 | `claude`, `gemini`, `genai` 각각 `-o` 지정 | `run_context_batch(output_dir=Path(...))` 호출 확인 |
+
 ---
 
 ## 8. 검증 절차
@@ -434,15 +581,22 @@ provider와 assistant를 mock하여 다음을 증명한다.
 3. `-l -nt`가 `LargeContextProcessor.process(..., include_tree=False)`로 전달된다.
 4. 반환 후 REPL 입력 함수와 파일 감시자가 호출되지 않는다.
 5. `main()` 반환값이 프로세스 종료 코드로 전달된다.
+6. `-o <dir>` 지정 시 `run_context_batch(output_dir=Path(<dir>))`로 전달되고, 응답 전체가 단일 파일로 저장된다.
+7. `-o` 미지정 시 `assistant.response_parser.parse_and_save(response, auto_overwrite=True)`가 호출된다.
 
 ### 8.3 실제 provider 스모크 테스트
 
 유효한 개발용 인증 환경에서 provider별 최소 1회 수행한다. 외부 API 호출이므로 자동 단위 테스트에는 포함하지 않는다.
 
 ```powershell
+# 저장 없이 실행
 python -m ai_cli -t claude -wp . -c context -nt "[src/cli_input.py]" -p docs\prompts\smoke.md
 python -m ai_cli -t gemini -wp . -c context -l -nt "[src/cli_input.py]" -p docs\prompts\smoke.md
 python -m ai_cli -t genai  -wp . -c context "[src/cli_input.py]" -p docs\prompts\smoke.md
+
+# 자동 저장 포함 실행
+python -m ai_cli -t claude -wp . -c context -nt "[src/cli_input.py]" -p docs\prompts\smoke.md -o docs\responses
+python -m ai_cli -t gemini -wp . -c context -l -nt "[src/cli_input.py]" -p docs\prompts\smoke.md -o docs\responses
 ```
 
 각 실행에서 다음을 확인한다.
@@ -452,23 +606,34 @@ python -m ai_cli -t genai  -wp . -c context "[src/cli_input.py]" -p docs\prompts
 - 정상 완료 시 `$LASTEXITCODE`가 `0`이다.
 - 실패 시 오류 유형에 맞는 종료 코드가 반환된다.
 - 로그에 인증 정보와 프롬프트 전문이 노출되지 않는다.
+- `-o` 지정 시 `docs\responses\context_YYYYMMDD_HHMMSS.md` 가 생성되고 stdout에 `💾 응답 저장:` 경로가 출력된다.
 
 ---
 
 ## 9. 구현 완료 체크리스트
 
-- [ ] `ai_cli`가 `context`와 `auto_context`를 모두 허용한다.
-- [ ] `-c context -l -nt ...`가 따옴표 없이도 파싱된다.
-- [ ] `parse_context_command_args()`를 재사용한다.
-- [ ] `-p`만 질문 소스로 사용하며 인라인 질문 충돌을 거부한다.
-- [ ] 일반 모드가 `assistant.chat(include_context=True)`를 호출한다.
-- [ ] large 모드가 `LargeContextProcessor`를 호출한다.
-- [ ] `-nt`가 두 모드 모두에서 트리를 제외한다.
-- [ ] 매칭 파일이 없으면 외부 API를 호출하지 않는다.
-- [ ] 세 provider가 공통 실행 경로와 종료 코드를 사용한다.
-- [ ] 처리 완료 후 stdin 대기 또는 REPL 진입 없이 종료한다.
-- [ ] 신규 테스트와 기존 회귀 테스트가 통과한다.
-- [ ] lint/typecheck가 통과하거나 실행 불가 사유가 기록된다.
+- [x] `ai_cli`가 `context`와 `auto_context`를 모두 허용한다.
+- [x] `-c context -l -nt ...`가 따옴표 없이도 파싱된다.
+- [x] `parse_context_command_args()`를 재사용한다.
+- [x] `-p`만 질문 소스로 사용하며 인라인 질문 충돌을 거부한다.
+- [x] 일반 모드가 `assistant.chat(include_context=True)`를 호출한다.
+- [x] large 모드가 `LargeContextProcessor`를 호출한다.
+- [x] `-nt`가 두 모드 모두에서 트리를 제외한다.
+- [x] 매칭 파일이 없으면 외부 API를 호출하지 않는다.
+- [x] 세 provider가 공통 실행 경로와 종료 코드를 사용한다.
+- [x] 처리 완료 후 stdin 대기 또는 REPL 진입 없이 종료한다.
+- [x] 신규 테스트와 기존 회귀 테스트가 통과한다.
+- [x] 변경 파일 `compileall`과 `git diff --check`가 통과했다.
+- [x] `-o`/`--output` 옵션이 최상위 옵션으로 등록되어 명령 토큰 오염 없이 파싱된다.
+- [x] 비절대 `-o` 경로는 `-wp` 기준으로 resolve 된다.
+- [x] 지정 디렉토리가 없으면 자동 생성, 파일이면 exit `1`로 조기 거부한다.
+- [x] `-o` 지정 시: 응답 전체를 `context_YYYYMMDD_HHMMSS.md` 단일 파일로 저장, 헤더(날짜·Provider·패턴) 포함, `💾 응답 저장:` 출력.
+- [x] `-o` 미지정 시: `assistant.response_parser.parse_and_save(response, auto_overwrite=True)` 호출로 `@@@filename:` 블록 자동 추출·저장.
+- [x] 블록 있음 → `✅ 총 N개 파일이 저장되었습니다.` 출력 / 블록 없음 → 출력 없이 exit `0`.
+- [x] 저장 `OSError` 시 exit `1`.
+- [x] 세 provider의 `main_batch(output_dir=)` 위임 계약이 단위 테스트로 검증된다.
+
+검증 기록(2026-06-21, FR-11 수정): FR-11 재정의 후 신규 테스트 포함 총 51개 `test_ai_cli_batch_context.py` 테스트 통과. 회귀 테스트(`test_large_context_command.py`, `test_context_pattern.py`, `test_context_builder.py`, `test_command_parser_options.py`) 54개 통과. 실제 provider API 스모크 테스트는 인증 정보가 없어 수행하지 않았다.
 
 ---
 
@@ -481,4 +646,5 @@ python -m ai_cli -t genai  -wp . -c context "[src/cli_input.py]" -p docs\prompts
 3. 정상 완료 시 자동 종료 및 exit `0`이 확인된다.
 4. 입력 오류, 처리 오류, 사용자 중단의 종료 코드 테스트가 통과한다.
 5. 기존 `auto_context` 배치와 REPL context 회귀 테스트가 통과한다.
-6. 실제 API 검증을 수행하지 못한 경우 그 사유와 미검증 위험이 릴리스 기록에 명시된다.
+6. `-o` 지정 시 응답 전체가 단일 파일로 저장되고, `-o` 미지정 시 응답 내 `@@@filename:` 블록이 `/save` 와 동일하게 자동 저장되며, 두 경우 모두 추가 상호작용 없이 프로세스가 종료된다.
+7. 실제 API 검증을 수행하지 못한 경우 그 사유와 미검증 위험이 릴리스 기록에 명시된다.
