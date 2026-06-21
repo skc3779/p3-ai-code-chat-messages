@@ -10,8 +10,11 @@ from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 import requests
-# pyrefly: ignore [missing-import]
-import sseclient
+try:
+    # pyrefly: ignore [missing-import]
+    import sseclient
+except ModuleNotFoundError:  # Non-streaming and local tooling remain usable.
+    sseclient = None
 
 from .os_utils import get_os_shell_hint as _get_os_shell_hint
 from .file_manager import FileManager
@@ -180,6 +183,9 @@ class GeminiCodeAssistant:
         file_patterns: Optional[List[str]] = None,
         *,
         include_tree: bool = True,
+        disable_tools: bool = False,
+        raise_on_error: bool = False,
+        internal_system_prompt: Optional[str] = None,
     ) -> str:
         """AI와 채팅"""
         # 컨텍스트 구성
@@ -200,13 +206,38 @@ class GeminiCodeAssistant:
         
         # API 호출
         try:
+            previous_error_mode = getattr(self, "_raise_api_errors", False)
+            previous_prompt_lock = getattr(self, "_internal_system_prompt_locked", False)
+            self._raise_api_errors = raise_on_error
+            self._internal_system_prompt_locked = internal_system_prompt is not None
+            if internal_system_prompt is not None:
+                self.system_prompt = internal_system_prompt
             if streaming:
                 return self._chat_streaming(full_message)
             else:
                 return self._chat_non_streaming(full_message)
         except Exception as e:
+            if raise_on_error:
+                raise
             print(f"\n❌ API 호출 오류: {str(e)}")
             return ""
+        finally:
+            self._raise_api_errors = previous_error_mode
+            self._internal_system_prompt_locked = previous_prompt_lock
+
+    def prepare_internal_request(self, user_message: str) -> Dict[str, Any]:
+        """Render the exact tool-free non-streaming request used by large context."""
+        system_prompt = self._render_system_prompt()
+        previous = self.system_prompt
+        self.system_prompt = system_prompt
+        try:
+            body = self._build_request_body(user_message)
+        finally:
+            self.system_prompt = previous
+        return {
+            "system_prompt": system_prompt,
+            "request_chars": len(json.dumps(body, ensure_ascii=False, separators=(",", ":"))),
+        }
 
     def _build_request_body(self, user_message: str) -> Dict:
         """Gemini API 요청 본문 구성"""
@@ -241,7 +272,8 @@ class GeminiCodeAssistant:
         import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:streamGenerateContent?alt=sse&key={self.api_key}"
         # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
-        self.system_prompt = self._render_system_prompt()
+        if not getattr(self, "_internal_system_prompt_locked", False):
+            self.system_prompt = self._render_system_prompt()
         body = self._build_request_body(user_message)
         
         # REQ-064-006: Request 로그 저장
@@ -269,8 +301,12 @@ class GeminiCodeAssistant:
                 streaming=True, assembled_content=response.text,
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"Gemini API {response.status_code}: {response.text}")
             return ""
         
+        if sseclient is None:
+            raise RuntimeError("스트리밍 응답에는 sseclient-py 패키지가 필요합니다.")
         client = sseclient.SSEClient(response)
         result_message = ""
         is_first_chunk = True
@@ -325,7 +361,8 @@ class GeminiCodeAssistant:
         import time as _time
         api_url = f"{self.endpoint_url}/models/{self.model_id}:generateContent?key={self.api_key}"
         # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
-        self.system_prompt = self._render_system_prompt()
+        if not getattr(self, "_internal_system_prompt_locked", False):
+            self.system_prompt = self._render_system_prompt()
         body = self._build_request_body(user_message)
         
         # REQ-064-006: Request 로그 저장
@@ -354,6 +391,8 @@ class GeminiCodeAssistant:
                 streaming=False, response_body={"error": response.text},
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"Gemini API {response.status_code}: {response.text}")
             return ""
         
         result = response.json()
@@ -367,8 +406,9 @@ class GeminiCodeAssistant:
             for part in parts:
                 content += part.get('text', '')
         
-        print(f"\n🤖 AI: {content}\n")
-        
+        if not getattr(self, "_suppress_chat_output", False):
+            print(f"\n🤖 AI: {content}\n")
+
         # REQ-064-006: 논스트리밍 Response 로그 저장
         self.api_logger.log_response(
             log_id=log_id, status_code=response.status_code,

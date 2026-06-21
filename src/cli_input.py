@@ -545,6 +545,7 @@ class CLIInputHandler:
 # FSD v1.0.123 § 5.1 — 공통 옵션 파싱 헬퍼
 # ═══════════════════════════════════════════════════════════════
 
+from dataclasses import dataclass
 from typing import Dict, Set, Tuple
 
 
@@ -588,8 +589,43 @@ def parse_command_options(
         options.add(aliases[tok])
         i += 1
 
-    # 토큰 재결합 — 옵션 토큰까지의 길이만 잘라냄
+    # 원문 길이 계산은 선행/중복 공백에서 잘못된 위치를 자를 수 있다.
+    # 이미 토큰화한 결과로 위치 인자를 안정적으로 재구성한다.
     if i == 0:
         return options, args
-    consumed_len = sum(len(t) for t in tokens[:i]) + i  # i개의 공백 포함
-    return options, args[consumed_len:].lstrip()
+    return options, " ".join(tokens[i:])
+
+
+@dataclass(frozen=True)
+class ContextCommandArgs:
+    file_patterns: list[str]
+    question: str
+    large: bool
+    no_tree: bool
+
+
+def parse_context_command_args(args: str) -> ContextCommandArgs:
+    """Parse the shared `/context` option, pattern, and question contract."""
+    aliases = {
+        "--large": "large",
+        "-l": "large",
+        "-nt": "no_tree",
+        "--no-tree": "no_tree",
+    }
+    options, remaining = parse_command_options(args, aliases)
+    if not remaining:
+        raise ValueError("파일 패턴을 입력하세요.")
+    if remaining.startswith("["):
+        try:
+            end = remaining.index("]")
+        except ValueError as exc:
+            raise ValueError("닫는 대괄호 ']'가 없습니다.") from exc
+        patterns = [item.strip() for item in remaining[1:end].split(",") if item.strip()]
+        question = remaining[end + 1:].strip()
+    else:
+        parts = remaining.split(maxsplit=1)
+        patterns = [parts[0]]
+        question = parts[1] if len(parts) == 2 else ""
+    if not patterns:
+        raise ValueError("파일 패턴을 입력하세요.")
+    return ContextCommandArgs(patterns, question, "large" in options, "no_tree" in options)

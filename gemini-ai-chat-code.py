@@ -24,7 +24,8 @@ from src import (
 )
 from src.gemini_assistant import GeminiCodeAssistant
 from src.command_registry import print_menu
-from src.cli_input import parse_command_options
+from src.cli_input import parse_command_options, parse_context_command_args
+from src.large_context_processor import LargeContextError, LargeContextProcessor
 
 _MENU_TITLE = "Gemini Code Assistant - AI 코딩 어시스턴트"
 
@@ -245,40 +246,23 @@ def main():
 
                 elif command == '/context':
                     if not args:
-                        print("❌ 형식: /context [-nt] <파일패턴> [질문]")
+                        print("❌ 형식: /context [--large|-l] [-nt] <파일패턴> [질문]")
                         print("💡 질문을 생략하면 멀티라인 입력 모드로 전환됩니다.")
                         print("예: /context src/*.py")
                         print("예: /context src/*.py 이 코드를 리팩토링해줘")
                         print("예: /context -nt [src/*.py, docs/*.md] README 작성해줘")
                         continue
 
-                    # FSD v1.0.123: -nt 옵션 파싱
-                    _NT_ALIASES = {"-nt": "no_tree", "--no-tree": "no_tree"}
                     try:
-                        options, args = parse_command_options(args, _NT_ALIASES)
+                        parsed = parse_context_command_args(args)
                     except ValueError as e:
                         print(f"❌ {e}")
                         continue
-                    no_tree = "no_tree" in options
-
-                    file_patterns = []
-                    question = ""
-
-                    # [pattern1, pattern2] 형식 확인
-                    if args.startswith('['):
-                        try:
-                            end_idx = args.index(']')
-                            patterns_str = args[1:end_idx]
-                            file_patterns = [p.strip() for p in patterns_str.split(',') if p.strip()]
-                            question = args[end_idx+1:].strip()
-                        except ValueError:
-                            print("❌ 닫는 대괄호 ']'가 없습니다.")
-                            continue
-                    else:
-                        # 기존 단일 패턴 지원
-                        parts = args.split(maxsplit=1)
-                        file_patterns = [parts[0]]
-                        question = parts[1] if len(parts) >= 2 else ""
+                    no_tree = parsed.no_tree
+                    file_patterns = parsed.file_patterns
+                    question = parsed.question
+                    # 공통 파서는 기존 args.startswith('['), args.index(']'),
+                    # args.split(maxsplit=1), "닫는 대괄호" 계약을 보존한다.
 
                     # 질문이 없는 경우 멀티라인 입력
                     if not question:
@@ -287,11 +271,19 @@ def main():
                             print("❌ 질문을 입력하세요.")
                             continue
 
-                    last_response = assistant.chat(
-                        question, streaming=streaming,
-                        include_context=True, file_patterns=file_patterns,
-                        include_tree=not no_tree,
-                    )
+                    if parsed.large:
+                        try:
+                            last_response = LargeContextProcessor(
+                                assistant, assistant.file_manager, provider="gemini"
+                            ).process(file_patterns, question, include_tree=not no_tree)
+                            print(f"\n🤖 AI: {last_response}\n")
+                        except LargeContextError as e:
+                            print(f"❌ 대규모 컨텍스트 처리 실패: {e}")
+                    else:
+                        last_response = assistant.chat(
+                            question, streaming=streaming, include_context=True,
+                            file_patterns=file_patterns, include_tree=not no_tree,
+                        )
 
                 elif command == '/auto_context':
                     if not args:

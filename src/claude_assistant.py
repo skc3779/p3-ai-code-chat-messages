@@ -9,8 +9,11 @@ from typing import List, Dict, Optional, Any
 from pathlib import Path
 
 import requests
-# pyrefly: ignore [missing-import]
-import sseclient
+try:
+    # pyrefly: ignore [missing-import]
+    import sseclient
+except ModuleNotFoundError:  # Non-streaming and local tooling remain usable.
+    sseclient = None
 
 from .os_utils import get_os_shell_hint as _get_os_shell_hint
 from .file_manager import FileManager
@@ -174,7 +177,9 @@ class ClaudeCodeAssistant:
 
     def chat(self, user_message: str, streaming: bool = True,
              include_context: bool = False, file_patterns: Optional[List[str]] = None,
-             disable_tools: bool = False, *, include_tree: bool = True) -> str:
+             disable_tools: bool = False, *, include_tree: bool = True,
+             raise_on_error: bool = False,
+             internal_system_prompt: Optional[str] = None) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
@@ -204,7 +209,7 @@ class ClaudeCodeAssistant:
         # print(f"### 요청 메세지 히스토리  : {messages}")
 
         # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
-        self.system_prompt = self._render_system_prompt()
+        self.system_prompt = internal_system_prompt if internal_system_prompt is not None else self._render_system_prompt()
 
         body = {
             "model": self.model_id,
@@ -218,14 +223,40 @@ class ClaudeCodeAssistant:
 
         api_url = f"{self.endpoint_url}/v1/messages"
 
+        previous_error_mode = getattr(self, "_raise_api_errors", False)
+        self._raise_api_errors = raise_on_error
         try:
             if streaming:
                 return self._chat_streaming(api_url, body, user_message)
             else:
-                return self._chat_non_streaming(api_url, body, user_message)
+                previous = getattr(self, "_disable_tool_execution", False)
+                self._disable_tool_execution = disable_tools
+                try:
+                    return self._chat_non_streaming(api_url, body, user_message)
+                finally:
+                    self._disable_tool_execution = previous
         except Exception as e:
+            if raise_on_error:
+                raise
             print(f"\n❌ API 호출 오류: {str(e)}")
             return ""
+        finally:
+            self._raise_api_errors = previous_error_mode
+
+    def prepare_internal_request(self, user_message: str) -> Dict[str, Any]:
+        """Render the exact tool-free non-streaming request used by large context."""
+        system_prompt = self._render_system_prompt()
+        body = {
+            "model": self.model_id,
+            "messages": [{"role": "user", "content": user_message}],
+            "max_tokens": 4096,
+            "system": system_prompt,
+            "stream": False,
+        }
+        return {
+            "system_prompt": system_prompt,
+            "request_chars": len(json.dumps(body, ensure_ascii=False, separators=(",", ":"))),
+        }
 
     def _execute_tool(self, tool_name: str, tool_input: Dict) -> Any:
         """도구 실행"""
@@ -300,8 +331,12 @@ class ClaudeCodeAssistant:
                 streaming=True, assembled_content=response.text,
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"Claude API {response.status_code}: {response.text}")
             return ""
 
+        if sseclient is None:
+            raise RuntimeError("스트리밍 응답에는 sseclient-py 패키지가 필요합니다.")
         client = sseclient.SSEClient(response)
         
         # 스트리밍 상태 관리
@@ -479,20 +514,25 @@ class ClaudeCodeAssistant:
                 streaming=False, response_body={"error": response.text},
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"Claude API {response.status_code}: {response.text}")
             return ""
 
         result = response.json()
         content_blocks = result.get('content', [])
         
         # 화면 출력 및 텍스트 추출
+        suppress = getattr(self, "_suppress_chat_output", False)
         full_text = ""
         for block in content_blocks:
             if block.get('type') == 'text':
                 text = block.get('text', '')
-                print(f"\n🤖 AI: {text}\n")
+                if not suppress:
+                    print(f"\n🤖 AI: {text}\n")
                 full_text += text
             elif block.get('type') == 'tool_use':
-                print(f"\n🔨 도구 호출: {block.get('name')}")
+                if not suppress:
+                    print(f"\n🔨 도구 호출: {block.get('name')}")
         
         # REQ-064-005: 논스트리밍 Response 로그 저장
         self.api_logger.log_response(
@@ -508,7 +548,7 @@ class ClaudeCodeAssistant:
         self.conversation_history.append({"role": "assistant", "content": content_blocks})
 
         # 도구 실행 확인
-        if result.get('stop_reason') == 'tool_use':
+        if result.get('stop_reason') == 'tool_use' and not getattr(self, "_disable_tool_execution", False):
             tool_results = []
             for block in content_blocks:
                 if block.get('type') == 'tool_use':

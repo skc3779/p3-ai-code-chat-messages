@@ -23,6 +23,10 @@ from src.sensitive_filter import SensitiveWordFilter
 from src.api_logger import ApiLogger
 from src.spinner import WaitSpinner
 from src.agent_runner import AgentRunner, AgentSession, AgentStopReason
+from src.large_context_processor import LargeContextProcessor, LargeContextError
+from src.large_context_cache import LargeContextCache
+from src.context_chunker import ContextChunker, ContextBudget
+from src.large_context_prompts import build_map_prompt, build_reduce_prompt
 
 __all__ = [
     'FileManager',
@@ -50,4 +54,11 @@ __all__ = [
     'AgentRunner',
     'AgentSession',
     'AgentStopReason',
+    'LargeContextProcessor',
+    'LargeContextError',
+    'LargeContextCache',
+    'ContextChunker',
+    'ContextBudget',
+    'build_map_prompt',
+    'build_reduce_prompt',
 ]

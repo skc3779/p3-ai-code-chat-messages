@@ -9,6 +9,22 @@
 codex mcp add context7 -- npx -y @upstash/context7-mcp
 ```
 
+```text
+// .codex/mcp.json (파일 생성 후 아래 내용 입력)
+{
+  "mcpServers": {
+    "context7": {
+      "command": "npx",
+      "args": ["-y", "@upstash/context7-mcp"],
+      "env": {
+        "CONTEXT7_API_KEY": "YOUR_CONTEXT7_API_KEY"
+      }
+    }
+  }
+}
+```
+
+
 ### 사용자 환경변수 등록 (sparkshell.bat - Windows)
 
 1. sparkshell.bat 파일을 특정 폴더(예: C:\tools\)에 고정해 두고, 어떤 프로젝트 폴더에서 OMX를 실행하든 항상 해당 파일을 참조하게 만드는 방법입니다.

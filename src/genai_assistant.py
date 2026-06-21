@@ -11,7 +11,10 @@ from typing import List, Dict, Optional
 from pathlib import Path
 
 import requests
-import sseclient
+try:
+    import sseclient
+except ModuleNotFoundError:  # Non-streaming and local tooling remain usable.
+    sseclient = None
 
 from .os_utils import get_os_shell_hint as _get_os_shell_hint
 from .file_manager import FileManager
@@ -275,7 +278,9 @@ class GenAICodeAssistant:
 
     def chat(self, user_message: str, streaming: bool = True,
              include_context: bool = False, file_patterns: Optional[List[str]] = None,
-             *, include_tree: bool = True) -> str:
+             *, include_tree: bool = True, disable_tools: bool = False,
+             raise_on_error: bool = False,
+             internal_system_prompt: Optional[str] = None) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
@@ -299,7 +304,7 @@ class GenAICodeAssistant:
         contents.append(full_message)
 
         # FSD v1.0.161: 요청 본문 구성 직전에 {{변수}} 재치환
-        self.system_prompt = self._render_system_prompt()
+        self.system_prompt = internal_system_prompt if internal_system_prompt is not None else self._render_system_prompt()
 
         # REQ-058-002: 민감 단어 치환 (GenAI 전송 전)
         masked_contents = self.sensitive_filter.mask_contents(contents)
@@ -315,6 +320,8 @@ class GenAICodeAssistant:
 
         api_url = f"{self.endpoint_url}/openapi/chat/v1/messages"
 
+        previous_error_mode = getattr(self, "_raise_api_errors", False)
+        self._raise_api_errors = raise_on_error
         try:
             response_text = ""
             if streaming:
@@ -326,7 +333,7 @@ class GenAICodeAssistant:
             response_text = self.sensitive_filter.unmask(response_text)
 
             # 도구 호출 처리
-            tool_results = self.process_tool_calls(response_text)
+            tool_results = "" if disable_tools else self.process_tool_calls(response_text)
             if tool_results:
                 print("\n📤 도구 실행 결과가 생성되었습니다.")
                 self.conversation_history.append({"role": "user", "content": f"[System Tool Results]\n{tool_results}"})
@@ -337,8 +344,28 @@ class GenAICodeAssistant:
             return response_text
 
         except Exception as e:
+            if raise_on_error:
+                raise
             print(f"\n❌ API 호출 오류: {str(e)}")
             return ""
+        finally:
+            self._raise_api_errors = previous_error_mode
+
+    def prepare_internal_request(self, user_message: str) -> Dict:
+        """Render the exact tool-free non-streaming request used by large context."""
+        system_prompt = self._render_system_prompt()
+        contents = [user_message]
+        body = {
+            "modelIds": [self.model_id],
+            "contents": self.sensitive_filter.mask_contents(contents),
+            "llmConfig": self.get_llm_config(),
+            "isStream": False,
+            "systemPrompt": self.sensitive_filter.mask_system_prompt(system_prompt),
+        }
+        return {
+            "system_prompt": system_prompt,
+            "request_chars": len(json.dumps(body, ensure_ascii=False, separators=(",", ":"))),
+        }
 
     def _chat_streaming(self, api_url: str, body: Dict,
                         user_message: str, full_message: str) -> str:
@@ -368,8 +395,12 @@ class GenAICodeAssistant:
                 streaming=True, assembled_content=response.text,
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"GenAI API {response.status_code}: {response.text}")
             return ""
 
+        if sseclient is None:
+            raise RuntimeError("스트리밍 응답에는 sseclient-py 패키지가 필요합니다.")
         client = sseclient.SSEClient(response)
         result_message = ""
         chunk_count = 0
@@ -442,6 +473,8 @@ class GenAICodeAssistant:
                 streaming=False, response_body={"error": response.text},
                 elapsed_ms=int((_time.time() - _start) * 1000)
             )
+            if getattr(self, "_raise_api_errors", False):
+                raise RuntimeError(f"GenAI API {response.status_code}: {response.text}")
             return ""
 
         result = response.json()
@@ -454,7 +487,8 @@ class GenAICodeAssistant:
             elapsed_ms=int((_time.time() - _start) * 1000)
         )
 
-        print(f"\n🤖 AI: {content}\n")
+        if not getattr(self, "_suppress_chat_output", False):
+            print(f"\n🤖 AI: {content}\n")
 
         # 히스토리에 추가
         self.conversation_history.append({"role": "user", "content": original_message})

@@ -1518,3 +1518,88 @@ python -m unittest tests.test_agent_dispatcher_patch -v
   - FSD 문서에는 아래 문구를 포함시킨다.
   - FSD 구현 완료 후 `docs/releases` 폴더에 `RELEASE-v1.0.161` 문서 업데이트를 지시한다.
   - README.md 파일 업데이트를 지시한다.
+
+---
+
+CLI (Codex, Gmini, Antigravity, ClaudeCode)에서 기존 소스코드 분석하여 README.md 파일을 만들어 달라고 할 때 폴더내 소스 코드가 많은 경우 LLM에 컨텍스트를 한번에 모두 전달하는 경우 컨텍스트 크기가 너무 커서 토큰 오버플로우가 발생하게 될 것이며, REAME.md 파일도 작성이 불가능 할 것이다. 이러한 문제를 해결하기 위한 처리 방법 가이드 해줘.
+
+CLI (Codex, Gmini, Antigravity, ClaudeCode)와 비슷한 기능을 개발하려고 한다. AI 모델의 REST API를 사용할 계획이며, 다음과 같은 질문시 해결방법을 찾고 있다.
+- 다음과 같이 `/context -nt [src/**/*.java, docs/*.md] 상세한 프로젝트 분석 가이드 파일 만들어줘.` 기존 소스코드 분석하여 상세 GUIDE.md 파일을 만들어 달라는 요청시 폴더내 패턴에 맞는 소스 파일의 개수가 많은 경우 LLM에 컨텍스트를 한번에 모두 전달하게 되면 컨텍스트 크기가 너무 커서 토큰 오버플로우가 발생하게 될 것이며, GUIDE.md 파일도 작성이 불가능 할 것이다. 
+- 현재 이러한 문제를 해결하기 위한 CLI의 처리 방법을 찾아보고 어떤식으로 설계하는게 좋을지 가이드 해줘.
+- 예시로 10개 미만은 한번에처리, 10개 이상부터는 분리하여 순차적으로 처리하고 결과를 병합하는 방식으로 개발 등등. 
+
+
+---
+
+`/context` 명령어 관련 아래 조건에 문제를 해결하기 위한 FSD 가이드 문서 만들어줘.
+
+- [claude-ai-chat-code.py, gemini-ai-chat-code.py, gen-ai-chat-code.py] 파일들에 대해 동일하게 적용되어 있음.
+
+- 현재 지원 방법
+```text
+
+docs/requirements/FSD_v1.0.068_context-multi-pattern-test.md
+사용법: /context <파일패턴> <질문>
+예: /context src/*.py
+예: /context src/*.py 이 코드를 리팩토링해줘
+예: /context [src/*.py, docs/*.md] README 작성해줘
+특징 : 워크스페이스 폴더를 포함하고 패턴과 일치하는 파일만 질문과 함께 패턴에 맞는 파일의 내용을 LLM에게 전달하여 답변을 생성하도록 한다.
+
+docs/requirements/FSD_v1.0.123_auto-context-quality-check-and-context-no-tree.md
+/context [옵션...] <파일패턴> [질문]
+예: /context -nt src/*.py
+예: /context -nt src/*.py 이 코드를 리팩토링해줘
+예: /context -nt [src/*.py, docs/*.md] README 작성해줘
+특징 : 워크스페이스 폴더를 제외하고, 패턴과 일치하는 파일만 질문과 함께 패턴에 맞는 파일의 내용을 LLM에게 전달하여 답변을 생성하도록 한다.
+```
+
+- 개선 사항
+- 다음과 같이 `/context -nt [src/**/*.java, docs/*.md] 상세한 프로젝트 분석 가이드 파일 만들어줘.` 기존 소스코드 분석하여 상세 GUIDE.md 파일을 만들어 달라는 요청시 폴더내 패턴에 맞는 소스 파일의 개수가 많은 경우 LLM에 컨텍스트를 한번에 모두 전달하게 되면 컨텍스트 크기가 너무 커서 토큰 오버플로우가 발생하게 될 것이며, GUIDE.md 파일도 작성이 불가능 할 것이다. 
+- 현재 코드의 문제점인 이러한 문제를 해결하기 위한 CLI의 처리 방법을 찾아보고 어떤식으로 설계하는게 좋을지 FSD 가이드 문서를 작성해줘.
+- `/context` 관련 사항은 `현재 지원 방법`에 나열된 FSD 문서들에서 확인 할 수 있다.
+- FSD 문서 작성전에 추가 질문의 필요하면 몇차례 추가 질문을 한 후에 문서 작성을 시작해줘. 
+- docs/requirements 폴더의 FSD v1.1.011 문서로 작성해줘.
+
+
+---
+
+@docs/requirements/FSD_v1.1.011_context-large-file-handling.md
+`### 13.5 플랫폼별 75% 안전 상한` 기본적으로 .env.sample을 보면 75% 안정 상한을 적용하여 한도를 설정했다 혹시 소스코드에 이중으로 안정 상한이 적용된 것이 아닌지 검증해줘. 만약 이중으로 적용된 것이 맞다면 소스코드의 로직을 확인하고 한도를 MAX값으로 변경해줘. 수정후 테스트 케이스도 작성해줘.
+
+---
+
+@docs/requirements/FSD_v1.1.011_context-large-file-handling.md
+`### 13.3 Map–Reduce` 시나리오 관련하여 
+| T-011-024 | `--large` 기본 | 트리가 최종 Reduce에 한 번만 포함 |
+
+---
+
+@docs/requirements/FSD_v1.0.157_ai-cli-batch-auto-context.md
+`FSD_v1.0.157_ai-cli-batch-auto-context.md` 문서에서 사용된 **단일 실행 명령** 에 다음 조건의 기능을 구현하기 위한 FSD 가이드 문서 만들어줘.
+
+- 현재 : `/auto_context` 를 즉시 수행하고 결과 처리 완료 시 **자동 종료** 하는 배치 실행 모드
+```ps1
+# 패턴
+python -m ai_cli -t <claude|gemini|genai> \
+                    -wp <workspace path> \
+                    -c auto_context <pattern> \
+                    -p <prompt file>
+```
+
+- 추가 : `/context` 를 즉시 수행하고 결과 처리 완료 시 **자동 종료** 하는 배치 실행 모드 추가.
+- 현재 `/context` 명령어는 명령어가 아닌 REPL 에서만 실행 가능하지만, 배치 실행 모드에서는 명령줄에서 직접 실행 가능하도록 추가.
+```ps1
+# 패턴
+python -m ai_cli -t <claude|gemini|genai> \
+                    -wp <workspace path> \
+                    -c context <options> <pattern> \
+                    -p <prompt file>
+
+# 예시
+python -m ai_cli -t gemini \
+                    -wp C:\03_sources\github_others_srcs\baeldung-tutorials \
+                    -c context -l -nt [apache-kafka-2/**/*.*,apache-kafka-3/**/*.*,apache-kafka-4/sa/**/*.*] \
+                    -p docs\prompts\prompt_module_guide.md
+```
+- docs/requirements 폴더의 FSD + v1.1.012 + 제목 문서로 작성해줘.
+- 추가 후 검증 및 테스트 케이스도 작성해줘.
