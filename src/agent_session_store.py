@@ -10,6 +10,17 @@ from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
 
+from .agent_goal_evaluator import (
+    ALLOWED_CHECK_TYPES,
+    ALLOWED_PROVENANCE,
+    ALLOWED_STATUSES,
+    MAX_CRITERIA,
+    MAX_DESCRIPTION_LENGTH,
+    MAX_EXPECTED_LENGTH,
+    MAX_ID_LENGTH,
+    MAX_TARGET_LENGTH,
+    AcceptanceCriterion,
+)
 from .agent_runner import ActionResult, AgentSession, AgentStopReason, IterationRecord
 
 
@@ -51,6 +62,8 @@ class AgentSessionStore:
 
     def _deserialize(self, json_str: str) -> AgentSession:
         data = json.loads(json_str)
+        if not isinstance(data, dict):
+            raise ValueError("agent session JSON must be an object")
         data.pop("_workspace", None)
         # stop_reason 복원
         sr = data.get("stop_reason")
@@ -61,7 +74,49 @@ class AgentSessionStore:
             actions = [ActionResult(**a) for a in it_data.pop("actions", [])]
             iters.append(IterationRecord(**it_data, actions=actions))
         data["iterations"] = iters
+        data["acceptance_criteria"] = self._deserialize_criteria(
+            data.get("acceptance_criteria", [])
+        )
+        # Ignore unknown future/tampered keys instead of forwarding them to the
+        # dataclass constructor. Runtime validation remains AgentRunner-owned.
+        allowed = {item.name for item in dataclasses.fields(AgentSession)}
+        data = {key: value for key, value in data.items() if key in allowed}
         return AgentSession(**data)
+
+    @staticmethod
+    def _deserialize_criteria(raw_records) -> List[AcceptanceCriterion]:
+        if not isinstance(raw_records, list):
+            return []
+        restored: List[AcceptanceCriterion] = []
+        for raw in raw_records[:MAX_CRITERIA]:
+            if not isinstance(raw, dict):
+                continue
+            values = {
+                "id": str(raw.get("id", "")),
+                "description": str(raw.get("description", "")),
+                "check_type": str(raw.get("check_type", "")),
+                "target": str(raw.get("target", "")),
+                "expected": str(raw.get("expected", "")),
+                "provenance": str(raw.get("provenance", "model")),
+                "status": str(raw.get("status", "pending")),
+                "evidence": str(raw.get("evidence", ""))[:MAX_TARGET_LENGTH],
+            }
+            if not values["id"] or len(values["id"]) > MAX_ID_LENGTH:
+                continue
+            if not values["description"] or len(values["description"]) > MAX_DESCRIPTION_LENGTH:
+                continue
+            if values["check_type"] not in ALLOWED_CHECK_TYPES:
+                continue
+            if values["provenance"] not in ALLOWED_PROVENANCE:
+                continue
+            if values["status"] not in ALLOWED_STATUSES:
+                continue
+            if len(values["target"]) > MAX_TARGET_LENGTH:
+                continue
+            if len(values["expected"]) > MAX_EXPECTED_LENGTH:
+                continue
+            restored.append(AcceptanceCriterion(**values))
+        return restored
 
     def save(self, session: AgentSession, filename: Optional[str] = None) -> Path:
         self._ensure_dir()

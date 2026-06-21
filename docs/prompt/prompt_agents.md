@@ -368,23 +368,76 @@ FSD 문서를 구현하고 문서내 `13. 승인` 올바르게 처리해줘
 [ACT] 의 `코드 실행`과 `쉘 명령 실행`를 구분하여 명확하게 응답하지 못하더라도, 아래와 같이 판단하여 처리 될 수 있도록 개선해줘.
 
 
+---
+
+## 참고자료 `/agent` 의 기능구현 FSD
+docs/requirements/FSD_v1.0.083_agents-autonomous-loop.md 
+docs/requirements/FSD_v1.0.085_agents-multi-provider-replication.md 
+docs/requirements/FSD_v1.0.086_agents-session-serialization-resume.md 
+docs/requirements/FSD_v1.0.087_agents-async-stop.md 
+docs/requirements/FSD_v1.0.088_agents-os-shell-hint.md 
+docs/requirements/FSD_v1.0.100_agents-bypass-approvals.md 
+docs/requirements/FSD_v1.0.101_agents-max-iterations-and-resume-index.md
+
+## 참고자료 `/agent` 의 기능구현 FSD 정리 문서
+docs/reports/REP_v1.1.032_agents-feature-analysis.md
+
+위 FSD 파일들과 정리 문서는 현재 시스템에 구현된 `/agent` 의 기능에 대한 문서입니다. 
+
+## 현재 구현된 `/agent` 명령어 목록
+
+| 명령어 | 설명 | 사용법 | 예시 / 대상 |
+| :--- | :--- | :--- | :--- |
+| **`/agents`** | 자율 에이전트 루프 실행<br>(목표 멀티라인, 루프 중 's' 키 또는 Ctrl+C 로 중단) | `/agents [-ba\|--bypassApprovals] [-s <N>] [pattern \| [p1,p2,...] \| stop]` | `[src/*.py, docs/*.md]` |
+| **`/agents resume`** | 마지막(또는 지정 인덱스/파일) 에이전트 세션 복원 | `/agents resume [N \| filename]` | `agent_20260421_123045_tetris.json` 또는 `2` |
+| **`/agents list`** | 저장된 에이전트 세션 목록 표시 | `/agents list` | - |
 
 
+## 요구사항
 
+현재 시스템에 구현된 `/agent`는 기능이 완벽하지 않습니다.
+목표를 주어 주면 반복적(loop)으로 작업을 수행하여 최종 목표(`goal`)를 달성하는 자율 에이전트 시스템을 구현하고자 합니다.
 
+- Goal (목적지): 에이전트가 도달해야 하는 명확하고 **검증 가능한 종료 상태(Verifiable end state)**입니다.
+  - 특징: 이전 턴(Turn)의 작업이 끝나자마자 다음 턴을 즉시 시작합니다. 평가자가 목표 달성을 확인하기 전까지 멈추지 않습니다.
+  # 용도: AI가 코드를 직접 뜯어고쳐야 하는 내부 통제권이 있는 작업
+  - 즉, "무엇이 달성되면 이 작업이 끝나는가?"를 정의합니다.
+  - 단, `goal` 자체를 해석하고 판단하는 과정은 AI의 판단에 맡깁니다.
 
+- `Goal` 의 특징과 용도를 참고하여 기존 소스코드의 문제점을 개선해 주시기 주세요.
+- 그외 개선사항
+    - 다음과 같은 **목표**를 제시하는 경우 테스트 코드 정상체크, 보고서 작성 누락하는 경우가 발생한다.
+    - 소스 코드가 너무 단순하고 몇개의 소스로만 구현이 된다. 
+    ```
+    공학용 계산기 프로그램을 python 으로 구현하는데 구현전 TDD 목록을 작성하고 해당 목록에 맞게 구현후 모든 기능이 완료되면 모든 테스트 코드가 정상적으로 통과하는지 검증하고 모두 완료되면 완료 보고서를 작성해줘.
+    ```
+    - 아래와 같은 **목표**를 제시하는 경우 소스코드 개선 미비, 테스트 코드 정상체크, 보고서 작성 누락하는 경우가 발생한다.
+    ```
+    API 서버와 앱 서버를 연동해서 ABC 소스에 기능을 수정/삭제 기능을 다음조건에 맞게 추가해줘
+        - 기능 개선 완료후 테스트 코드를 작성하고 검증한다.
+        - 모든 기능 개선 완료후 완료 보고서를 작성한다.
+    ```
+- docs/requirements 폴더에 REP + v1.1.023 문서로 작성한다.
 
+## `Goal` 참고 링크 :
+- [Goal](https://code.claude.com/docs/en/goal)
 
+---
 
+@docs/requirements/REP_v1.1.032_agents-goal-driven-evaluator-gate.md 
+@src/agent_runner.py  
 
+AgentRunner._build_system_prompt()에 `== 선택지 A-2. 파일 패치 (기존 파일의 부분 수정) ==\n` 와 관련하여 소스코드 개선 작업 시 시스템 프롬프트에 작성된 방식으로 동작이 잘 이루어지지 않고 있다. 예상되는 원인은 소스코드 길이가긴 파일의 경우 수정 전 소스와 LLM이 수정을 위해 생성한 코드가 일치하지 않아 패턴 이식이 안되어 수정이 불가능한 경우가 발생하게 되고, 이로인해 AGENT_MAX_ITERATIONS 횟수를 초과하는 경우가 발생한다.
 
+- 해당 문제를 개선 할 수 있는 최적의 방법을 제안하고 개선안을 반영해줘.
+- docs/requirements 폴더의REP_v1.1.032_agents-goal-driven-evaluator-gate.md 개선사항, 검증 및 테스트 케이스도 FSD 문서에 같이 포함하여 작성해줘.
 
+---
 
+docs/requirements/REP_v1.1.032_agents-goal-driven-evaluator-gate.md
+docs/requirements/REP_v1.1.033_agents-patch-fuzzy-matching.md
 
-
-
-
-
-
-
-
+- 위 두개의 문서는 현재 시스템에 구현 `/agent` 의 기능에 대한 문서입니다. 
+- 아래 순번데로 처리해줘
+    1. `REP_v1.1.032_agents-goal-driven-evaluator-gate.md`를 FSD문서를 검토하고 개선사항이 있으면 체크리스트 포함 문서를 개선한 다음 구현하고 모두 완료했는지 검증해줘.
+    2. `REP_v1.1.033_agents-patch-fuzzy-matching.md`는 구현까지 되어 있습니다. FSD문서를 다시한번 검토하고 개선사항이 있으면 체크리스트 포함 개선하고 모두 완료했는지 검증해줘.

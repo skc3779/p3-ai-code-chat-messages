@@ -4,13 +4,18 @@ AgentPatchApplier (FSD v1.0.115)
 `/agents` ACT 의 ```patch:<path>``` 블록을 SEARCH/REPLACE 방식으로 적용한다.
 
 - 한 펜스에 N 개의 SEARCH/REPLACE 쌍 허용
-- exact / fuzzy / appended / ambiguous / no_match 5 가지 상태 보고
+- exact / fuzzy / similar / appended / ambiguous / no_match 상태 보고
 - 트랜잭셔널: 한 블록이라도 실패하면 디스크에 쓰지 않음
 - 빈 SEARCH 는 파일 끝 append 또는 신규 파일 생성으로 동작
-- 정규식 미사용 — 리터럴 매칭 보장 (NFR-111-04)
+- 정규식 미사용 — 리터럴/시퀀스 매칭 보장 (NFR-111-04)
+- REP v1.1.033: difflib 유사도 기반 윈도우 매칭 tier 추가 — 긴 파일에서
+  LLM 이 생성한 SEARCH 가 원본과 '거의' 같지만 완전히 일치하지 않을 때 처리
 - workspace 밖 경로(traversal)는 거부
 """
 
+import difflib
+import math
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -30,7 +35,7 @@ class _Block:
 @dataclass
 class BlockResult:
     """단일 SEARCH/REPLACE 블록의 적용 결과."""
-    status: str                    # "exact" | "fuzzy" | "appended" | "ambiguous" | "no_match"
+    status: str                    # exact | fuzzy | similar | appended | ambiguous | no_match
     diagnostic: Optional[str] = None
 
 
@@ -53,9 +58,34 @@ class AgentPatchApplier:
 
     SNIPPET_CONTEXT_LINES = 5
     DIAGNOSTIC_MAX_CHARS = 500
+    # REP v1.1.033 — 유사도 기반 fuzzy 매칭: 최우선/차순위 ratio 차이가
+    # 이 값보다 작고 둘 다 임계값 이상이면 모호(ambiguous)로 간주한다.
+    UNIQUENESS_MARGIN = 0.05
+    # 최우선 ratio 가 이 값 이상이면 (거의 정확한 매칭) 차순위와 무관하게 적용.
+    # 반복적 코드에서 정수만 다른 인접 블록을 정확히 겨냥하기 위함.
+    HIGH_CONFIDENCE_RATIO = 0.95
+    # 최우선/차순위 ratio 차가 이 값 미만이면 '동률(tie)' — 진짜로 구별 불가
+    # (예: 본문이 동일한 두 함수). HIGH_CONFIDENCE 여도 적용하지 않는다.
+    TIE_EPSILON = 0.01
 
     def __init__(self, file_manager):
         self.file_manager = file_manager
+        # REP v1.1.033 — difflib 유사도 매칭 설정 (env 오버라이드 가능)
+        self.similarity_enabled = os.getenv("AGENT_PATCH_SIMILARITY", "1") != "0"
+        try:
+            threshold = float(
+                os.getenv("AGENT_PATCH_FUZZY_THRESHOLD", "0.85")
+            )
+        except (TypeError, ValueError):
+            threshold = 0.85
+        self.fuzzy_threshold = (
+            threshold if math.isfinite(threshold) and 0.0 <= threshold <= 1.0 else 0.85
+        )
+        try:
+            flex = int(os.getenv("AGENT_PATCH_FUZZY_FLEX", "2"))
+        except (TypeError, ValueError):
+            flex = 2
+        self.fuzzy_flex = flex if 0 <= flex <= 20 else 2
 
     # ─── 진입 ─────────────────────────────────────────────────
     def apply(
@@ -137,7 +167,7 @@ class AgentPatchApplier:
             results.append(BlockResult(status=status, diagnostic=diag))
 
         all_ok = all(
-            r.status in ("exact", "fuzzy", "appended") for r in results
+            r.status in ("exact", "fuzzy", "similar", "appended") for r in results
         )
 
         if not all_ok:
@@ -358,12 +388,137 @@ class AgentPatchApplier:
             )
             return (new_text, "fuzzy", None)
 
+        # similar — REP v1.1.033: difflib 유사도 기반 블록 매칭
+        #   (공백 정규화로도 못 찾은 content drift 처리)
+        sim = self._apply_similarity(working, search, replace)
+        if sim is not None:
+            return sim
+
         # no_match
         return (
             working,
             "no_match",
             self._format_diagnostic(working, search, kind="no_match"),
         )
+
+    # ─── 유사도 기반 블록 매칭 (REP v1.1.033) ────────────────
+    def _apply_similarity(
+        self, working: str, search: str, replace: str
+    ) -> Optional[Tuple[str, str, Optional[str]]]:
+        """difflib 유사도 기반 블록 매칭.
+
+        공백 정규화로도 못 찾은 경우, LLM 이 생성한 SEARCH 가 원본과
+        '거의' 같지만 완전히 일치하지 않을 때(긴 파일에서 흔함)를 처리한다.
+        파일을 라인 윈도우로 슬라이딩하며 `SequenceMatcher.ratio()` 가
+        가장 높은 구간을 찾아, 임계값(`fuzzy_threshold`)과 유일성 마진
+        (`UNIQUENESS_MARGIN`)을 만족하면 그 구간을 교체한다.
+
+        성능: `real_quick_ratio()` / `quick_ratio()` 로 임계값 미만 윈도우를
+        선차단하여 전체 ratio 계산을 최소화한다.
+
+        Returns:
+            (new_text, "similar", None)         — 적용 성공
+            (working, "ambiguous", diagnostic)  — 후보가 둘 이상 (위험 → 미적용)
+            None                                — 적용 불가 (호출측이 no_match 처리)
+        """
+        if not self.similarity_enabled:
+            return None
+
+        working_lf = working.replace("\r\n", "\n").replace("\r", "\n")
+        search_lf = search.replace("\r\n", "\n").replace("\r", "\n")
+        work_lines = working_lf.split("\n")
+        search_lines = search_lf.split("\n")
+        # join 잔재로 생긴 끝의 빈 라인 제거
+        while search_lines and search_lines[-1] == "":
+            search_lines.pop()
+        n = len(search_lines)
+        if n == 0 or not work_lines:
+            return None
+
+        search_block = "\n".join(search_lines)
+        sm = difflib.SequenceMatcher(autojunk=False)
+        sm.set_seq2(search_block)
+
+        # 임계값 이상 후보를 (ratio, start, size) 로 모두 수집한다.
+        # 윈도우 크기 n-flex .. n+flex 변형은 같은 위치의 경계 차이일 뿐이므로
+        # 유일성 판정은 '겹치지 않는 영역' 끼리만 비교한다 (REP v1.1.033).
+        lo_size = max(1, n - self.fuzzy_flex)
+        hi_size = n + self.fuzzy_flex
+        candidates: List[Tuple[float, int, int]] = []
+        for size in range(lo_size, hi_size + 1):
+            if size > len(work_lines):
+                break
+            for start in range(0, len(work_lines) - size + 1):
+                window = "\n".join(work_lines[start:start + size])
+                sm.set_seq1(window)
+                if sm.real_quick_ratio() < self.fuzzy_threshold:
+                    continue
+                if sm.quick_ratio() < self.fuzzy_threshold:
+                    continue
+                r = sm.ratio()
+                if r >= self.fuzzy_threshold:
+                    candidates.append((r, start, size))
+
+        if not candidates:
+            return None
+
+        # ratio 내림차순 → 최우선 후보 결정
+        candidates.sort(key=lambda c: c[0], reverse=True)
+        best_ratio, best_start, best_size = candidates[0]
+
+        def _overlaps(s1: int, sz1: int, s2: int, sz2: int) -> bool:
+            return s1 < s2 + sz2 and s2 < s1 + sz1
+
+        # 최우선 영역과 겹치지 않는 첫 후보 = 진짜 경쟁 후보
+        second_ratio: Optional[float] = None
+        for r, st, sz in candidates[1:]:
+            if not _overlaps(best_start, best_size, st, sz):
+                second_ratio = r
+                break
+
+        # 유일성 판정 (겹치지 않는 차순위 후보 기준):
+        #  - 동률(tie, 차 < TIE_EPSILON): 본문이 같은 두 블록 등 진짜 구별 불가
+        #    → HIGH_CONFIDENCE 여도 ambiguous.
+        #  - 그 외엔 최우선이 HIGH_CONFIDENCE 이상이면 적용, 아니면 마진 검사.
+        gap = best_ratio - second_ratio if second_ratio is not None else 1.0
+        is_tie = (
+            second_ratio is not None
+            and second_ratio >= self.fuzzy_threshold
+            and gap < self.TIE_EPSILON
+        )
+        margin_fail = (
+            second_ratio is not None
+            and second_ratio >= self.fuzzy_threshold
+            and gap < self.UNIQUENESS_MARGIN
+        )
+        if is_tie or (
+            best_ratio < self.HIGH_CONFIDENCE_RATIO and margin_fail
+        ):
+            return (
+                working,
+                "ambiguous",
+                self._format_diagnostic(
+                    working, search,
+                    kind=(
+                        f"similar_ambiguous(best={best_ratio:.2f}, "
+                        f"second={second_ratio:.2f})"
+                    ),
+                ),
+            )
+
+        # 매칭 구간의 문자 오프셋 계산 (work_lines 는 "\n" join 으로 무손실 복원)
+        span_start = sum(len(l) for l in work_lines[:best_start]) + best_start
+        block = "\n".join(work_lines[best_start:best_start + best_size])
+        span_end = span_start + len(block)
+
+        adjusted_replace = self._align_replace_indent(
+            working_lf, span_start, search, replace,
+        )
+        new_lf = working_lf[:span_start] + adjusted_replace + working_lf[span_end:]
+        # 원본이 CRLF 였다면 결과도 CRLF 로 복원
+        if "\r\n" in working:
+            new_lf = new_lf.replace("\n", "\r\n")
+        return (new_lf, "similar", None)
 
     # ─── 공백 정규화 ──────────────────────────────────────────
     @classmethod
@@ -520,6 +675,13 @@ class AgentPatchApplier:
         out = f"{kind}\n{snippet}" if snippet else kind
         if len(out) > self.DIAGNOSTIC_MAX_CHARS:
             out = out[: self.DIAGNOSTIC_MAX_CHARS] + "…"
+        # REP v1.1.033 — 반복 실패 → 정확 복사 또는 전문 재작성 유도
+        if kind.startswith(("no_match", "similar_ambiguous", "multiple_matches")):
+            out += (
+                "\n💡 SEARCH 가 원본과 정확히 일치해야 합니다. 위 스니펫의 "
+                "텍스트를 그대로 복사해 SEARCH 를 재작성하거나, 변경 범위가 "
+                "크면 `@@@filename:` 전문 재작성(A-1)으로 전환하세요."
+            )
         return out
 
     def _nearest_snippet(self, working: str, search: str) -> str:

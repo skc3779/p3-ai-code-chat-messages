@@ -39,6 +39,7 @@ def _make_runner(**env_overrides) -> AgentRunner:
         "AGENT_COMPACT_AFTER": "5",
         "AGENT_CODE_TIMEOUT": "30",
         "AGENT_DONE_TOKEN": "[AGENT_DONE]",
+        "AGENT_EVAL_GATE": "0",
         "AGENT_BYPASS_TIMEOUT": "1800",
         "AGENT_BYPASS_STAGNATION_N": "3",
         "AGENT_BYPASS_LOOP_N": "3",

@@ -17,6 +17,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .agent_action_dispatcher import AgentActionDispatcher
+from .agent_goal_evaluator import (
+    AcceptanceCriterion,
+    AgentGoalEvaluator,
+    bounded_env_int,
+    env_flag,
+)
 from .agent_input_listener import AgentInputListener
 from .code_executor import CodeExecutor
 from .os_utils import get_os_shell_hint
@@ -28,6 +34,9 @@ class AgentStopReason(Enum):
     USER_STOP = "user_stop"              # /agents stop 또는 Ctrl+C
     USER_ABORT_ON_ERROR = "user_abort"   # 에러 프롬프트에서 사용자가 s 선택
     FATAL_ERROR = "fatal_error"          # 복구 불가 예외
+    # REP v1.1.032 — evaluator-gated termination
+    GOAL_NOT_MET = "goal_not_met"
+    GOAL_UNVERIFIED = "goal_unverified"
     # FSD v1.0.100
     BYPASS_TIMEOUT = "bypass_timeout"           # 시간 예산 초과
     BYPASS_STAGNATION = "bypass_stagnation"     # 진행 정체 탐지
@@ -75,6 +84,10 @@ class AgentSession:
     stop_reason: Optional[AgentStopReason] = None
     # FSD v1.0.101 — 런타임 캐시 (JSON 직렬화에서 제외)
     effective_max_iterations: Optional[int] = None
+    # REP v1.1.032 — persisted records are revalidated by AgentRunner on resume
+    acceptance_criteria: List[AcceptanceCriterion] = field(default_factory=list)
+    eval_reject_count: int = 0
+    criteria_reprompted: bool = False
 
 
 class AgentRunner:
@@ -119,6 +132,20 @@ class AgentRunner:
         self.compact_after    = int(os.getenv("AGENT_COMPACT_AFTER", "5"))
         self.code_timeout     = int(os.getenv("AGENT_CODE_TIMEOUT", "60"))
         self.done_token       = os.getenv("AGENT_DONE_TOKEN", "[AGENT_DONE]")
+        # REP v1.1.032 goal evaluator. Invalid security-sensitive bounds disable
+        # command verification instead of widening execution authority.
+        self.eval_gate_enabled = env_flag("AGENT_EVAL_GATE", True)
+        parsed_rejects = bounded_env_int("AGENT_EVAL_MAX_REJECTS", 3, 0, 20)
+        self.eval_max_rejects = parsed_rejects if parsed_rejects is not None else 0
+        self.eval_test_timeout = bounded_env_int(
+            "AGENT_EVAL_TEST_TIMEOUT", self.code_timeout, 1, 600
+        )
+        self.eval_output_limit = bounded_env_int(
+            "AGENT_EVAL_OUTPUT_MAX_BYTES", 65536, 1, 1048576
+        )
+        self.eval_report_path = os.getenv(
+            "AGENT_EVAL_REPORT_PATH", "docs/완료보고서.md"
+        )[:4096]
         # FSD v1.0.100 bypass 안전장치
         self.bypass_timeout_sec       = int(os.getenv("AGENT_BYPASS_TIMEOUT", "1800"))
         self.bypass_stagnation_window = int(os.getenv("AGENT_BYPASS_STAGNATION_N", "3"))
@@ -128,6 +155,14 @@ class AgentRunner:
         # 에이전트 전용 CodeExecutor (AGENT_CODE_TIMEOUT 반영)
         self.code_executor = CodeExecutor(
             self.file_manager.workspace_dir, timeout=self.code_timeout
+        )
+        self._goal_evaluator = AgentGoalEvaluator(
+            Path(self.file_manager.workspace_dir),
+            self.assistant,
+            streaming=self.streaming,
+            timeout=self.eval_test_timeout,
+            output_limit=self.eval_output_limit,
+            report_path=self.eval_report_path,
         )
 
         # FSD v1.0.107: 지능형 디스패처
@@ -242,6 +277,7 @@ class AgentRunner:
             print("💡 루프 중 's' 키로 안전하게 중단할 수 있습니다 (Ctrl+C 도 여전히 유효).")
 
         try:
+            completed = False
             # ── Step 0. PLAN (신규 세션만) ──────────────────
             if resume_session is None:
                 plan_prompt = self._build_initial_prompt(goal, file_context)
@@ -249,11 +285,24 @@ class AgentRunner:
                 session.plan = plan_response
                 self._print_block("📋", " PLAN", plan_response)
 
+            if self.eval_gate_enabled:
+                if not self._initialize_acceptance_criteria(
+                    session, is_resume=resume_session is not None
+                ):
+                    session.stop_reason = AgentStopReason.GOAL_UNVERIFIED
+                    print("\n⛔ 검증 가능한 완료 기준을 확정하지 못했습니다.")
+                    completed = True
+                elif resume_session is not None:
+                    # Refresh evidence, but an unmet stale criterion does not
+                    # terminate a resumed loop before a new claim or cap.
+                    self._goal_evaluator.evaluate(session.acceptance_criteria)
+
             # ── Step 1..N. 반복 ──────────────────────────────
             feedback: Optional[str] = None
-            completed = False
 
             for i in range(start_iteration, effective_max + 1):
+                if completed:
+                    break
                 # ── 체크포인트 1: iteration 시작 전 ──
                 if self._check_async_stop(session):
                     completed = True
@@ -302,10 +351,31 @@ class AgentRunner:
 
                 # [AGENT_DONE] 체크
                 if self.done_token in response:
-                    session.stop_reason = AgentStopReason.DONE
-                    print(f"\n✅ 에이전트가 목표 달성을 선언했습니다 ({self.done_token}).")
-                    completed = True
-                    break
+                    if not self.eval_gate_enabled:
+                        session.stop_reason = AgentStopReason.DONE
+                        print(f"\n✅ 에이전트가 목표 달성을 선언했습니다 ({self.done_token}).")
+                        completed = True
+                        break
+                    outcome = self._finalize_goal(session)
+                    if outcome == AgentStopReason.DONE:
+                        session.stop_reason = outcome
+                        print(f"\n✅ 완료 기준 검증 통과 ({self.done_token}).")
+                        completed = True
+                        break
+                    if outcome == AgentStopReason.GOAL_UNVERIFIED:
+                        session.stop_reason = outcome
+                        print("\n⛔ 완료 주장을 검증할 수 없어 종료합니다.")
+                        completed = True
+                        break
+                    session.eval_reject_count += 1
+                    if session.eval_reject_count > self.eval_max_rejects:
+                        session.stop_reason = AgentStopReason.GOAL_NOT_MET
+                        print("\n⛔ 완료 주장 거부 한도를 초과했습니다.")
+                        completed = True
+                        break
+                    feedback = self._build_gate_feedback(session)
+                    print("\n⛔ 완료 주장 거부 — 미충족 기준을 보완합니다.")
+                    continue
 
                 # ── 체크포인트 3: 액션 실행 후 ──
                 if self._check_async_stop(session):
@@ -336,8 +406,15 @@ class AgentRunner:
                     self._enter_bypass_mode(session)
 
             if not completed and session.stop_reason is None:
-                session.stop_reason = AgentStopReason.MAX_ITERATIONS
-                print(f"\n⚠️  최대 iteration ({effective_max}) 초과 — 한도 도달.")
+                if self.eval_gate_enabled:
+                    session.stop_reason = self._finalize_goal(session)
+                    print(
+                        f"\n⚠️  최대 iteration ({effective_max}) 도달 — "
+                        f"검증 결과: {session.stop_reason.value}"
+                    )
+                else:
+                    session.stop_reason = AgentStopReason.MAX_ITERATIONS
+                    print(f"\n⚠️  최대 iteration ({effective_max}) 초과 — 한도 도달.")
 
         except KeyboardInterrupt:
             session.stop_reason = AgentStopReason.USER_STOP
@@ -506,7 +583,11 @@ f"[실행 환경]\n{os_hint}\n\n"
 "  모호하면 위/아래에 한두 줄을 더 포함시켜 유일하게 만드세요.\n"
 "- 들여쓰기·공백·줄바꿈을 원본 그대로 복사하세요.\n"
 "- 블록 삭제는 REPLACE 를 비우면 됩니다.\n"
-"- 신규 파일을 만들 때는 A-2 가 아닌 A-1 을 사용하세요.\n\n"
+"- 신규 파일을 만들 때는 A-2 가 아닌 A-1 을 사용하세요.\n"
+"- SEARCH 는 제공된 파일 컨텍스트의 텍스트를 **그대로 복사**하세요. 기억에\n"
+"   의존해 재작성하면 원본과 미세하게 달라 매칭이 실패합니다.\n"
+"- 같은 파일 패치가 2회 이상 실패하면 SEARCH 를 더 짧고 유일하게 줄이거나\n"
+"   `@@@filename:` 전문 재작성(A-1)으로 전환하세요.\n\n"
 
 "예시 : `import json` 을 imports 끝에 추가:\n"
 "@@@patch:src/agent_runner.py\n"
@@ -543,7 +624,9 @@ f"[실행 환경]\n{os_hint}\n\n"
 "자주 하는 실수:\n"
 "    1) SEARCH 블록을 너무 짧게 작성 → 여러 곳 매칭 → ambiguous 실패\n"
 "    2) SEARCH 의 들여쓰기를 임의로 줄임 → 매칭 실패 가능\n"
-"    3) 한 파일을 @@@filename:@@@ 와 @@@patch:@@@ 양쪽으로 동시 작성\n\n"
+"    3) 한 파일을 @@@filename:@@@ 와 @@@patch:@@@ 양쪽으로 동시 작성\n"
+"    4) 긴 파일에서 기억에 의존해 SEARCH 작성 → 원본과 미세하게 달라 매칭\n"
+"       실패 (제공된 파일 컨텍스트의 텍스트를 그대로 복사할 것)\n\n"
 
 "== 선택지 B. 코드 실행 (임시 실행 — 파일 저장 없음) ==\n"
 "```python\n"
@@ -594,9 +677,108 @@ f"{shell_brief}\n\n"
             parts.append(f"[FILE_CONTEXT]\n{file_context}")
         parts.append(
             "이 목표를 달성하기 위한 전체 PLAN 을 번호 매긴 목록으로 제시하세요.\n"
-            "PLAN 은 간결하게, 실행 가능한 단위로 쪼개세요."
+            "PLAN 은 간결하게, 실행 가능한 단위로 쪼개세요.\n"
+            "목표에 객관적 완료 기준을 추가해야 한다면 다음 형식만 사용하세요:\n"
+            "@@@criteria\n"
+            "M1 | file_exists|file_contains|cmd_exit_zero|llm | target | expected | description\n"
+            "@@@end\n"
+            "기준은 추가만 가능하며 목표에서 추출된 기준을 제거하거나 약화할 수 없습니다."
         )
         return "\n\n".join(parts)
+
+    # ─── Goal evaluator (REP v1.1.032) ─────────────────────
+    def _initialize_acceptance_criteria(
+        self, session: AgentSession, *, is_resume: bool
+    ) -> bool:
+        """Build authoritative criteria and strictly restore additive records.
+
+        Persisted ``extracted`` records are deliberately discarded.  They are
+        reconstructed from the persisted goal so an edited session JSON cannot
+        weaken the user's authoritative criteria.
+        """
+
+        authoritative = self._goal_evaluator.extract_from_goal(session.goal)
+        plan_model, malformed = self._goal_evaluator.parse_model_criteria(session.plan)
+        stored_model = (
+            self._goal_evaluator.restore_model_criteria(session.acceptance_criteria)
+            if is_resume
+            else []
+        )
+        combined = self._merge_criteria(authoritative, plan_model, stored_model)
+
+        needs_reprompt = not combined or malformed
+        if needs_reprompt and not session.criteria_reprompted:
+            session.criteria_reprompted = True
+            criteria_response = self._call_model(
+                session,
+                "[GOAL]\n"
+                + session.goal
+                + "\n\n검증 가능한 완료 기준을 다음 형식으로 한 번만 제시하세요. "
+                "임의 쉘 명령은 금지됩니다.\n"
+                "@@@criteria\n"
+                "M1 | file_exists|file_contains|cmd_exit_zero|llm | target | expected | description\n"
+                "@@@end",
+            )
+            prompted, prompted_malformed = self._goal_evaluator.parse_model_criteria(
+                criteria_response
+            )
+            if prompted and not prompted_malformed:
+                session.plan = f"{session.plan}\n\n{criteria_response}".strip()
+                combined = self._merge_criteria(authoritative, plan_model, prompted)
+                needs_reprompt = False
+
+        if needs_reprompt:
+            session.acceptance_criteria = combined
+            return False
+
+        session.acceptance_criteria = combined
+        return bool(combined)
+
+    @staticmethod
+    def _merge_criteria(*groups: List[AcceptanceCriterion]) -> List[AcceptanceCriterion]:
+        merged: List[AcceptanceCriterion] = []
+        seen = set()
+        for group in groups:
+            for criterion in group:
+                key = (
+                    criterion.check_type,
+                    criterion.target.replace("\\", "/"),
+                    criterion.expected,
+                )
+                if key in seen or len(merged) >= 32:
+                    continue
+                seen.add(key)
+                prefix = "A" if criterion.provenance == "extracted" else "M"
+                count = sum(1 for item in merged if item.provenance == criterion.provenance) + 1
+                criterion.id = f"{prefix}{count}"
+                criterion.status = "pending"
+                criterion.evidence = ""
+                merged.append(criterion)
+        return merged
+
+    def _finalize_goal(self, session: AgentSession) -> AgentStopReason:
+        if not session.acceptance_criteria:
+            return AgentStopReason.GOAL_UNVERIFIED
+        if all(c.check_type == "llm" for c in session.acceptance_criteria):
+            return AgentStopReason.GOAL_UNVERIFIED
+        self._goal_evaluator.evaluate(session.acceptance_criteria)
+        if any(c.status == "unverified" for c in session.acceptance_criteria):
+            return AgentStopReason.GOAL_UNVERIFIED
+        if all(c.status == "passed" for c in session.acceptance_criteria):
+            return AgentStopReason.DONE
+        return AgentStopReason.GOAL_NOT_MET
+
+    @staticmethod
+    def _build_gate_feedback(session: AgentSession) -> str:
+        lines = ["완료 기준 검증에서 다음 항목이 통과하지 못했습니다:"]
+        for criterion in session.acceptance_criteria:
+            if criterion.status != "passed":
+                lines.append(
+                    f"- {criterion.id} [{criterion.status}] {criterion.description}: "
+                    f"{criterion.evidence[:1000]}"
+                )
+        lines.append("증거를 충족하도록 구현을 보완한 뒤 다시 완료를 선언하세요.")
+        return "\n".join(lines)
 
     def _build_iteration_prompt(
         self, session: AgentSession, feedback: Optional[str]
@@ -1097,6 +1279,14 @@ f"{shell_brief}\n\n"
             print(f"🖥  쉘 명령: {len(shells)}건")
             for s in shells[:10]:
                 print(f"  {s}")
+
+        if session.acceptance_criteria:
+            print("🎯 완료 기준 검증:")
+            for criterion in session.acceptance_criteria:
+                print(
+                    f"  - {criterion.id} [{criterion.provenance}/{criterion.status}] "
+                    f"{criterion.description} — {criterion.evidence[:500]}"
+                )
 
         print("=" * 60)
 

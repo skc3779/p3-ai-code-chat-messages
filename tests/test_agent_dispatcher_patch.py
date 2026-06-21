@@ -62,6 +62,7 @@ def _make_runner(workspace: Path) -> AgentRunner:
         "AGENT_COMPACT_AFTER": "5",
         "AGENT_CODE_TIMEOUT": "30",
         "AGENT_DONE_TOKEN": "[AGENT_DONE]",
+        "AGENT_EVAL_GATE": "0",
     }
     with patch.dict(os.environ, env, clear=False):
         with patch("src.agent_runner.CodeExecutor"):

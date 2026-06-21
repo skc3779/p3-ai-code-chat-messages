@@ -42,6 +42,7 @@ def _make_runner(assistant_role: str = "model", **env_overrides) -> AgentRunner:
         "AGENT_COMPACT_AFTER": "5",
         "AGENT_CODE_TIMEOUT": "30",
         "AGENT_DONE_TOKEN": "[AGENT_DONE]",
+        "AGENT_EVAL_GATE": "0",
     }
     env.update(env_overrides)
 

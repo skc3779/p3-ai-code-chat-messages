@@ -1632,5 +1632,3 @@ python -m ai_cli -t claude -wp . -c context -nt "[src/cli_input.py]" -p docs\pro
 python -m ai_cli -t gemini -wp . -c context -l -nt "[src/cli_input.py]" -p docs\prompts\smoke.md -o docs\responses
 ```
 
-
-@@@
