@@ -109,7 +109,7 @@ def run_context_batch(
             )
             # Large-context internal calls are non-streaming, so this layer owns
             # the final synthesized response output.
-            if response:
+            if not streaming and response:
                 print(f"🤖 AI: {response}")
         else:
             response = assistant.chat(
@@ -120,7 +120,7 @@ def run_context_batch(
                 include_tree=not request.no_tree,
                 raise_on_error=True,
             )
-            # Streaming assistants already print chunks. Non-streaming calls do
+            # Streaming assistants already print chunks. streaming calls do
             # not, so print their result exactly once here.
             if not streaming and response:
                 print(f"🤖 AI: {response}")

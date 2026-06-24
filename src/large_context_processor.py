@@ -56,7 +56,7 @@ class LargeContextProcessor:
                 )
             try:
                 response = self.assistant.chat(
-                    prompt, streaming=False, include_context=False,
+                    prompt, streaming=True, include_context=False,
                     disable_tools=True, raise_on_error=True,
                     internal_system_prompt=system_prompt,
                 )
@@ -248,6 +248,7 @@ class LargeContextProcessor:
                     for part in chunk.parts
                 )
                 prompt = build_map_prompt(question, inventory, chunk.payload)
+                print(f"[Map {chunk.index}/{len(chunks)}] {label} ... 🔍 분석")
                 try:
                     summary = self._invoke(prompt, budget)
                 except BaseException:
@@ -258,7 +259,8 @@ class LargeContextProcessor:
                 cache.save_artifact("map", chunk.fingerprint, summary, {"chunk_index": chunk.index})
                 manifest["chunks"][chunk.index - 1]["status"] = "complete"
                 cache.save_manifest(manifest)
-                print(f"[Map {chunk.index}/{len(chunks)}] {label} ... ✅ 저장")
+                print(f"[Map {chunk.index}/{len(chunks)}] ... ✅ 저장")
+                # print(f"[Map {chunk.index}/{len(chunks)}] {label} ... ✅ 저장")
             summaries.append((chunk.fingerprint, summary))
         return summaries
 

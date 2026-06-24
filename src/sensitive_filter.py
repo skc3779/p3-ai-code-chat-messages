@@ -2,6 +2,7 @@
 SensitiveWordFilter - GenAI 입력 컨텍스트 민감 단어 치환 모듈
 
 FSD v1.0.058 / REQ-058-001~006
+FSD v1.1.030
 
 GenAI는 입력 context에 password, secret 등의 민감 단어가 포함되면
 "The content was blocked by the filter" 오류가 발생한다.
@@ -46,10 +47,7 @@ class SensitiveWordFilter:
         ("password", "p1assw1ord"),
         ("Password", "P1assw1ord"),
         ("PASSWORD", "P1ASSW1ORD"),
-        ("api_key", "a1pi_k1ey"),
-        ("apikey", "a1pike1y"),
-        ("secret", "s1ecr1et"),
-        ("token", "t1oken"),
+        ("secret", "s1ecr1et")
     ]
 
     def __init__(self):

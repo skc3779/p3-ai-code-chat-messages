@@ -2,15 +2,93 @@
 ResponseParser - AI 응답 파싱 유틸리티
 """
 
-from typing import List
 import re
+from typing import List
+
 from .file_manager import FileManager
+
 
 class ResponseParser:
     """AI 응답에서 파일 블록을 추출하고 저장하는 파서"""
     
     def __init__(self, file_manager: FileManager):
+        self.file_block_validator = None
         self.file_manager = file_manager
+
+
+    def _ensure_single_file_block_closed(self, text: str) -> str:
+        """
+        [개선 기능] 응답에 @@@filename: 블록이 단 '하나'만 존재할 때,
+        닫는 구분자(예: @@@)가 누락되어 있다면 문자열 끝에 자동으로 추가합니다.
+        """
+        filename_pattern = r"^(@{3,})filename:(.+)$"
+        lines = text.splitlines()
+
+        # 1. 파일 블록 시작 패턴을 가진 라인들을 탐색
+        valid_matches = []
+        for line in lines:
+            m = re.match(filename_pattern, line.strip())
+            if m:
+                valid_matches.append(m)
+
+        # 2. 반드시 단 하나의 파일 블록만 존재할 때만 보정 로직 실행
+        if len(valid_matches) != 1:
+            return text
+
+        delimiter = valid_matches[0].group(1)  # 매칭된 구분자 추출 (예: '@@@')
+
+        # 3. 파서 상태를 가상으로 시뮬레이션하여 닫혔는지 판단
+        collecting = False
+        in_nested_block = False
+
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+
+            if not collecting:
+                match = re.match(filename_pattern, stripped)
+                if match:
+                    collecting = True
+                    in_nested_block = False
+                    continue
+
+            if collecting:
+                # 언어 태그가 있는 내부 중첩 코드 블록의 시작
+                if stripped.startswith(delimiter) and len(stripped) > len(delimiter):
+                    in_nested_block = True
+                    continue
+
+                # 정확히 구분자만 적혀있는 줄인 경우
+                if stripped == delimiter:
+                    # 이미 내부 중첩 블록 안이라면 -> 내부 블록만 종료
+                    if in_nested_block:
+                        in_nested_block = False
+                        continue
+
+                    # 내부 중첩 블록 밖이라면 -> 다음 줄을 확인하여 무명 중첩 블록인지 체크
+                    next_idx = idx + 1
+                    if next_idx < len(lines):
+                        next_stripped = lines[next_idx].strip()
+                        is_next_delimiter = next_stripped == delimiter
+                        is_next_filename = bool(re.match(r"^@{3,}filename:.+$", next_stripped))
+
+                        if (
+                            next_stripped
+                            and not is_next_delimiter
+                            and not is_next_filename
+                        ):
+                            in_nested_block = True
+                            continue
+
+                    # 정상적으로 파일 블록이 종료됨
+                    collecting = False
+
+        # 4. 시뮬레이션 종료 시점에 블록이 닫히지 않았다면(collecting == True) 구분자 추가
+        if collecting:
+            if not text.endswith("\n"):
+                text += "\n"
+            text += delimiter
+
+        return text
 
     def parse_and_save(self, response: str, *, auto_overwrite: bool = False) -> List[str]:
         """
@@ -29,9 +107,12 @@ class ResponseParser:
                             에이전트 루프의 Bypass Approvals 모드에서만 True 로 호출된다.
                             기본값 False — 대화형 경로는 기존 동작 유지.
         """
-        saved_files: List[str] = []
+
+        # 동일 레벨의 보정 메서드 호출 (단일 파일 블록 누락 보정)
+        response = self._ensure_single_file_block_closed(response)
 
         # 라인 단위로 파싱하기 위해 문자열을 분리
+        saved_files: List[str] = []
         lines = response.splitlines()
 
         collecting: bool = False               # 현재 파일 블록을 수집 중인지 여부

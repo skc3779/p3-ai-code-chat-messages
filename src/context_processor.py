@@ -360,8 +360,6 @@ class ContextProcessor:
             i += 1  # 닫는 fence 건너뜀
         return pairs
 
-    # ─── 기존 메서드 ─────────────────────────────────────────────
-
     def _build_prompt(self, question: str, rel_path, content: str) -> str:
         """파일 내용을 포함한 프롬프트 생성"""
         return (
@@ -371,67 +369,151 @@ class ContextProcessor:
             f"--- 파일 끝 ---"
         )
 
-    def _auto_save_files(self, response: str) -> List[str]:
+    def _ensure_single_file_block_closed(self, text: str) -> str:
         """
-        AI 응답에서 @@@filename: 블록을 추출하여 자동 저장
-        (확인 프롬프트 없이 자동 덮어쓰기)
-
-        중첩 코드 블록 처리:
-        - 언어 태그가 있는 ```lang → 내부 코드 블록 시작
-        - 언어 태그가 없는 ``` → 내부 블록이 열려있으면 종료,
-          아닌 경우 다음 줄 존재 여부로 내부 블록 시작 vs 파일 블록 종료 판별
-
-        전처리:
-        - ``` 앞에 \\n이 없으면(문자열 시작 제외) 자동으로 \\n을 삽입
+        [개선 기능] 응답에 @@@filename: 블록이 단 '하나'만 존재할 때,
+        닫는 구분자(예: @@@)가 누락되어 있다면 문자열 끝에 자동으로 추가합니다.
         """
-        saved_files: List[str] = []
-        lines = response.splitlines()
+        filename_pattern = r"^(@{3,})filename:(.+)$"
+        lines = text.splitlines()
 
+        # 1. 파일 블록 시작 패턴을 가진 라인들을 탐색
+        valid_matches = []
+        for line in lines:
+            m = re.match(filename_pattern, line.strip())
+            if m:
+                valid_matches.append(m)
+
+        # 2. 반드시 단 하나의 파일 블록만 존재할 때만 보정 로직 실행
+        if len(valid_matches) != 1:
+            return text
+
+        delimiter = valid_matches[0].group(1)  # 매칭된 구분자 추출 (예: '@@@')
+
+        # 3. 파서 상태를 가상으로 시뮬레이션하여 닫혔는지 판단
         collecting = False
-        current_path = ""
-        current_content: List[str] = []
-        delimiter = "```"
         in_nested_block = False
 
         for idx, line in enumerate(lines):
             stripped = line.strip()
 
             if not collecting:
+                match = re.match(filename_pattern, stripped)
+                if match:
+                    collecting = True
+                    in_nested_block = False
+                    continue
+
+            if collecting:
+                # 언어 태그가 있는 내부 중첩 코드 블록의 시작
+                if stripped.startswith(delimiter) and len(stripped) > len(delimiter):
+                    in_nested_block = True
+                    continue
+
+                # 정확히 구분자만 적혀있는 줄인 경우
+                if stripped == delimiter:
+                    # 이미 내부 중첩 블록 안이라면 -> 내부 블록만 종료
+                    if in_nested_block:
+                        in_nested_block = False
+                        continue
+
+                    # 내부 중첩 블록 밖이라면 -> 다음 줄을 확인하여 무명 중첩 블록인지 체크
+                    next_idx = idx + 1
+                    if next_idx < len(lines):
+                        next_stripped = lines[next_idx].strip()
+                        is_next_delimiter = next_stripped == delimiter
+                        is_next_filename = bool(re.match(r"^@{3,}filename:.+$", next_stripped))
+
+                        if (
+                            next_stripped
+                            and not is_next_delimiter
+                            and not is_next_filename
+                        ):
+                            in_nested_block = True
+                            continue
+
+                    # 정상적으로 파일 블록이 종료됨
+                    collecting = False
+
+        # 4. 시뮬레이션 종료 시점에 블록이 닫히지 않았다면(collecting == True) 구분자 추가
+        if collecting:
+            if not text.endswith("\n"):
+                text += "\n"
+            text += delimiter
+
+        return text
+
+    # ─── 기존 자동 저장 메서드 ───────────────────────────────────────
+
+    def _auto_save_files(self, response: str) -> List[str]:
+        """
+        AI 응답에서 @@@filename:<경로> 블록을 추출하여 파일로 자동 저장합니다.
+        (사용자 확인 프롬프트 없이 자동으로 기존 파일을 덮어씁니다.)
+
+        중첩된 코드 블록 처리 방식:
+        - ```lang (또는 @@@lang) -> 중첩된 내부 코드 블록의 시작으로 처리
+        - 일반 ``` (또는 @@@) -> 내부 블록이 열려있다면 종료하고, 
+          닫혀있다면 다음 줄을 미리 확인(Lookahead)하여 언어 태그가 없는 
+          내부 블록의 시작인지 또는 전체 파일 블록의 종료인지를 판별
+
+        전처리:
+        - ``` 또는 @@@ 앞에 줄바꿈(\\n)이 없으면 자동으로 삽입하여 줄 시작에 맞춤
+        """
+        # 1. 동일 레벨의 보정 메서드 호출 (단일 파일 블록 누락 보정)
+        response = self._ensure_single_file_block_closed(response)
+
+        # 2. 파일 파싱 및 저장 진행
+        saved_files: List[str] = []
+        lines = response.splitlines()
+
+        collecting = False
+        current_path = ""
+        current_content: List[str] = []
+        delimiter = "@@@"
+        in_nested_block = False
+
+        for idx, line in enumerate(lines):
+            stripped = line.strip()
+
+            # --- 상태: 파일 블록 시작 태그(@@@filename:)를 찾는 중 ---
+            if not collecting:
+                # @@@filename:path/to/file.py 와 같은 패턴 매칭
                 match = re.match(r"^(@{3,})filename:(.+)$", stripped)
                 if match:
-                    delimiter = match.group(1)
+                    delimiter = match.group(1)  # 매칭된 구분자 추출 (예: '@@@')
                     current_path = match.group(2).strip()
                     collecting = True
                     current_content = []
                     in_nested_block = False
                     continue
 
+            # --- 상태: 파일 내용을 수집하는 중 ---
             if collecting:
-                # 1) 언어 태그가 있는 코드 블록 시작 (```python, ```sql 등)
+                # 1) 언어 태그가 붙은 내부 중첩 코드 블록의 시작 (예: @@@python)
                 if stripped.startswith(delimiter) and len(stripped) > len(delimiter):
                     in_nested_block = True
                     current_content.append(line)
                     continue
 
-                # 2) 정확히 delimiter만 있는 줄
+                # 2) 정확히 구분자(예: @@@)만 적혀있는 줄인 경우
                 if stripped == delimiter:
-                    # 2-a) 내부 블록이 열려있으면 → 내부 블록 종료
+                    # 2-a) 이미 내부 중첩 블록 안인 경우 -> 내부 블록만 종료
                     if in_nested_block:
                         in_nested_block = False
                         current_content.append(line)
                         continue
 
-                    # 2-b) 내부 블록이 닫혀있는 상태에서 ``` 발견
-                    #      → 다음 줄을 확인하여 내부 코드 블록 시작인지 판별
+                    # 2-b) 내부 중첩 블록 밖인 경우 -> 다음 줄을 미리 확인(Peek)하여
+                    #      언어 태그가 지정되지 않은 내부 블록의 시작인지 확인
                     next_idx = idx + 1
                     if next_idx < len(lines):
                         next_stripped = lines[next_idx].strip()
-                        # 다음 줄이 비어있지 않고, ``` 또는 @@@filename:이 아니면
-                        # 이것은 언어 태그 없는 내부 코드 블록 시작
+                        
+                        # 다음 줄이 비어있지 않고, 구분자 줄이 아니며, 새로운 파일 시작 줄도 아니라면
+                        # 언어 태그가 없는 내부 중첩 블록의 시작으로 판단합니다.
                         is_next_delimiter = next_stripped == delimiter
-                        is_next_filename = re.match(
-                            r"^@{3,}filename:.+$", next_stripped
-                        )
+                        is_next_filename = bool(re.match(r"^@{3,}filename:.+$", next_stripped))
+                        
                         if (
                             next_stripped
                             and not is_next_delimiter
@@ -441,11 +523,11 @@ class ContextProcessor:
                             current_content.append(line)
                             continue
 
-                    # 2-c) 파일 블록 종료 → 저장
+                    # 2-c) 파일 블록의 종료 -> 지금까지 수집된 파일 저장
                     file_path = self.file_manager.workspace_dir / current_path
                     file_content = "\n".join(current_content).strip()
 
-                    # 상위 디렉토리 자동 생성
+                    # 부모 디렉터리가 존재하지 않으면 자동으로 생성
                     file_path.parent.mkdir(parents=True, exist_ok=True)
 
                     if self.file_manager.write_file(file_path, file_content):
@@ -454,13 +536,16 @@ class ContextProcessor:
                     else:
                         print(f"❌ 파일 저장 실패: {current_path}")
 
+                    # 다음 파일 처리를 위해 상태 변수 초기화
                     collecting = False
                     current_path = ""
                     current_content = []
                     continue
 
+                # 기본 처리: 수집 중인 파일 내용에 현재 라인 추가
                 current_content.append(line)
 
+        # 예외 케이스: 파일 블록이 열렸으나 정상적으로 닫히지 않고 끝난 경우
         if collecting:
             print(f"⚠️  닫히지 않은 파일 블록 발견: {current_path}")
 

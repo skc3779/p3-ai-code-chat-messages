@@ -39,7 +39,17 @@ from .spinner import WaitSpinner
 # 정상 경로는 YAML 자산이며, 본 상수는 빌드물에 자산이 동봉되지 않은 경우의 안전망.
 _BUILTIN_FALLBACK_GENAI = """당신은 전문 소프트웨어 개발 어시스턴트입니다.
 
-사용자의 프로젝트 파일을 분석하고, 코드를 생성하거나 수정하며, 문서를 작성합니다.
+[역할 및 태도]
+- 사용자의 코딩 문제를 해결하고, 프로젝트 구조를 분석하며, 최적의 솔루션을 제안합니다.
+- 답변은 전문적이고 논리적이며, 불필요한 서두 없이 본론으로 바로 들어갑니다.
+- 복잡한 개념은 명확하고 간결하게 설명합니다.
+- 사용자가 별도로 요청하지 않는 한 항상 한국어로 답변합니다.
+
+[코드 작성 규칙]
+1. 항상 최신 언어 표준과 모범 사례(Best Practices)를 따릅니다.
+2. 코드는 가독성이 높아야 하며, 중요한 로직에는 명확한 주석을 답니다.
+3. 변수명과 함수명은 직관적이고 의미 있게 작명합니다.
+4. 에러 처리와 예외 상황을 고려하여 견고한 코드를 작성합니다.
 
 [필수] 코드나 파일을 생성할 때는 반드시 아래 형식을 정확히 따르세요:
 
@@ -53,28 +63,17 @@ def add(a, b):
     return a + b
 @@@
 
-[필수] 파일 시스템 조작, Git 작업, 패키지 확인이 필요한 경우 제공된 도구(Tools)를 사용하세요.
+[필수] 파일 시스템 조작 확인이 필요한 경우 제공된 도구(Tools)를 사용하세요.
 
 ```tool_code
 {"name": "도구이름", "input": {"키": "값"}}
 ```
 
-사용 가능한 도구:
-1. 파일 시스템:
+파일 시스템 사용 가능한 도구:
 - read_file(path)
 - write_file(path, content)
 - list_files()
 - list_directory_tree(depth)
-
-2. Git:
-- git_status()
-- git_diff(cached=True/False)
-- git_log(max_count)
-- git_add(files=[])
-- git_commit(message)
-
-3. 패키지:
-- list_packages(language="python"|"node")
 
 예시:
 ```tool_code
@@ -317,6 +316,8 @@ class GenAICodeAssistant:
             "isStream": streaming,
             "systemPrompt": masked_system_prompt
         }
+        
+        # print(f"### gen-ai request body llmConfig : {self.get_llm_config()}")
 
         api_url = f"{self.endpoint_url}/openapi/chat/v1/messages"
 
@@ -330,7 +331,7 @@ class GenAICodeAssistant:
                 response_text = self._chat_non_streaming(api_url, body, user_message, full_message)
             
             # REQ-058-005: 응답에서 치환된 단어 복원
-            response_text = self.sensitive_filter.unmask(response_text)
+            # response_text = self.sensitive_filter.unmask(response_text)
 
             # 도구 호출 처리
             tool_results = "" if disable_tools else self.process_tool_calls(response_text)
@@ -419,6 +420,8 @@ class GenAICodeAssistant:
                     content = data.get('content', '')
 
                     if event_status == 'CHUNK' and content:
+                        # FSD v1.1.030 : unmask 처리
+                        content = self.sensitive_filter.unmask(content)
                         print(content, end="", flush=True)
                         result_message += content
                         chunk_count += 1

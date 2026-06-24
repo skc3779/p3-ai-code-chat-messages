@@ -555,7 +555,7 @@ def main():
                         print(f"\n✅ 총 {len(saved_files)}개 파일이 저장되었습니다.")
                     else:
                         print("\n⚠️  저장된 파일이 없습니다.")
-                        print("💡 파일 형식: ```filename:path/to/file.ext")
+                        print("💡 파일 형식: @@@filename:path/to/file.ext")
 
                 elif command == '/run':
                     if not last_response:
