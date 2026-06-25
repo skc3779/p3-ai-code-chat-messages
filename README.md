@@ -274,7 +274,7 @@ python -m unittest tests.test_response_parser.TestResponseParser.test_parse_unta
 
 ```bash
 # FSD_v1.0.157_ai-cli-batch-auto-context.md 단위테스트
-python -m pytest tests/test_ai_cli_batch.py
+python -m pytest tests/test_agent_runner.py -v
 ```
 
 ---
