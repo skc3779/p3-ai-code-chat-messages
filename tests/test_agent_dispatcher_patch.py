@@ -217,24 +217,24 @@ class TestDispatcherPatch(unittest.TestCase):
 
     # ─── T-111-35 ──────────────────────────────────────────
     def test_T111_35_user_choses_always(self):
-        """bypass=False, auto_approve_file_mutation=False, 사용자 'A' → flag True."""
+        """bypass=False, auto_approve_file_mutation=False, 사용자 'A' → flag True.
+
+        FSD v1.1.062 §3.4: 디스패처 patch 승인은 _confirm_change(diff 미리보기)
+        경로로 이동. 'All' 선택 시 auto_approve_file_mutation 세팅 → 이후 자동.
+        """
         self._seed("a.txt", "foo\n")
         self._seed("b.txt", "alpha\n")
         act_a = "@@@patch:a.txt\n<<<<<<< SEARCH\nfoo\n=======\nbar\n>>>>>>> REPLACE\n@@@\n"
         act_b = "@@@patch:b.txt\n<<<<<<< SEARCH\nalpha\n=======\nbeta\n>>>>>>> REPLACE\n@@@\n"
 
-        # 첫 호출은 _approve_dangerous 가 호출되며 'A' 선택 → flag 세팅 + True 반환
-        def fake_approve(session, attr, _label):
-            setattr(session, attr, True)
-            return True
-
-        with patch.object(self.runner, "_approve_dangerous", side_effect=fake_approve) as m:
+        # 첫 호출은 _confirm_change 가 호출되며 'all' 반환 → 디스패처가 flag 세팅.
+        with patch.object(self.runner, "_confirm_change", return_value="all") as m:
             results_a = self.dispatcher.dispatch(self.session, act_a)
             self.assertTrue(results_a[0].success)
             self.assertTrue(self.session.auto_approve_file_mutation)
             self.assertEqual(m.call_count, 1)
 
-            # 두 번째 패치 — flag 가 True 이므로 _approve_dangerous 미호출
+            # 두 번째 패치 — flag 가 True 이므로 _confirm_change 미호출(자동 commit)
             results_b = self.dispatcher.dispatch(self.session, act_b)
             self.assertTrue(results_b[0].success)
             self.assertEqual(m.call_count, 1)  # 증가 없음

@@ -92,16 +92,50 @@ class AgentActionDispatcher:
         }
 
         results: list = []
-        for a in actions:
-            if a.kind == "file":
-                results += self._exec_file(session, a)
-            elif a.kind == "code":
-                results.append(self._exec_code(a))
-            elif a.kind == "script":
-                results.append(self._exec_script(session, a))
-            elif a.kind == "shell":
-                results.append(self._exec_shell(session, a))
-            elif a.kind == "patch":
+        for idx, a in enumerate(actions):
+            # ── per-action 정책 게이트 (FR-062-22, §3.2) ──
+            # 각 액션 실행 직전에 정책을 평가해 승인/정지/자동을 결정한다.
+            gate = self._per_action_gate(session, a)
+            if gate == "stop":
+                # 정지 — 이 액션 및 나머지 액션을 실행하지 않고 보존(사용자 턴으로).
+                results.append(self._make_hold_result(actions[idx:]))
+                break
+            if gate == "reject":
+                # 이 액션만 거부(실패 처리), 나머지는 계속.
+                results.append(ActionResult(
+                    kind=self._observe_kind(a),
+                    target=self._action_target(a),
+                    success=False,
+                    detail="사용자 거부 (per-action 승인 거부)",
+                ))
+                continue
+            # gate == "approve" 로 셸/스크립트가 승인된 경우, 실행기 내부의 위험
+            # 셸 2차 프롬프트와 중복되지 않도록 해당 액션 한정 자동승인을 임시 부여
+            # (실행 후 원복). interactive/auto 경로는 gate 가 AUTO 라 영향 없음.
+            transient_danger_ok = (
+                gate == "approve" and a.kind in ("shell", "script")
+            )
+            prev_danger_flag = getattr(
+                session, "auto_approve_dangerous_shell", False
+            )
+            if transient_danger_ok:
+                session.auto_approve_dangerous_shell = True
+            try:
+                # gate in ("auto", "approve") → 실행 진행
+                if a.kind == "file":
+                    results += self._exec_file(session, a)
+                elif a.kind == "code":
+                    results.append(self._exec_code(a))
+                elif a.kind == "script":
+                    results.append(self._exec_script(session, a))
+                elif a.kind == "shell":
+                    results.append(self._exec_shell(session, a))
+                elif a.kind == "patch":
+                    pass  # 아래 patch 분기에서 처리 (try 밖)
+            finally:
+                if transient_danger_ok:
+                    session.auto_approve_dangerous_shell = prev_danger_flag
+            if a.kind == "patch":
                 key = (a.filepath or "").strip().replace("\\", "/")
                 if key and key in file_paths:
                     results.append(ActionResult(
@@ -113,6 +147,84 @@ class AgentActionDispatcher:
                     continue
                 results.append(self._exec_patch(session, a))
         return results
+
+    # ─── per-action 정책 게이트 (FR-062-22, §3.2) ──────────────
+    @staticmethod
+    def _observe_kind(a: _ParsedAction) -> str:
+        """ActionResult.kind 매핑 (file/patch→file, script→code 보고 형식 유지)."""
+        if a.kind in ("file", "patch"):
+            return "file"
+        if a.kind == "script":
+            return "code"
+        return a.kind
+
+    @staticmethod
+    def _action_target(a: _ParsedAction) -> str:
+        """보고용 타겟 — 파일/패치는 경로, 셸은 명령, 코드는 언어."""
+        if a.kind in ("file", "patch"):
+            return a.filepath or "?"
+        if a.kind == "shell":
+            return a.payload
+        return a.lang or a.kind
+
+    def _policy_action_kind(self, a: _ParsedAction) -> str:
+        """_ParsedAction → 정책 액션 범주 (file | shell | code)."""
+        from .agent_policy import ACTKIND_CODE, ACTKIND_FILE, ACTKIND_SHELL
+
+        if a.kind in ("file", "patch"):
+            return ACTKIND_FILE
+        if a.kind in ("shell", "script"):
+            return ACTKIND_SHELL
+        return ACTKIND_CODE
+
+    def _action_is_dangerous(self, a: _ParsedAction) -> bool:
+        """셸/스크립트의 위험 명령 여부 — 정책 무관 항상 사전 승인 대상."""
+        if a.kind == "shell":
+            dangerous, _ = self._runner._is_chain_dangerous(a.payload)
+            return dangerous
+        if a.kind == "script":
+            # 스크립트 첫 실행 라인의 base command 검사 (_exec_script 와 동일 기준).
+            for line in a.payload.splitlines():
+                stripped = line.strip()
+                if stripped and not stripped.startswith("#"):
+                    tok = stripped.split()
+                    first = tok[0].lower() if tok else ""
+                    return first in self._runner.terminal_executor.DANGEROUS_COMMANDS
+        return False
+
+    def _per_action_gate(self, session, a: _ParsedAction) -> str:
+        """액션 실행 직전 정책 평가를 runner.per_action_gate 에 위임.
+
+        Returns: "auto" | "approve" | "stop" | "reject".
+        """
+        action_kind = self._policy_action_kind(a)
+        is_dangerous = self._action_is_dangerous(a)
+        label = self._action_target(a)
+        return self._runner.per_action_gate(
+            session, action_kind, is_dangerous=is_dangerous, label=label,
+        )
+
+    def _make_hold_result(self, remaining: List[_ParsedAction]):
+        """정지 시 나머지 액션 보존 — OBSERVE 에 보류를 기록하는 ActionResult.
+
+        잔여 액션을 다음 프롬프트에 재제시하지 않고 모델이 OBSERVE 로 인지하도록
+        한다(§3.2). 보류된 액션 요약을 detail 에 담아 보고한다.
+        """
+        from .agent_runner import ActionResult
+
+        summary = []
+        for a in remaining:
+            summary.append(f"{a.kind}:{self._action_target(a)}")
+        detail = (
+            "사용자 승인 대기로 나머지 액션 보류 — "
+            f"{len(remaining)}개 미실행: " + ", ".join(summary)
+        )
+        # kind="hold" — 정책 보류는 실패가 아니므로 Self-Correction 을 트리거하지
+        # 않는다 (_has_code_failure 가 file/code/shell 만 본다).
+        return ActionResult(
+            kind="hold", target="per-action-hold",
+            success=True, detail=detail,
+        )
 
     # ─── 파싱 ──────────────────────────────────────────────────
     # v1.0.141 — `@@@` 도 펜스 마커로 인식 (filename:/patch: 전용 신규 패턴)
@@ -249,7 +361,26 @@ class AgentActionDispatcher:
 
     # ─── 실행 어댑터 ──────────────────────────────────────────
     def _exec_file(self, session, a: _ParsedAction) -> list:
-        """파일 저장 — AgentRunner._save_file_blocks() 위임."""
+        """파일 저장 — AgentRunner._save_file_blocks() 위임.
+
+        FSD v1.1.062 §3.4: 디스크 반영 전 before(현재 디스크) vs after(신규)
+        diff 를 미리보기로 출력(로그). 저장 자체의 승인은 기존 _save_file_blocks /
+        response_parser 경로(auto_overwrite)가 담당 — 이중 프롬프트 회피.
+        """
+        if a.filepath and self._runner.diff_preview_enabled:
+            try:
+                from .patch_applier import PatchApplier
+                applier = PatchApplier(self._runner.file_manager)
+                plan = applier.compute_full_file(a.filepath, a.payload)
+                if plan.success and plan.diff:
+                    label = "신규" if not plan.existed else "수정"
+                    print(f"\n📝 파일 변경 미리보기 ({label}): {a.filepath}")
+                    diff = self._runner._preview_file_change(
+                        a.filepath, plan.before_text, a.payload,
+                    )
+                    print(diff)
+            except Exception:
+                pass  # 미리보기는 표시용 — 실패해도 저장 흐름에 영향 없음
         fake = f"@@@filename:{a.filepath}\n{a.payload}\n@@@"
         return self._runner._save_file_blocks(session, fake)
 
@@ -295,9 +426,13 @@ class AgentActionDispatcher:
         return self._runner._exec_single_shell_command(session, a.payload)
 
     def _exec_patch(self, session, a: _ParsedAction):
-        """patch 적용 — AgentPatchApplier 위임 (FSD v1.0.115)."""
-        from .agent_patch_applier import AgentPatchApplier
-        from .agent_runner import ActionResult
+        """patch 적용 — PatchApplier 위임 (FSD v1.0.115, FSD v1.1.061 중립 모듈).
+
+        FSD v1.1.062 §3.4: compute(dry-run) → diff 미리보기 → 정책 승인 →
+        승인 시 commit, 거부 시 폐기(무변경). 세션 자동승인 시 미리보기 생략 가능.
+        """
+        from .patch_applier import PatchApplier
+        from .agent_runner import ActionResult, AgentStopReason
 
         if not a.filepath:
             return ActionResult(
@@ -305,23 +440,62 @@ class AgentActionDispatcher:
                 detail="patch path 미지정",
             )
 
-        applier = AgentPatchApplier(self._runner.file_manager)
+        applier = PatchApplier(self._runner.file_manager)
         auto_approve = bool(
             getattr(session, "bypass_approvals", False)
             or getattr(session, "auto_approve_file_mutation", False)
         )
-        on_first_approval = lambda: self._runner._approve_dangerous(
-            session, "auto_approve_file_mutation",
-            f"파일 patch '{a.filepath}'",
-        )
 
         print(f"\n📝 patch 적용: {a.filepath}")
-        result = applier.apply(
-            a.filepath,
-            a.payload,
-            auto_approve=auto_approve,
-            on_first_approval=on_first_approval,
-        )
+
+        # ── compute: 매칭·diff 산출 (디스크 미변경) ──
+        plan = applier.compute(a.filepath, a.payload)
+
+        if not plan.success:
+            # 매칭/파싱 실패 — commit 없이 실패 PatchResult 형태로 보고
+            from .patch_applier import PatchResult
+            result = PatchResult(
+                success=False, applied_count=0,
+                total_count=len(plan.block_results),
+                block_results=plan.block_results, error=plan.error,
+            )
+            return self._report_patch(a, result)
+
+        # ── diff 미리보기 + 정책 승인 ──
+        if auto_approve:
+            # 세션 자동승인: diff 로그만(있으면), 바로 commit.
+            # FR-062-10: 자동승인 경로도 AGENT_DIFF_MAX_LINES 요약을 거친다.
+            if self._runner.diff_preview_enabled and plan.diff:
+                summarized = self._runner._summarize_diff(plan.diff)
+                print(f"\n📝 변경 미리보기 (자동 적용): {a.filepath}\n{summarized}")
+        else:
+            decision = self._runner._confirm_change(
+                session.interaction_policy, a.filepath, plan.diff,
+            )
+            if decision == "all":
+                session.auto_approve_file_mutation = True
+            elif decision == "stop":
+                session.stop_reason = (
+                    getattr(session, "stop_reason", None)
+                    or AgentStopReason.USER_STOP
+                )
+                return ActionResult(
+                    kind="file", target=a.filepath, success=False,
+                    detail="사용자 중단 (diff 승인에서 stop)",
+                )
+            elif decision == "no":
+                return ActionResult(
+                    kind="file", target=a.filepath, success=False,
+                    detail="사용자 거부 (diff 미승인 — 무변경)",
+                )
+            # "yes" / "all" → commit 진행
+
+        result = applier.commit(plan)
+        return self._report_patch(a, result)
+
+    def _report_patch(self, a: _ParsedAction, result):
+        """PatchResult → ActionResult 보고 (FR-111-24 형식 보존)."""
+        from .agent_runner import ActionResult
 
         # 보고 형식 (FR-111-24): N/M blocks (statuses)
         statuses = [r.status for r in result.block_results]

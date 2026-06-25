@@ -1,7 +1,8 @@
 """
-AgentPatchApplier (FSD v1.0.115)
+PatchApplier (FSD v1.0.115, FSD v1.1.061 중립 모듈 이전)
 
-`/agents` ACT 의 ```patch:<path>``` 블록을 SEARCH/REPLACE 방식으로 적용한다.
+```patch:<path>``` 블록을 SEARCH/REPLACE 방식으로 적용한다.
+컨텍스트 품질검사(QC, context_processor) 등에서 공용으로 사용한다.
 
 - 한 펜스에 N 개의 SEARCH/REPLACE 쌍 허용
 - exact / fuzzy / appended / ambiguous / no_match 5 가지 상태 보고
@@ -11,6 +12,7 @@ AgentPatchApplier (FSD v1.0.115)
 - workspace 밖 경로(traversal)는 거부
 """
 
+import difflib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple
@@ -45,7 +47,24 @@ class PatchResult:
     new_text: Optional[str] = None    # 성공 시 디스크에 쓰여진 본문 (테스트용)
 
 
-class AgentPatchApplier:
+@dataclass
+class PatchPlan:
+    """compute() 산출물 — 디스크 미변경 dry-run 결과 (FSD v1.1.062 §3.4, FR-062-19).
+
+    승인 워크플로(preview → confirm → commit)의 중간 표현. commit() 의 입력.
+    """
+    rel_path: str
+    computed_text: Optional[str]                       # 적용 결과 전문 (실패 시 None)
+    block_results: List[BlockResult] = field(default_factory=list)
+    success: bool = False                              # transactional 판정
+    error: Optional[str] = None                        # 파싱/IO/경로 오류
+    before_text: str = ""                              # 현재 디스크 본문 (없으면 '')
+    diff: str = ""                                     # unified diff (before→after)
+    existed: bool = False                              # 적용 대상 파일이 이미 존재했는지
+    is_full_file: bool = False                         # compute_full_file 경로 여부
+
+
+class PatchApplier:
     """SEARCH/REPLACE 패치 적용기.
 
     의존성: FileManager (read_file / write_file / workspace_dir)
@@ -57,62 +76,57 @@ class AgentPatchApplier:
     def __init__(self, file_manager):
         self.file_manager = file_manager
 
-    # ─── 진입 ─────────────────────────────────────────────────
-    def apply(
-        self,
-        relative_path: str,
-        payload: str,
-        *,
-        auto_approve: bool = False,
-        on_first_approval: Optional[Callable[[], bool]] = None,
-    ) -> PatchResult:
-        """패치 본문을 적용한다.
+    # ─── compute (dry-run) ────────────────────────────────────
+    def compute(self, relative_path: str, payload: str) -> PatchPlan:
+        """패치 본문을 매칭·적용해 결과를 산출하되 **디스크는 변경하지 않는다**.
+
+        FSD v1.1.062 §3.4 / FR-062-19. cascade(exact→fuzzy→similar) 수행 후
+        결과 문자열·block statuses·transactional 판정·unified diff 만 만든다.
 
         Args:
             relative_path: 워크스페이스 상대 경로
             payload: ```patch:...``` 펜스의 본문 (마커 포함)
-            auto_approve: True 면 사용자 승인 프롬프트 생략
-            on_first_approval: auto_approve=False 일 때 호출 — True 반환 시 적용
         """
         # ── 1) 경로 정규화 + traversal 차단 ──
         try:
             abs_path = self._safe_path(relative_path)
         except IOError as e:
-            return PatchResult(
-                success=False, total_count=0,
-                error=f"잘못된 경로: {e}",
+            return PatchPlan(
+                rel_path=relative_path, computed_text=None,
+                success=False, error=f"잘못된 경로: {e}",
             )
 
         # ── 2) 펜스 본문 파싱 ──
         try:
             blocks = self.parse_blocks(payload)
         except ValueError as e:
-            return PatchResult(
-                success=False, total_count=0,
-                error=f"패치 본문 파싱 실패: {e}",
+            return PatchPlan(
+                rel_path=relative_path, computed_text=None,
+                success=False, error=f"패치 본문 파싱 실패: {e}",
             )
         if not blocks:
-            return PatchResult(
-                success=False, total_count=0,
-                error="patch 빈 본문",
+            return PatchPlan(
+                rel_path=relative_path, computed_text=None,
+                success=False, error="patch 빈 본문",
             )
 
-        # ── 3) 원본 읽기 ──
-        # newline="" 로 EOL 보존 — FileManager.read_file 은 universal newlines
-        # 변환을 거치므로 patch 의 CRLF 보존을 위해 직접 읽는다.
+        # ── 3) 원본 읽기 (EOL 보존) ──
         existed = abs_path.exists()
         if existed:
             original = self._read_preserving_eol(abs_path)
             if original is None:
-                return PatchResult(
-                    success=False, total_count=len(blocks),
+                return PatchPlan(
+                    rel_path=relative_path, computed_text=None,
+                    success=False, existed=True,
+                    block_results=[],
                     error=f"파일 읽기 실패: {relative_path}",
                 )
         else:
             # 신규 파일 — 모든 블록이 빈 SEARCH 여야 함
             if not all(b.search == "" for b in blocks):
-                return PatchResult(
-                    success=False, total_count=len(blocks),
+                return PatchPlan(
+                    rel_path=relative_path, computed_text=None,
+                    success=False, existed=False,
                     block_results=[
                         BlockResult(
                             status="no_match",
@@ -129,7 +143,6 @@ class AgentPatchApplier:
         # ── 4) 블록별 적용 (in-memory) ──
         working = original
         results: List[BlockResult] = []
-
         for block in blocks:
             working, status, diag = self._apply_one(
                 working, block.search, block.replace,
@@ -141,15 +154,137 @@ class AgentPatchApplier:
         )
 
         if not all_ok:
-            # 부분 실패 — 디스크 미변경
+            # 부분 실패 — transactional 폐기, 디스크 미변경
+            return PatchPlan(
+                rel_path=relative_path, computed_text=None,
+                success=False, existed=existed,
+                block_results=results, before_text=original,
+            )
+
+        diff = self._unified_diff(original, working, relative_path, existed)
+        return PatchPlan(
+            rel_path=relative_path, computed_text=working,
+            success=True, existed=existed,
+            block_results=results, before_text=original, diff=diff,
+        )
+
+    def compute_full_file(self, relative_path: str, new_text: str) -> PatchPlan:
+        """파일 전문(A-1) 경로의 dry-run 결과 — before(현 디스크) vs after diff.
+
+        SEARCH/REPLACE 와 무관하게 항상 success=True (전문 덮어쓰기). 디스크 미변경.
+        """
+        try:
+            abs_path = self._safe_path(relative_path)
+        except IOError as e:
+            return PatchPlan(
+                rel_path=relative_path, computed_text=None,
+                success=False, error=f"잘못된 경로: {e}", is_full_file=True,
+            )
+        existed = abs_path.exists()
+        before = ""
+        if existed:
+            before = self._read_preserving_eol(abs_path) or ""
+        diff = self._unified_diff(before, new_text, relative_path, existed)
+        return PatchPlan(
+            rel_path=relative_path, computed_text=new_text,
+            success=True, existed=existed, before_text=before,
+            diff=diff, is_full_file=True,
+        )
+
+    # ─── commit (디스크 반영) ──────────────────────────────────
+    def commit(self, plan: PatchPlan) -> PatchResult:
+        """승인된 PatchPlan 을 실제 디스크에 원자적으로 기록한다.
+
+        plan.success 가 False 면 무변경 PatchResult(success=False).
+        """
+        total = len(plan.block_results)
+        if not plan.success or plan.computed_text is None:
+            return PatchResult(
+                success=False, applied_count=0, total_count=total,
+                block_results=plan.block_results, error=plan.error,
+            )
+
+        try:
+            abs_path = self._safe_path(plan.rel_path)
+        except IOError as e:
+            return PatchResult(
+                success=False, applied_count=0, total_count=total,
+                block_results=plan.block_results, error=f"잘못된 경로: {e}",
+            )
+
+        try:
+            abs_path.parent.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            return PatchResult(
+                success=False, applied_count=0, total_count=total,
+                block_results=plan.block_results,
+                error=f"디렉터리 생성 실패: {e}",
+            )
+
+        ok = self._write_preserving_eol(abs_path, plan.computed_text)
+        if not ok:
+            return PatchResult(
+                success=False, applied_count=0, total_count=total,
+                block_results=plan.block_results, error="디스크 쓰기 실패",
+            )
+
+        return PatchResult(
+            success=True, applied_count=total, total_count=total,
+            block_results=plan.block_results, new_text=plan.computed_text,
+        )
+
+    @staticmethod
+    def _unified_diff(
+        before: str, after: str, rel_path: str, existed: bool
+    ) -> str:
+        """before→after 통합 diff. EOL 은 LF 로 정규화해 비교(노이즈 억제)."""
+        b_lf = before.replace("\r\n", "\n").replace("\r", "\n")
+        a_lf = after.replace("\r\n", "\n").replace("\r", "\n")
+        if b_lf == a_lf:
+            return ""
+        fromfile = f"a/{rel_path}" if existed else "/dev/null"
+        tofile = f"b/{rel_path}"
+        diff = difflib.unified_diff(
+            b_lf.splitlines(keepends=False),
+            a_lf.splitlines(keepends=False),
+            fromfile=fromfile, tofile=tofile, lineterm="",
+        )
+        return "\n".join(diff)
+
+    # ─── 진입 (compute + commit wrapper) ──────────────────────
+    def apply(
+        self,
+        relative_path: str,
+        payload: str,
+        *,
+        auto_approve: bool = False,
+        on_first_approval: Optional[Callable[[], bool]] = None,
+    ) -> PatchResult:
+        """패치 본문을 적용한다 (compute + commit 묶음 wrapper).
+
+        FSD v1.1.062 §3.4: 내부적으로 compute()(dry-run) → 승인 → commit() 로
+        분해되었으나 외부 시그니처·반환·동작은 기존과 동일하다. QC·디스패처 등
+        기존 호출부 무회귀가 최우선.
+
+        Args:
+            relative_path: 워크스페이스 상대 경로
+            payload: ```patch:...``` 펜스의 본문 (마커 포함)
+            auto_approve: True 면 사용자 승인 프롬프트 생략
+            on_first_approval: auto_approve=False 일 때 호출 — True 반환 시 적용
+        """
+        plan = self.compute(relative_path, payload)
+
+        # 매칭 실패/파싱 실패 — 기존 apply 와 동일한 PatchResult 형태로 반환
+        if not plan.success:
             return PatchResult(
                 success=False,
                 applied_count=0,
-                total_count=len(blocks),
-                block_results=results,
+                total_count=len(plan.block_results),
+                block_results=plan.block_results,
+                error=plan.error,
             )
 
-        # ── 5) 승인 검사 ──
+        # 승인 검사 (compute 성공 후에만 — 기존 동작 보존)
         if not auto_approve and on_first_approval is not None:
             try:
                 approved = bool(on_first_approval())
@@ -159,40 +294,12 @@ class AgentPatchApplier:
                 return PatchResult(
                     success=False,
                     applied_count=0,
-                    total_count=len(blocks),
-                    block_results=results,
+                    total_count=len(plan.block_results),
+                    block_results=plan.block_results,
                     error="사용자 거부",
                 )
 
-        # ── 6) 디스크 쓰기 ──
-        try:
-            abs_path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
-            return PatchResult(
-                success=False,
-                applied_count=0,
-                total_count=len(blocks),
-                block_results=results,
-                error=f"디렉터리 생성 실패: {e}",
-            )
-
-        ok = self._write_preserving_eol(abs_path, working)
-        if not ok:
-            return PatchResult(
-                success=False,
-                applied_count=0,
-                total_count=len(blocks),
-                block_results=results,
-                error="디스크 쓰기 실패",
-            )
-
-        return PatchResult(
-            success=True,
-            applied_count=len(blocks),
-            total_count=len(blocks),
-            block_results=results,
-            new_text=working,
-        )
+        return self.commit(plan)
 
     # ─── EOL 보존 입출력 ──────────────────────────────────────
     @staticmethod

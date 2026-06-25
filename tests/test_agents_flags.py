@@ -153,12 +153,15 @@ class TestRunMaxIterationsOverride(unittest.TestCase):
         """T-101-08: max_iterations_override=3 이면 최대 3회 후 종료"""
         runner = _make_runner(AGENT_MAX_ITERATIONS="10")
         runner.assistant.chat.return_value = "[REASON] r\n[ACTION] a\n[OBSERVE] o"
-        runner._ask_continue = MagicMock(return_value=('c', None))
+        # P4: iteration 경계 사용자 턴은 _interaction_turn 으로 확장됨.
+        runner._interaction_turn = MagicMock(return_value=('c', None))
         runner._input_listener = MagicMock()
         runner._input_listener.enabled = False
         runner._input_listener.is_stop_requested = MagicMock(return_value=False)
 
-        with patch("src.agent_session_store.AgentSessionStore"):
+        # FR-062-02: PLAN 게이트는 루프 카운트 검증과 무관 — 비활성화.
+        with patch.dict(os.environ, {"AGENT_PLAN_GATE": "0"}, clear=False), \
+             patch("src.agent_session_store.AgentSessionStore"):
             session = runner.run(goal="test", max_iterations_override=3)
 
         self.assertEqual(session.stop_reason, AgentStopReason.MAX_ITERATIONS)

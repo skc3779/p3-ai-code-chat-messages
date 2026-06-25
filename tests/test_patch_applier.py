@@ -1,5 +1,5 @@
 """
-AgentPatchApplier Unit Tests (FSD v1.0.115)
+PatchApplier Unit Tests (FSD v1.0.115)
 
 T-111-01 ~ T-111-20: SEARCH/REPLACE 파싱·exact/fuzzy/ambiguous/no_match·
 트랜잭셔널 적용·신규 파일·들여쓰기 정렬·path traversal 등.
@@ -14,7 +14,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.agent_patch_applier import AgentPatchApplier
+from src.patch_applier import PatchApplier
 from src.file_manager import FileManager
 
 
@@ -31,12 +31,12 @@ def _patch_payload(*pairs: str) -> str:
     return "\n".join(out)
 
 
-class TestAgentPatchApplier(unittest.TestCase):
+class TestPatchApplier(unittest.TestCase):
 
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="patch_test_")
         self.fm = FileManager(self.tmp)
-        self.applier = AgentPatchApplier(self.fm)
+        self.applier = PatchApplier(self.fm)
 
     def tearDown(self):
         import shutil
@@ -293,7 +293,7 @@ class TestApprovalFlow(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.mkdtemp(prefix="patch_app_")
         self.fm = FileManager(self.tmp)
-        self.applier = AgentPatchApplier(self.fm)
+        self.applier = PatchApplier(self.fm)
 
     def tearDown(self):
         import shutil

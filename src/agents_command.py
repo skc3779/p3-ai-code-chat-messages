@@ -7,8 +7,15 @@ gemini / claude / gen-ai 세 엔트리 포인트에서 공통으로 호출한다
 import os
 from typing import List, Optional, Tuple
 
+from .agent_policy import (
+    POLICY_AUTO,
+    env_default_policy,
+    normalize_policy,
+)
+
 BYPASS_FLAGS = {"-ba", "--bypassapprovals", "--bypass-approvals"}
 STEPS_FLAGS  = {"-s", "--steps"}  # FSD v1.0.101
+POLICY_FLAGS = {"--policy"}       # FSD v1.1.062 FR-062-01
 
 
 def _extract_steps_flag(args: str) -> Tuple[Optional[int], str]:
@@ -74,6 +81,52 @@ def _extract_bypass_flag(args: str) -> Tuple[bool, str]:
     return bypass, " ".join(remaining)
 
 
+def _has_policy_flag(args: str) -> bool:
+    """대괄호 블록 밖에서 `--policy` 가 명시되었는지 여부."""
+    stripped = args.strip()
+    if not stripped or stripped.startswith("["):
+        return False
+    return any(tok.lower() in POLICY_FLAGS for tok in stripped.split())
+
+
+def _extract_policy_flag(args: str) -> Tuple[str, str]:
+    """args 에서 `--policy <val>` 을 분리해 (policy, 남은_args) 를 반환.
+
+    - 플래그 명시값 > env(AGENT_INTERACTION_POLICY) > 기본(interactive)
+    - 잘못된 값은 normalize_policy 로 interactive 폴백
+    - 대괄호 블록([...])으로 시작하면 즉시 (env_default, args) 반환
+    """
+    env_default = env_default_policy()
+
+    stripped = args.strip()
+    if not stripped or stripped.startswith("["):
+        return env_default, args
+
+    tokens = stripped.split()
+    policy: Optional[str] = None
+    remaining: List[str] = []
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        if tok.lower() in POLICY_FLAGS:
+            if i + 1 >= len(tokens):
+                print(f"⚠️  {tok} 플래그의 값이 누락되어 무시됩니다.")
+                i += 1
+                continue
+            raw = tokens[i + 1]
+            normalized = normalize_policy(raw)
+            if normalized != raw.strip().lower():
+                print(f"⚠️  {tok} 값이 유효하지 않아 '{normalized}' 로 처리됩니다: {raw!r}")
+            policy = normalized
+            i += 2
+            continue
+        remaining.append(tok)
+        i += 1
+
+    final = policy if policy is not None else env_default
+    return final, " ".join(remaining)
+
+
 def _resolve_resume_target(arg: str, store) -> Optional[object]:
     """resume 인자를 해석해 AgentSession 을 반환.
 
@@ -109,9 +162,28 @@ def handle_agents_command(
     from .agent_runner import AgentRunner
     from .agent_session_store import AgentSessionStore
 
-    # 플래그 선추출: bypass → steps 순
+    # --policy 가 명시되었는지 추출 전에 판정 (대괄호 블록 밖에서만)
+    policy_explicit = _has_policy_flag(args)
+
+    # 플래그 선추출: bypass → steps → policy 순
     bypass, args = _extract_bypass_flag(args)
     steps_override, args = _extract_steps_flag(args)
+    policy_flag, args = _extract_policy_flag(args)
+
+    # 최종 정책 결정 (FR-062-01):
+    #   --policy 명시값 > (-ba 있으면 auto) > env > interactive
+    # _extract_policy_flag 는 플래그 부재 시 env_default 를 돌려주므로,
+    # 명시 여부(policy_explicit)로 -ba 와의 우선순위를 가린다.
+    if policy_explicit:
+        policy = policy_flag                     # 명시 --policy 가 최우선
+    elif bypass:
+        policy = POLICY_AUTO                      # -ba 후방호환 → auto
+    else:
+        policy = policy_flag                      # env > interactive
+
+    # bypass_approvals 는 policy=="auto" 와 동치로 정리 (기존 _enter_bypass_mode 재사용)
+    bypass = (policy == POLICY_AUTO)
+
     stripped = args.strip()
     sub = stripped.lower().split()[0] if stripped else ""
 
@@ -179,6 +251,7 @@ def handle_agents_command(
             resume_session=session,
             bypass_approvals=bypass,
             max_iterations_override=steps_override,
+            interaction_policy=policy,
         )
         return
 
@@ -221,4 +294,5 @@ def handle_agents_command(
         file_patterns=file_patterns or None,
         bypass_approvals=bypass,
         max_iterations_override=steps_override,
+        interaction_policy=policy,
     )

@@ -566,7 +566,7 @@ class TestDispatcherPatch(unittest.TestCase):
         self.assertIn("REPLACE", patches[0].payload)
 
     def test_T107_25_patch_dispatch_success(self):
-        """T-107-25: patch: 블록 dispatch → AgentPatchApplier 호출, file ActionResult(success=True)."""
+        """T-107-25: patch: 블록 dispatch → PatchApplier 호출, file ActionResult(success=True)."""
         act = (
             "```patch:src/foo.py\n"
             "<<<<<<< SEARCH\n"
@@ -580,6 +580,12 @@ class TestDispatcherPatch(unittest.TestCase):
         mock_block.status = "applied"
         mock_block.diagnostic = None
 
+        # §3.4: 디스패처는 compute → (자동승인) → commit 흐름.
+        mock_plan = MagicMock()
+        mock_plan.success = True
+        mock_plan.block_results = [mock_block]
+        mock_plan.diff = "--- a/src/foo.py\n+++ b/src/foo.py\n-old_code\n+new_code"
+
         mock_result = MagicMock()
         mock_result.success = True
         mock_result.applied_count = 1
@@ -587,8 +593,11 @@ class TestDispatcherPatch(unittest.TestCase):
         mock_result.block_results = [mock_block]
         mock_result.error = None
 
-        with patch("src.agent_patch_applier.AgentPatchApplier") as MockCls:
-            MockCls.return_value.apply.return_value = mock_result
+        # auto_approve 경로로 commit 까지 직행하도록 세션 자동승인 설정
+        self.session.auto_approve_file_mutation = True
+        with patch("src.patch_applier.PatchApplier") as MockCls:
+            MockCls.return_value.compute.return_value = mock_plan
+            MockCls.return_value.commit.return_value = mock_result
             results = self.d.dispatch(self.session, act)
 
         file_results = [r for r in results if r.kind == "file"]
@@ -612,15 +621,14 @@ class TestDispatcherPatch(unittest.TestCase):
         mock_block.status = "no_match"
         mock_block.diagnostic = "SEARCH 블록 매칭 실패"
 
-        mock_result = MagicMock()
-        mock_result.success = False
-        mock_result.applied_count = 0
-        mock_result.total_count = 1
-        mock_result.block_results = [mock_block]
-        mock_result.error = "patch 실패"
+        # §3.4: compute 가 실패(success=False) 면 commit 없이 실패 보고.
+        mock_plan = MagicMock()
+        mock_plan.success = False
+        mock_plan.block_results = [mock_block]
+        mock_plan.error = "patch 실패"
 
-        with patch("src.agent_patch_applier.AgentPatchApplier") as MockCls:
-            MockCls.return_value.apply.return_value = mock_result
+        with patch("src.patch_applier.PatchApplier") as MockCls:
+            MockCls.return_value.compute.return_value = mock_plan
             results = self.d.dispatch(self.session, act)
 
         self.assertEqual(len(results), 1)
@@ -666,7 +674,7 @@ class TestDispatcherPatch(unittest.TestCase):
             ">>>>>>> REPLACE\n"
             "```"
         )
-        with patch("src.agent_patch_applier.AgentPatchApplier"):
+        with patch("src.patch_applier.PatchApplier"):
             results = self.d.dispatch(self.session, act)
 
         self.assertEqual(len(results), 1)

@@ -311,8 +311,8 @@ class ContextProcessor:
         if not blocks:
             return ("no_changes", 0, 0)
 
-        from .agent_patch_applier import AgentPatchApplier
-        applier = AgentPatchApplier(self.file_manager)
+        from .patch_applier import PatchApplier
+        applier = PatchApplier(self.file_manager)
 
         applied_total = 0
         block_total = 0

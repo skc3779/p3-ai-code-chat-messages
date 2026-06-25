@@ -269,7 +269,8 @@ class TestRunnerAsyncStop(unittest.TestCase):
         runner.run(resume_session=session)
 
         fake.start.assert_called_once()
-        fake.clear_stop.assert_called_once()
+        # P4: run() 진입 시 clear_all() 로 stop/steer/pause 플래그를 모두 초기화.
+        fake.clear_all.assert_called_once()
 
     def test_T087_check_async_stop_helper(self):
         """T-087-B3: _check_async_stop() 이 세션의 stop_reason 설정"""
