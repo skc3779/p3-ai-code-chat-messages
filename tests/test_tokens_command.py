@@ -10,12 +10,16 @@ def reset_token_manager():
     # 저장
     original_max = TokenManager.MAX_MESSAGES_TO_KEEP
     original_default = TokenManager.DEFAULT_MAX_MESSAGES_TO_KEEP
+    original_agent = TokenManager.MAX_AGENT_MESSAGES_TO_KEEP
+    original_agent_default = TokenManager.DEFAULT_MAX_AGENT_MESSAGES_TO_KEEP
     
     yield
     
     # 복원
     TokenManager.MAX_MESSAGES_TO_KEEP = original_max
     TokenManager.DEFAULT_MAX_MESSAGES_TO_KEEP = original_default
+    TokenManager.MAX_AGENT_MESSAGES_TO_KEEP = original_agent
+    TokenManager.DEFAULT_MAX_AGENT_MESSAGES_TO_KEEP = original_agent_default
 
 
 def test_set_max_messages():
@@ -160,3 +164,35 @@ def test_trim_verbose_message_no_75pct_mention(capsys):
     captured = capsys.readouterr()
     assert "75%" not in captured.out
     assert "한도 초과" in captured.out
+
+
+def test_auto_trim_history_accepts_max_messages_override():
+    """T-073-01: 호출별 max_messages override 는 전역 MAX_MESSAGES_TO_KEEP 와 분리된다."""
+    TokenManager.MAX_MESSAGES_TO_KEEP = 1
+    history = [{"role": "user", "content": str(i)} for i in range(6)]
+
+    result = TokenManager.auto_trim_history(
+        history, max_tokens=10_000, verbose=False, max_messages=5
+    )
+
+    assert len(result) == 4  # current_count >= 5 동안 pop, 4에서 중단
+    assert TokenManager.MAX_MESSAGES_TO_KEEP == 1
+
+
+def test_reload_agent_messages_env_valid_and_invalid(monkeypatch):
+    """T-073-01: MAX_AGENT_MESSAGES_TO_KEEP 는 2..200 범위, 오류는 기본 30."""
+    monkeypatch.setenv("MAX_AGENT_MESSAGES_TO_KEEP", "42")
+    TokenManager.reload_from_env()
+    assert TokenManager.MAX_AGENT_MESSAGES_TO_KEEP == 42
+
+    monkeypatch.setenv("MAX_AGENT_MESSAGES_TO_KEEP", "1")
+    TokenManager.reload_from_env()
+    assert TokenManager.MAX_AGENT_MESSAGES_TO_KEEP == 30
+
+    monkeypatch.setenv("MAX_AGENT_MESSAGES_TO_KEEP", "201")
+    TokenManager.reload_from_env()
+    assert TokenManager.MAX_AGENT_MESSAGES_TO_KEEP == 30
+
+    monkeypatch.setenv("MAX_AGENT_MESSAGES_TO_KEEP", "abc")
+    TokenManager.reload_from_env()
+    assert TokenManager.MAX_AGENT_MESSAGES_TO_KEEP == 30

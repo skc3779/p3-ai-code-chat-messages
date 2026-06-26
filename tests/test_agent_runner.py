@@ -226,12 +226,119 @@ class TestBuildPrompts(unittest.TestCase):
         self.assertIn("[FILE_CONTEXT_REF]", prompt)
         self.assertIn("src/a.py", prompt)
 
+    def test_T073_02_acceptance_criteria_block_in_iteration_prompt(self):
+        """FSD v1.1.073: criteria 가 있으면 매 iteration 프롬프트에 블록 포함."""
+        from src.agent_goal_evaluator import Criterion
+        session = AgentSession(goal="목표")
+        session.acceptance_criteria = [
+            Criterion(
+                id="c1", kind="file_exists", provenance="extracted",
+                target="docs/output.md", passed=None, evidence="",
+            )
+        ]
+        prompt = self.runner._build_iteration_prompt(session, feedback=None)
+        self.assertIn("[ACCEPTANCE_CRITERIA]", prompt)
+        self.assertIn("[extracted/file_exists/unknown] docs/output.md", prompt)
+
+    def test_T073_04_acceptance_criteria_failed_evidence_truncated(self):
+        """FSD v1.1.073: failed evidence 는 160자 이내 요약으로 표시."""
+        from src.agent_goal_evaluator import Criterion
+        evidence = "파일 없음: docs/output.md " + ("x" * 300)
+        session = AgentSession(goal="목표")
+        session.acceptance_criteria = [
+            Criterion(
+                id="c1", kind="file_exists", provenance="extracted",
+                target="docs/output.md", passed=False, evidence=evidence,
+            )
+        ]
+        block = self.runner._build_acceptance_criteria_block(session)
+        self.assertIn("[extracted/file_exists/failed] docs/output.md", block)
+        self.assertIn("파일 없음", block)
+        self.assertLessEqual(len(block.split(" - ", 1)[1]), 220)
+
+    def test_T073_05_readonly_drift_guard_powershell(self):
+        """FSD v1.1.073: PowerShell 조회성 shell 반복이면 guard 주입."""
+        from src.agent_goal_evaluator import Criterion, CriteriaSnapshot
+        c = Criterion("c1", "file_exists", "extracted", "docs/output.md", passed=False)
+        session = AgentSession(goal="목표")
+        session.acceptance_criteria = [c]
+        session.iterations = [
+            IterationRecord(i, "r", "a", [ActionResult("shell", cmd, True, "ok")], "obs")
+            for i, cmd in enumerate(["Get-ChildItem", "Get-Content docs/x.md", "Select-String foo docs/x.md"], 1)
+        ]
+        prompt = self.runner._build_iteration_prompt(
+            session, feedback=None, probe_snapshot=CriteriaSnapshot(unmet=[c])
+        )
+        self.assertIn("[READONLY_DRIFT_GUARD]", prompt)
+        self.assertIn("docs/output.md", prompt)
+
+    def test_T073_06_readonly_drift_guard_reset_by_file_action(self):
+        """FSD v1.1.073: 성공 file action 이 있으면 guard 미주입."""
+        from src.agent_goal_evaluator import Criterion, CriteriaSnapshot
+        c = Criterion("c1", "file_exists", "extracted", "docs/output.md", passed=False)
+        session = AgentSession(goal="목표")
+        session.acceptance_criteria = [c]
+        session.iterations = [
+            IterationRecord(1, "r", "a", [ActionResult("shell", "find .", True, "ok")], "obs"),
+            IterationRecord(2, "r", "a", [ActionResult("file", "docs/output.md", True, "saved")], "obs"),
+            IterationRecord(3, "r", "a", [ActionResult("shell", "cat docs/output.md", True, "ok")], "obs"),
+        ]
+        prompt = self.runner._build_iteration_prompt(
+            session, feedback=None, probe_snapshot=CriteriaSnapshot(unmet=[c])
+        )
+        self.assertNotIn("[READONLY_DRIFT_GUARD]", prompt)
+
+    def test_T073_07_readonly_drift_guard_linux(self):
+        """FSD v1.1.073: Linux 조회성 shell 반복이면 guard 주입."""
+        from src.agent_goal_evaluator import Criterion, CriteriaSnapshot
+        c = Criterion("c1", "file_contains", "extracted", "docs/output.md", expect="done", passed=False)
+        session = AgentSession(goal="목표")
+        session.acceptance_criteria = [c]
+        session.iterations = [
+            IterationRecord(i, "r", "a", [ActionResult("shell", cmd, True, "ok")], "obs")
+            for i, cmd in enumerate(["find . -maxdepth 2", "cat docs/output.md", "rg done docs"], 1)
+        ]
+        prompt = self.runner._build_iteration_prompt(
+            session, feedback=None, probe_snapshot=CriteriaSnapshot(unmet=[c])
+        )
+        self.assertIn("[READONLY_DRIFT_GUARD]", prompt)
+        self.assertIn("docs/output.md", prompt)
+
+    def test_T073_06_initial_prompt_mentions_optional_criteria(self):
+        """FSD v1.1.073: PLAN 프롬프트가 선택적 @@@criteria 생성을 안내."""
+        prompt = self.runner._build_initial_prompt("목표")
+        self.assertIn("@@@criteria", prompt)
+        self.assertIn("cmd_exit_zero", prompt)
+
 
 # ─── T-16 ~ T-19: 히스토리 격리 / 요약 / 압축 ──────────────────
 class TestHistoryManagement(unittest.TestCase):
 
     def setUp(self):
         self.runner = _make_runner()
+
+    def test_T073_01_call_model_uses_agent_message_limit(self):
+        """FSD v1.1.073: MAX_MESSAGES_TO_KEEP=1이어도 agent 전용 limit 로 trim."""
+        from src.token_manager import TokenManager
+        TokenManager.MAX_MESSAGES_TO_KEEP = 1
+        self.runner.max_agent_messages_to_keep = 5
+        seen = {}
+
+        def fake_chat(prompt, streaming, include_context, **kwargs):
+            seen["history_len"] = len(self.runner.assistant.conversation_history)
+            seen["max_history_messages"] = kwargs.get("max_history_messages")
+            return "응답"
+
+        self.runner.assistant.chat.side_effect = fake_chat
+        session = AgentSession(
+            goal="목표",
+            agent_history=[{"role": "user", "content": str(i)} for i in range(8)],
+        )
+        self.runner._call_model(session, "프롬프트")
+
+        self.assertEqual(seen["history_len"], 4)
+        self.assertEqual(seen["max_history_messages"], 5)
+        self.assertEqual(TokenManager.MAX_MESSAGES_TO_KEEP, 1)
 
     def test_T16_call_model_restores_conversation_history(self):
         """T-16: _call_model() 이 conversation_history 를 원복"""
@@ -280,6 +387,53 @@ class TestHistoryManagement(unittest.TestCase):
         self.runner._call_model(session, "테스트 프롬프트")
 
         self.assertGreater(len(session.agent_history), 0)
+
+    def test_T17c_call_model_deep_copies_main_history(self):
+        """FSD v1.1.073: nested provider mutations cannot corrupt main history."""
+        original = [{"role": "user", "content": {"parts": ["기존"]}}]
+        self.runner.assistant.conversation_history = original
+
+        def fake_chat(prompt, streaming, include_context):
+            # Mutate the active agent history in-place; the main history must be
+            # restored from a deep snapshot, not a shallow alias.
+            self.runner.assistant.conversation_history.append(
+                {"role": "user", "content": {"parts": [prompt]}}
+            )
+            self.runner.assistant.conversation_history[0]["content"]["parts"].append("오염")
+            return "응답"
+
+        self.runner.assistant.chat.side_effect = fake_chat
+
+        session = AgentSession(
+            goal="목표",
+            agent_history=[{"role": "user", "content": {"parts": ["agent"]}}],
+        )
+        self.runner._call_model(session, "테스트 프롬프트")
+
+        self.assertEqual(
+            self.runner.assistant.conversation_history,
+            [{"role": "user", "content": {"parts": ["기존"]}}],
+        )
+        self.assertIsNot(self.runner.assistant.conversation_history, original)
+
+    def test_T17d_call_model_deep_copies_session_history_input(self):
+        """FSD v1.1.073: chat-time mutation does not alter the pre-call object graph."""
+        pre_call = [{"role": "user", "content": {"parts": ["agent"]}}]
+
+        def fake_chat(prompt, streaming, include_context):
+            self.runner.assistant.conversation_history[0]["content"]["parts"].append("mutated")
+            return "응답"
+
+        self.runner.assistant.chat.side_effect = fake_chat
+
+        session = AgentSession(goal="목표", agent_history=pre_call)
+        self.runner._call_model(session, "테스트 프롬프트")
+
+        self.assertEqual(pre_call, [{"role": "user", "content": {"parts": ["agent"]}}])
+        self.assertEqual(
+            session.agent_history[0],
+            {"role": "user", "content": {"parts": ["agent", "mutated"]}},
+        )
 
     def test_T18_append_summary_adds_two_messages(self):
         """T-18: _append_summary_to_main_history() 가 메인 히스토리에 2개 추가"""

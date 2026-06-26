@@ -72,6 +72,14 @@ class AgentActionDispatcher:
 
         actions = self._parse(act_text)
 
+        if act_text.strip() and not actions:
+            return [ActionResult(
+                kind="code", target="dispatcher", success=False,
+                detail="파싱 가능한 ACTION이 없습니다. 파일 작업은 "
+                       "@@@filename:path ... @@@ 또는 @@@patch:path ... @@@, "
+                       "shell은 '$ command' 형식을 사용하세요.",
+            )]
+
         # AGENT_ACTION_TAGS_REQUIRED=1: 태그 없으면 Self-Correction 유도
         if self.action_tags_required and actions and not any(a.explicit_tag for a in actions):
             return [ActionResult(
