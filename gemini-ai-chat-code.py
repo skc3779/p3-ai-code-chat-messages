@@ -374,6 +374,7 @@ def main():
                         args=args,
                         assistant_role="model",
                     )
+                    cli_handler.reset_runtime_state()
                     last_response = ""
 
                 elif command == '/save':

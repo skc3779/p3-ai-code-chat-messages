@@ -201,7 +201,45 @@ Claude Code 세션에 접속하여, 우선 기존 `/agents` 관련 흔적을 지
 추가로 진행할 작업이 있으면 말씀해 주세요. 예를 들어:
 - 단계별 커밋 정리 (P0~P5를 의미 단위로 분리 커밋)
 - 차기 follow-up 처리 (diff 생성 로직 통합 등 3건)
-- 또는 다른 작업
-
 
 `release_v1.1.070` branch 에 단계별로 커밋 해줘.
+
+---
+
+## 이슈
+
+`/agents` 의 아래의 기능이 다음 동작이 정상적이지 않다. 검토하고 문제점 파악후 버그 리포트를 작성해줘.
+- `gemini-ai-chat-code.py` 모델을 실행.
+- `s` 를 입력하여 에이전트 동작중단시 `KeyboardInterrupt` 에러가 발생한다. `s` 를 입력하면 정상적으로 동작 중지 되도록 수정해줘
+   ```
+   🤖 AI가 답변을 고민 중입니다... s [s]top ? (a):
+   ```
+- TUI 화면에서 `/agents` 에이전트 진행이 완료된 이후 `>` 명령창에서 키보드의 명령어가 정상적으로 실행이 안됨.
+   ```
+   ~~~
+   ============================================================
+   ✅ 에이전트 종료 (stop_reason=done, 3 iterations)
+   📁 생성/수정 파일 (4):
+   - pyproject.toml
+   - pytop/engine.py
+   - pytop/tui.py
+   - pytop/main.py
+   ============================================================
+   >   <--- 커서만 깜빡임이며 키보드 명령이 먹지 않음.
+   /home/kangchun/sources/pytop-app         streaming        /model gemini-3.5-flash
+   - 그외 추가적인 문제점이 있는지도 검토해줘.
+   ```
+- docs/reuirements 폴더에 BUGF + v1.1.071.md + 제목 버전의 문서에 저장한다  
+
+---
+
+`MAX_MESSAGES_TO_KEEP=1` 문제로 보인다. `MAX_MESSAGES_TO_KEEP=30` 으로 하니 정상적으로 동작한다.
+그러나 `BUG_v1.1.072_agents-readme-generation-goal-not-met.md` 문서에서 `7. 수정 제안` 수정 제안 사항을 보면 개선점이 있어 보인다.
+다시한번. 버그 리포트를 기준으로 개선점이 무엇인지 검토하고 개선 사항이 타당하다면 FSD 문서를 작성해줘.
+- docs/requirements 폴더에 FSD + v1.1.073.md + 제목 버전의 문서에 저장한다.
+
+---
+tmux
+
+export OMX_TEAM_WORKER_CLI_MAP=codex,claude
+omx team 2:executor "/mnt/c/03_sources/skc3779_srcs/p3-ai-code-chat-messages-wsl/docs/requirements/FSD_v1.1.073_agents-goal-criteria-and-history-guard.md 문서의 구현과 테스트를 병렬로 검토해줘"

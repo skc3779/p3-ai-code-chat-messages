@@ -31,6 +31,7 @@ TTY 가 아닌 환경(파이프/CI)에서는 자동으로 비활성화된다 —
       수행해야 한다 (리스너 스레드와 동기 input 동시 소비 금지).
 """
 
+import os
 import sys
 import threading
 import time
@@ -73,10 +74,15 @@ class AgentInputListener:
         self._steer_event = threading.Event()
         self._pause_event = threading.Event()
         self._thread: Optional[threading.Thread] = None
+        self._thread_lock = threading.Lock()
         self._enabled = self._detect_tty()
         self._poll_interval = (
             poll_interval if poll_interval is not None else self.POLL_INTERVAL
         )
+        self._terminal_fd: Optional[int] = None
+        self._terminal_attrs = None
+        self._terminal_flags: Optional[int] = None
+        self._terminal_lock = threading.Lock()
 
     # ─── 환경 감지 ───────────────────────────────────────────
     @staticmethod
@@ -153,13 +159,14 @@ class AgentInputListener:
             return
         if self.is_listening:
             return
-        self._active.set()
-        self._thread = threading.Thread(
-            target=self._listen_loop,
-            daemon=True,
-            name="agent-input-listener",
-        )
-        self._thread.start()
+        with self._thread_lock:
+            self._active.set()
+            self._thread = threading.Thread(
+                target=self._listen_loop,
+                daemon=True,
+                name="agent-input-listener",
+            )
+            self._thread.start()
 
     def stop(self) -> None:
         """리스너 스레드에 종료 요청. stop 요청 플래그는 유지된다.
@@ -168,9 +175,14 @@ class AgentInputListener:
         메인 프로세스 종료 시 자동 정리된다.
         """
         self._active.clear()
-        # 폴링 간격 내에 자연 종료 — join 은 하지 않는다
-        # (getch/readline 이 블로킹 중이면 join 이 지연되기 때문)
-        self._thread = None
+        thread = self._thread
+        if thread is not None and thread.is_alive() \
+                and thread is not threading.current_thread():
+            thread.join(timeout=max(0.2, self._poll_interval * 3))
+        self._restore_terminal()
+        with self._thread_lock:
+            if self._thread is thread:
+                self._thread = None
 
     def paused(self) -> "_PauseContext":
         """stdin 을 직접 읽어야 하는 구간에서 사용하는 컨텍스트 매니저.
@@ -192,6 +204,8 @@ class AgentInputListener:
         except Exception:
             # 리스너 오류는 조용히 무시 — Ctrl+C 가 폴백
             pass
+        finally:
+            self._restore_terminal()
 
     def _classify_key(self, token: str, *, char_mode: bool) -> Optional[str]:
         """입력 토큰을 'stop' | 'pause' | 'steer' | None 으로 분류.
@@ -266,12 +280,62 @@ class AgentInputListener:
                 return
             time.sleep(self._poll_interval)
 
+    def _configure_unix_terminal(self) -> None:
+        """Unix/WSL 에서 Enter 없이 단일 키를 읽도록 터미널을 cbreak 로 전환.
+
+        cbreak 는 Ctrl+C 같은 signal 처리를 보존하면서 canonical line buffering 만
+        끈다. 리스너 종료/일시정지 시 반드시 원래 속성으로 복구한다.
+        """
+        try:
+            import fcntl
+            import termios
+            import tty
+        except ImportError:
+            return
+
+        try:
+            fd = sys.stdin.fileno()
+            attrs = termios.tcgetattr(fd)
+            flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+            tty.setcbreak(fd)
+            fcntl.fcntl(fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
+        except Exception:
+            return
+
+        with self._terminal_lock:
+            self._terminal_fd = fd
+            self._terminal_attrs = attrs
+            self._terminal_flags = flags
+
+    def _restore_terminal(self) -> None:
+        """리스너가 변경한 Unix 터미널 모드를 원복한다."""
+        with self._terminal_lock:
+            fd = self._terminal_fd
+            attrs = self._terminal_attrs
+            flags = self._terminal_flags
+            self._terminal_fd = None
+            self._terminal_attrs = None
+            self._terminal_flags = None
+
+        if fd is None:
+            return
+        try:
+            import fcntl
+            import termios
+            if attrs is not None:
+                termios.tcsetattr(fd, termios.TCSADRAIN, attrs)
+            if flags is not None:
+                fcntl.fcntl(fd, fcntl.F_SETFL, flags)
+        except Exception:
+            pass
+
     def _poll_unix(self) -> None:
         try:
             import select
         except ImportError:
             return
 
+        self._configure_unix_terminal()
         while self._active.is_set():
             try:
                 ready, _, _ = select.select(
@@ -279,14 +343,20 @@ class AgentInputListener:
                 )
                 if not ready:
                     continue
-                line = sys.stdin.readline()
-                if not line:
+                try:
+                    raw = os.read(sys.stdin.fileno(), 32)
+                except BlockingIOError:
+                    continue
+                if not raw:
                     # stdin 이 닫힘 → 더 이상 폴링 의미 없음
                     return
-                normalized = line.strip().lower()
-                kind = self._classify_key(normalized, char_mode=False)
-                if self._apply_key(kind):
-                    return
+                text = raw.decode("utf-8", errors="ignore").lower()
+                for ch in text:
+                    if ch in ("\r", "\n"):
+                        continue
+                    kind = self._classify_key(ch, char_mode=True)
+                    if self._apply_key(kind):
+                        return
             except Exception:
                 return
 

@@ -141,6 +141,42 @@ class TestInputListenerCore(unittest.TestCase):
                 self.assertFalse(listener.is_listening)
             self.assertFalse(listener.is_listening)
 
+    def test_T087_A09_unix_poll_reads_single_stop_key_without_enter(self):
+        """Unix/WSL: canonical readline 없이 단일 's' 키로 stop 을 감지."""
+        class FakeStdin:
+            def fileno(self):
+                return 99
+
+        fake_stdin = FakeStdin()
+        with patch.object(AgentInputListener, "_detect_tty", return_value=True):
+            listener = AgentInputListener(poll_interval=0.01)
+
+        listener._active.set()
+        with patch("src.agent_input_listener.sys.stdin", fake_stdin):
+            with patch("select.select", return_value=([fake_stdin], [], [])):
+                with patch("src.agent_input_listener.os.read", return_value=b"s"):
+                    listener._poll_unix()
+
+        self.assertTrue(listener.is_stop_requested())
+
+    def test_T087_A10_stop_restores_saved_terminal_state(self):
+        """stop() 은 리스너가 바꾼 Unix 터미널 속성을 즉시 원복한다."""
+        import fcntl
+        import termios
+
+        with patch.object(AgentInputListener, "_detect_tty", return_value=True):
+            listener = AgentInputListener(poll_interval=0.01)
+        listener._terminal_fd = 99
+        listener._terminal_attrs = ["old-attrs"]
+        listener._terminal_flags = 123
+
+        with patch.object(termios, "tcsetattr") as mock_tcsetattr:
+            with patch.object(fcntl, "fcntl") as mock_fcntl:
+                listener.stop()
+
+        mock_tcsetattr.assert_called_once_with(99, termios.TCSADRAIN, ["old-attrs"])
+        mock_fcntl.assert_called_once_with(99, fcntl.F_SETFL, 123)
+
 
 # ─── T-087-B: AgentRunner 통합 (checkpoint 동작) ──────────────
 class TestRunnerAsyncStop(unittest.TestCase):
@@ -196,6 +232,19 @@ class TestRunnerAsyncStop(unittest.TestCase):
         # _call_model 은 실행되었지만, 액션은 실행되지 않고 중단
         self.assertEqual(len(result.iterations), 0,
                          "체크포인트 2 에서 중단 → iterations 에 추가되지 않음")
+
+    def test_T087_03b_stop_after_initial_plan_model_call(self):
+        """신규 세션 PLAN 생성 중 's' 입력 → 승인 프롬프트 없이 USER_STOP."""
+        runner = _make_runner()
+        fake = self._patch_listener(runner)
+        fake.is_stop_requested.return_value = True
+        runner.assistant.chat.return_value = "1. plan"
+
+        result = runner.run(goal="g")
+
+        self.assertEqual(result.stop_reason, AgentStopReason.USER_STOP)
+        self.assertEqual(result.plan, "1. plan")
+        self.assertEqual(len(result.iterations), 0)
 
     def test_T087_04_stop_after_actions(self):
         """T-087-04: 액션 실행 후 체크포인트에서 stop 감지"""

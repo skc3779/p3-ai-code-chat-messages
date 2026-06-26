@@ -535,6 +535,7 @@ def main():
                         args=args,
                         assistant_role="assistant",
                     )
+                    input_handler.reset_runtime_state()
                     last_response = ""
 
                 elif command == '/save':

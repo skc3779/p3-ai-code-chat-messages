@@ -390,6 +390,16 @@ class CLIInputHandler:
             print()
             return ""
 
+    def reset_runtime_state(self) -> None:
+        """외부 입력 루프(`/agents` 등) 종료 후 다음 TUI 입력을 깨끗하게 시작한다."""
+        self._result = None
+        self._filtered = []
+        self._show_suggestions = False
+        self._selected_idx = 0
+        self._scroll_offset = 0
+        if hasattr(self, "_buffer"):
+            self._buffer = None
+
     def get_multiline(self) -> str:
         """
         멀티라인 텍스트 편집 입력 (prompt_toolkit 사용)

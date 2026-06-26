@@ -385,6 +385,8 @@ class AgentRunner:
                 plan_prompt = self._build_initial_prompt(goal, file_context)
                 plan_response = self._call_model(session, plan_prompt)
                 session.plan = plan_response
+                if self._check_async_stop(session):
+                    raise _PlanGateStop()
                 self._print_block("📋", " PLAN", plan_response)
 
                 # ── 완료 기준 초기화 (§2.2 / FR-062-08) — PLAN 게이트보다 먼저 ──
