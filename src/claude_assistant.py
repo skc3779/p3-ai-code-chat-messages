@@ -179,7 +179,8 @@ class ClaudeCodeAssistant:
              include_context: bool = False, file_patterns: Optional[List[str]] = None,
              disable_tools: bool = False, *, include_tree: bool = True,
              raise_on_error: bool = False,
-             internal_system_prompt: Optional[str] = None) -> str:
+             internal_system_prompt: Optional[str] = None,
+             max_history_messages: Optional[int] = None) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
@@ -199,7 +200,8 @@ class ClaudeCodeAssistant:
         # 히스토리 자동 트리밍 (Claude 토큰 한도 적용)
         self.conversation_history = TokenManager.auto_trim_history(
             self.conversation_history,
-            max_tokens=TokenManager.MAX_TOKENS_CLAUDE
+            max_tokens=TokenManager.MAX_TOKENS_CLAUDE,
+            max_messages=max_history_messages,
         )
 
         # API 호출 - Claude API 형식으로 메시지 구성

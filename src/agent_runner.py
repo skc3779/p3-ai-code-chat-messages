@@ -8,6 +8,7 @@ Provider 에 독립적으로 설계되었으며, `assistant.chat(prompt, streami
 및 `assistant.conversation_history`, `assistant.system_prompt` 인터페이스만 요구한다.
 """
 
+import copy
 import difflib
 import os
 import platform
@@ -37,6 +38,7 @@ from .agent_policy import (
 from .agent_goal_evaluator import AgentGoalEvaluator
 from .code_executor import CodeExecutor
 from .os_utils import get_os_shell_hint
+from .token_manager import TokenManager
 
 
 class AgentStopReason(Enum):
@@ -202,6 +204,11 @@ class AgentRunner:
         self.diff_preview_enabled = os.getenv("AGENT_DIFF_PREVIEW", "1") != "0"
         self.diff_max_lines       = self._env_int("AGENT_DIFF_MAX_LINES", 200, minimum=1)
         self.progress_bar_enabled = os.getenv("AGENT_PROGRESS_BAR", "1") != "0"
+        # FSD v1.1.073 — 일반 대화 MAX_MESSAGES_TO_KEEP 와 분리된 agent history 보존
+        self.max_agent_messages_to_keep = TokenManager.MAX_AGENT_MESSAGES_TO_KEEP
+        self.readonly_drift_n = self._env_int("AGENT_READONLY_DRIFT_N", 3, minimum=2)
+        if self.readonly_drift_n > 10:
+            self.readonly_drift_n = 3
 
         # 에이전트 전용 CodeExecutor (AGENT_CODE_TIMEOUT 반영)
         self.code_executor = CodeExecutor(
@@ -839,7 +846,11 @@ f"{shell_brief}\n\n"
             parts.append(f"[FILE_CONTEXT]\n{file_context}")
         parts.append(
             "이 목표를 달성하기 위한 전체 PLAN 을 번호 매긴 목록으로 제시하세요.\n"
-            "PLAN 은 간결하게, 실행 가능한 단위로 쪼개세요."
+            "PLAN 은 간결하게, 실행 가능한 단위로 쪼개세요.\n"
+            "필요하면 마지막에 @@@criteria 블록을 추가할 수 있습니다. "
+            "형식은 file_exists:path, file_contains:path::expected, "
+            "cmd_exit_zero:pytest -q, llm:description 중 하나이며, "
+            "cmd_exit_zero 는 테스트 러너 명령만 허용됩니다."
         )
         return "\n\n".join(parts)
 
@@ -862,6 +873,10 @@ f"{shell_brief}\n\n"
                 "(전문은 이전 메시지 참조):\n" + files_ref
             )
 
+        criteria_block = self._build_acceptance_criteria_block(session)
+        if criteria_block:
+            parts.append(criteria_block)
+
         # HISTORY SUMMARY: 압축 요약은 agent_history 에 이미 반영되어 있으므로
         # RECENT OBSERVATIONS 만 별도로 주입한다.
         recent = session.iterations[-2:] if session.iterations else []
@@ -879,6 +894,10 @@ f"{shell_brief}\n\n"
             if refine_block:
                 parts.append(refine_block)
 
+        drift_block = self._build_readonly_drift_guard(session, probe_snapshot)
+        if drift_block:
+            parts.append(drift_block)
+
         # FSD v1.1.062 §3.8.2 (FR-062-14/20): 생성 코드 재-grounding.
         # 휘발성 — 이 블록은 _call_model 직후 history 에서 strip 된다.
         current_files_block = self._build_current_files_block(session)
@@ -893,6 +912,89 @@ f"{shell_brief}\n\n"
             f"목표를 달성했다면 {self.done_token} 으로 마무리하세요."
         )
         return "\n\n".join(parts)
+
+    def _build_acceptance_criteria_block(self, session: AgentSession) -> str:
+        """FSD v1.1.073: 매 iteration 완료 기준을 명시적으로 주입."""
+        criteria = getattr(session, "acceptance_criteria", None) or []
+        if not criteria:
+            return ""
+        lines = [
+            "[ACCEPTANCE_CRITERIA]",
+            "다음 기준은 목표 달성의 권위 기준입니다. 미충족 기준을 우선 처리하세요.",
+        ]
+        for c in criteria:
+            passed = getattr(c, "passed", None)
+            status = "passed" if passed is True else "failed" if passed is False else "unknown"
+            provenance = getattr(c, "provenance", "model")
+            kind = getattr(c, "kind", "unknown")
+            target = getattr(c, "target", "") or "(target 없음)"
+            line = f"- [{provenance}/{kind}/{status}] {target}"
+            evidence = (getattr(c, "evidence", "") or "").strip().replace("\n", " ")
+            if evidence and status == "failed":
+                if len(evidence) > 160:
+                    evidence = evidence[:157] + "..."
+                line += f" - {evidence}"
+            lines.append(line)
+        return "\n".join(lines)
+
+    def _build_readonly_drift_guard(self, session: AgentSession, probe_snapshot: Optional[Any]) -> str:
+        """FSD v1.1.073: 조회성 shell/no-action 반복 시 목표 기준 우선 피드백."""
+        unmet = list(getattr(probe_snapshot, "unmet", None) or [])
+        if not unmet:
+            unmet = [
+                c for c in (getattr(session, "acceptance_criteria", None) or [])
+                if getattr(c, "passed", None) is False
+            ]
+        file_unmet = [
+            c for c in unmet
+            if getattr(c, "kind", None) in ("file_exists", "file_contains")
+        ]
+        if not file_unmet or len(session.iterations) < self.readonly_drift_n:
+            return ""
+
+        recent = session.iterations[-self.readonly_drift_n:]
+        saw_success = False
+        for rec in recent:
+            successful = [a for a in (rec.actions or []) if a.success]
+            if any(a.kind == "file" for a in successful):
+                return ""
+            shell_actions = [a for a in successful if a.kind == "shell"]
+            other_success = [a for a in successful if a.kind not in ("shell", "hold")]
+            if other_success:
+                return ""
+            if shell_actions and not all(self._is_readonly_shell(a.target) for a in shell_actions):
+                return ""
+            if successful:
+                saw_success = True
+
+        # 성공 액션이 모두 조회성 shell 이거나 실행 액션 없음이면 guard 주입.
+        targets = ", ".join(str(getattr(c, "target", "")) for c in file_unmet if getattr(c, "target", ""))
+        example = self._readonly_guard_example()
+        return (
+            "[READONLY_DRIFT_GUARD]\n"
+            f"최근 {self.readonly_drift_n}회 iteration 이 산출물 기준을 충족하지 못한 채 "
+            "조회성 shell 또는 무액션으로 끝났습니다.\n"
+            f"남은 파일 기준({targets or 'target 없음'})을 우선 처리하세요. "
+            "추가 탐색은 해당 기준을 해결하기 위한 경우에만 짧게 수행하세요.\n"
+            f"현재 실행 환경에 맞는 shell 예시: {example} — 파일 생성/수정은 @@@filename:path 또는 @@@patch:path 형식을 사용하세요."
+        )
+
+    @staticmethod
+    def _is_readonly_shell(command: str) -> bool:
+        cmd = (command or "").strip()
+        if not cmd:
+            return False
+        low = cmd.lower()
+        first = low.split()[0] if low.split() else ""
+        powershell = {"get-childitem", "gci", "dir", "get-content", "gc", "type", "select-string", "sls"}
+        linux = {"find", "cat", "ls", "tree", "head", "tail", "rg", "grep"}
+        return first in powershell or first in linux or low.startswith("sed -n")
+
+    @staticmethod
+    def _readonly_guard_example() -> str:
+        if platform.system().lower().startswith("win"):
+            return "$ Get-ChildItem / $ Get-Content <path>"
+        return "$ find . -maxdepth 2 -type f / $ cat <path>"
 
     # ─── §3.8.2 생성 코드 재-grounding ([CURRENT_FILES]) ─────
     def _collect_recent_file_snapshots(
@@ -1262,20 +1364,40 @@ f"{shell_brief}\n\n"
 
     # ─── 모델 호출 (히스토리 격리) ───────────────────────────
     def _call_model(self, session: AgentSession, user_prompt: str) -> str:
-        saved_main = self.assistant.conversation_history
+        # FSD v1.1.073 history guard: isolate agent/model calls from the
+        # provider's main conversation history and from session history aliases.
+        # Shallow list copies are insufficient because provider/tool code may
+        # mutate nested message dictionaries or list-valued content in place.
+        saved_main = copy.deepcopy(self.assistant.conversation_history)
         saved_sys = getattr(self.assistant, "system_prompt", None)
 
-        self.assistant.conversation_history = list(session.agent_history)
+        agent_history = TokenManager.auto_trim_history(
+            copy.deepcopy(session.agent_history),
+            max_tokens=TokenManager.DEFAULT_MAX_TOKENS,
+            verbose=False,
+            max_messages=self.max_agent_messages_to_keep,
+        )
+        self.assistant.conversation_history = agent_history
         self.assistant.system_prompt = self._build_system_prompt()
 
         try:
-            response = self.assistant.chat(
-                user_prompt,
-                streaming=self.streaming,
-                include_context=False,
-            )
+            try:
+                response = self.assistant.chat(
+                    user_prompt,
+                    streaming=self.streaming,
+                    include_context=False,
+                    max_history_messages=self.max_agent_messages_to_keep,
+                )
+            except TypeError:
+                # 테스트 더블/구형 provider 호환: provider 가 전용 인자를 모르면
+                # 사전 trim 된 agent history 로 호출한다.
+                response = self.assistant.chat(
+                    user_prompt,
+                    streaming=self.streaming,
+                    include_context=False,
+                )
         finally:
-            session.agent_history = self.assistant.conversation_history
+            session.agent_history = copy.deepcopy(self.assistant.conversation_history)
             # FSD v1.1.062 §3.8.2 (FR-062-20): [CURRENT_FILES] 휘발성 주입 —
             # 호출 직후 history 의 직전 user 메시지에서 블록을 제거(경로 참조만 잔존)
             # 하여 대형 스냅샷이 누적되지 않도록 한다.
@@ -2035,7 +2157,9 @@ f"{shell_brief}\n\n"
         )
 
         # 요약 호출은 현 세션에 추가 메시지를 남기지 않기 위해 임시 히스토리로 수행
-        saved_main = self.assistant.conversation_history
+        # FSD v1.1.073 history guard: summary calls are internal and must not
+        # leak nested mutations into the provider's main conversation history.
+        saved_main = copy.deepcopy(self.assistant.conversation_history)
         saved_sys = getattr(self.assistant, "system_prompt", None)
         self.assistant.conversation_history = []
         self.assistant.system_prompt = self._build_system_prompt()

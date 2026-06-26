@@ -17,6 +17,14 @@ def _env_int(name: str, default: int) -> int:
         return default
 
 
+def _env_int_range(name: str, default: int, minimum: int, maximum: int) -> int:
+    """환경변수 정수를 범위 검증해 반환. 범위 밖/오류는 기본값."""
+    value = _env_int(name, default)
+    if minimum <= value <= maximum:
+        return value
+    return default
+
+
 class TokenManager:
     """대화 히스토리 토큰 관리"""
     
@@ -31,8 +39,14 @@ class TokenManager:
     # 최대 유지할 메시지 수 (.env에서 설정 가능, 기본값 30, 최솟값 1)
     MAX_MESSAGES_TO_KEEP = max(1, _env_int("MAX_MESSAGES_TO_KEEP", 30))
 
+    # /agents 전용 히스토리 보존 수 (FSD v1.1.073): 일반 채팅 설정과 분리
+    MAX_AGENT_MESSAGES_TO_KEEP = _env_int_range(
+        "MAX_AGENT_MESSAGES_TO_KEEP", 30, 2, 200
+    )
+
     # 기본값 (복원 시 사용)
     DEFAULT_MAX_MESSAGES_TO_KEEP = max(1, _env_int("MAX_MESSAGES_TO_KEEP", 30))
+    DEFAULT_MAX_AGENT_MESSAGES_TO_KEEP = MAX_AGENT_MESSAGES_TO_KEEP
     
     # 토큰 추정 비율 (평균적으로 1토큰 ≈ 4자, 한글은 약 2-3자)
     CHARS_PER_TOKEN = 3.5
@@ -79,7 +93,11 @@ class TokenManager:
         cls.MAX_TOKENS_GEMINI = _env_int("MAX_TOKENS_GEMINI", 786000)
         cls.DEFAULT_MAX_TOKENS = cls.MAX_TOKENS_CLAUDE
         cls.MAX_MESSAGES_TO_KEEP = max(1, _env_int("MAX_MESSAGES_TO_KEEP", 30))
+        cls.MAX_AGENT_MESSAGES_TO_KEEP = _env_int_range(
+            "MAX_AGENT_MESSAGES_TO_KEEP", 30, 2, 200
+        )
         cls.DEFAULT_MAX_MESSAGES_TO_KEEP = cls.MAX_MESSAGES_TO_KEEP
+        cls.DEFAULT_MAX_AGENT_MESSAGES_TO_KEEP = cls.MAX_AGENT_MESSAGES_TO_KEEP
 
     @classmethod
     def set_max_messages(cls, value: int) -> None:
@@ -146,7 +164,8 @@ class TokenManager:
         cls,
         conversation_history: List[Dict],
         max_tokens: int = None,
-        verbose: bool = True
+        verbose: bool = True,
+        max_messages: int = None,
     ) -> List[Dict]:
         """
         히스토리가 토큰 한도를 초과하거나 메시지 수가
@@ -163,6 +182,7 @@ class TokenManager:
             conversation_history: 대화 히스토리 리스트
             max_tokens: 최대 허용 토큰 수 (기본값: DEFAULT_MAX_TOKENS)
             verbose: 트리밍 발생 시 메시지 출력 여부
+            max_messages: 메시지 수 한도. None 이면 MAX_MESSAGES_TO_KEEP 사용
 
         Returns:
             트리밍된 대화 히스토리
@@ -170,12 +190,17 @@ class TokenManager:
         if max_tokens is None:
             max_tokens = cls.DEFAULT_MAX_TOKENS
 
+        if max_messages is None:
+            max_messages = cls.MAX_MESSAGES_TO_KEEP
+        else:
+            max_messages = max(1, int(max_messages))
+
         current_tokens = cls.count_tokens(conversation_history)
         message_count = len(conversation_history)
         token_threshold = max_tokens
 
-        # 트리밍 조건 확인: 메시지 수 >= MAX_MESSAGES_TO_KEEP OR 토큰 한도 초과
-        needs_trim_by_messages = message_count >= cls.MAX_MESSAGES_TO_KEEP
+        # 트리밍 조건 확인: 메시지 수 >= max_messages OR 토큰 한도 초과
+        needs_trim_by_messages = message_count >= max_messages
         needs_trim_by_tokens = current_tokens > token_threshold
         
         if not needs_trim_by_messages and not needs_trim_by_tokens:
@@ -186,7 +211,7 @@ class TokenManager:
             if needs_trim_by_messages:
                 reasons.append(
                     f"메시지 수 초과 ({message_count}개 >= "
-                    f"{cls.MAX_MESSAGES_TO_KEEP}개)"
+                    f"{max_messages}개)"
                 )
             if needs_trim_by_tokens:
                 reasons.append(
@@ -205,7 +230,7 @@ class TokenManager:
             current_tokens = cls.count_tokens(conversation_history)
             current_count = len(conversation_history)
 
-            still_over_messages = current_count >= cls.MAX_MESSAGES_TO_KEEP
+            still_over_messages = current_count >= max_messages
             still_over_tokens = current_tokens > token_threshold
 
             if not still_over_messages and not still_over_tokens:

@@ -94,6 +94,20 @@ class TestDispatcherBasic(unittest.TestCase):
         self.d = _make_dispatcher()
         self.session = _make_session()
 
+    def test_T073_08_malformed_nonempty_action_returns_failure(self):
+        """FSD v1.1.073: non-empty ACTION 파싱 실패는 self-correction 실패로 기록."""
+        results = self.d.dispatch(self.session, "sh\ncat docs/output.md")
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].kind, "code")
+        self.assertEqual(results[0].target, "dispatcher")
+        self.assertFalse(results[0].success)
+        self.assertIn("파싱 가능한 ACTION", results[0].detail)
+
+    def test_T073_09_dispatcher_failure_triggers_code_failure(self):
+        """FSD v1.1.073: dispatcher 실패는 AgentRunner._has_code_failure=True."""
+        results = self.d.dispatch(self.session, "sh\ncat docs/output.md")
+        self.assertTrue(AgentRunner._has_code_failure(results))
+
     def test_T107_07_single_shell_line(self):
         """T-107-07: 단독 $ 라인 → shell 1건."""
         results = self.d.dispatch(self.session, "$ git status")
@@ -498,14 +512,16 @@ class TestDispatcherMalformed(unittest.TestCase):
     """망가진 펜스."""
 
     def test_T107_20_unclosed_fence(self):
-        """T-107-20: 마지막 ``` 누락 → 펜스 미인식, code 0건."""
+        """T-107-20/FSD-073: 닫히지 않은 non-empty ACTION은 실패로 기록."""
         d = _make_dispatcher()
         session = _make_session()
         # 마지막 ``` 없음
         act = '```python\nprint(1)\n'
         results = d.dispatch(session, act)
-        codes = [r for r in results if r.kind == "code"]
-        self.assertEqual(len(codes), 0)
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0].kind, "code")
+        self.assertFalse(results[0].success)
+        self.assertIn("파싱 가능한 ACTION", results[0].detail)
 
 
 class TestDispatcherBypass(unittest.TestCase):

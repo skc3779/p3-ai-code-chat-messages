@@ -279,7 +279,8 @@ class GenAICodeAssistant:
              include_context: bool = False, file_patterns: Optional[List[str]] = None,
              *, include_tree: bool = True, disable_tools: bool = False,
              raise_on_error: bool = False,
-             internal_system_prompt: Optional[str] = None) -> str:
+             internal_system_prompt: Optional[str] = None,
+             max_history_messages: Optional[int] = None) -> str:
         """AI와 채팅"""
 
         # 컨텍스트 구성
@@ -295,7 +296,8 @@ class GenAICodeAssistant:
         # 토큰 관리를 위한 히스토리 자동 트리밍 (GenAI 한도 적용)
         self.conversation_history = TokenManager.auto_trim_history(
             self.conversation_history,
-            max_tokens=TokenManager.MAX_TOKENS_GENAI
+            max_tokens=TokenManager.MAX_TOKENS_GENAI,
+            max_messages=max_history_messages,
         )
 
         # API 호출 - GenAI API 형식 (contents: List[str])
