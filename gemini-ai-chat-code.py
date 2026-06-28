@@ -367,13 +367,18 @@ def main():
 
                 elif command == '/agents':
                     from src.agents_command import handle_agents_command
-                    handle_agents_command(
-                        assistant=assistant,
-                        cli_handler=cli_handler,
-                        streaming=streaming,
-                        args=args,
-                        assistant_role="model",
-                    )
+                    # B-071-03: /agents 종료(정상·중단·예외) 후 prompt_toolkit TUI
+                    # 상태를 초기화해 다음 > 입력창이 정상 동작하도록 보장한다.
+                    try:
+                        handle_agents_command(
+                            assistant=assistant,
+                            cli_handler=cli_handler,
+                            streaming=streaming,
+                            args=args,
+                            assistant_role="model",
+                        )
+                    finally:
+                        cli_handler.reset_runtime_state()
                     last_response = ""
 
                 elif command == '/save':

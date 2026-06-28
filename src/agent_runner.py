@@ -380,6 +380,11 @@ class AgentRunner:
                 session.plan = plan_response
                 self._print_block("📋", " PLAN", plan_response)
 
+                # B-071-04: PLAN 생성 직후 stop 체크포인트 — 승인 게이트 진입 전에
+                # 사용자가 's' 를 눌렀으면 여기서 USER_STOP 으로 빠져나간다.
+                if self._check_async_stop(session):
+                    raise _PlanGateStop()
+
                 # ── 완료 기준 초기화 (§2.2 / FR-062-08) — PLAN 게이트보다 먼저 ──
                 self._initialize_acceptance_criteria(session, goal)
 

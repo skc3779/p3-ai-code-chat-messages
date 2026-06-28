@@ -141,6 +141,83 @@ class TestInputListenerCore(unittest.TestCase):
                 self.assertFalse(listener.is_listening)
             self.assertFalse(listener.is_listening)
 
+    def test_B071_unix_single_s_key_stops_without_enter(self):
+        """B-071-01: Unix 리스너는 Enter 없이 단일 's' 키를 stop 으로 처리."""
+        import fcntl
+
+        fake_stdin = MagicMock()
+        fake_stdin.fileno.return_value = 7
+
+        with patch.object(AgentInputListener, "_detect_tty", return_value=True), \
+             patch("sys.stdin", fake_stdin), \
+             patch("select.select", return_value=([7], [], [])), \
+             patch("termios.tcgetattr", return_value=["orig"]), \
+             patch("termios.tcsetattr"), \
+             patch("tty.setcbreak"), \
+             patch("fcntl.fcntl") as mock_fcntl, \
+             patch("src.agent_input_listener.os.read", return_value=b"s"):
+            mock_fcntl.side_effect = (
+                lambda _fd, cmd, *args: 0 if cmd == fcntl.F_GETFL else None
+            )
+            listener = AgentInputListener(poll_interval=0.01)
+            listener._active.set()
+
+            listener._poll_unix()
+
+        self.assertTrue(listener.is_stop_requested())
+
+    def test_B071_stop_restores_saved_terminal_state(self):
+        """B-071-02: stop() 은 저장된 터미널 속성과 파일 플래그를 원복."""
+        with patch.object(AgentInputListener, "_detect_tty", return_value=True):
+            listener = AgentInputListener()
+        listener._stdin_fd = 7
+        listener._saved_term_attrs = ["orig"]
+        listener._saved_file_flags = 123
+
+        with patch("fcntl.fcntl") as mock_fcntl, \
+             patch("termios.tcsetattr") as mock_tcsetattr:
+            listener.stop()
+
+        mock_fcntl.assert_called()
+        mock_tcsetattr.assert_called_once()
+        self.assertIsNone(listener._stdin_fd)
+        self.assertIsNone(listener._saved_term_attrs)
+        self.assertIsNone(listener._saved_file_flags)
+
+    def test_B071_stop_waits_until_listener_can_restart(self):
+        """B-071-02: stop() 반환 후에는 start() 가 즉시 새 리스너를 시작할 수 있다."""
+        with patch.object(AgentInputListener, "_detect_tty", return_value=True):
+            listener = AgentInputListener(poll_interval=0.01)
+
+        exit_seen = threading.Event()
+
+        def fake_loop():
+            while listener._active.is_set():
+                time.sleep(0.01)
+            exit_seen.set()
+
+        listener._listen_loop = fake_loop  # type: ignore[method-assign]
+        listener.start()
+        time.sleep(0.03)
+
+        listener.stop()
+
+        self.assertTrue(exit_seen.is_set())
+        self.assertFalse(listener.is_listening)
+        second_exit_seen = threading.Event()
+
+        def second_fake_loop():
+            while listener._active.is_set():
+                time.sleep(0.01)
+            second_exit_seen.set()
+
+        listener._listen_loop = second_fake_loop  # type: ignore[method-assign]
+        listener.start()
+        time.sleep(0.03)
+        self.assertTrue(listener.is_listening)
+        listener.stop()
+        self.assertTrue(second_exit_seen.is_set())
+
 
 # ─── T-087-B: AgentRunner 통합 (checkpoint 동작) ──────────────
 class TestRunnerAsyncStop(unittest.TestCase):
@@ -291,6 +368,19 @@ class TestRunnerAsyncStop(unittest.TestCase):
         session = AgentSession(goal="g")
         self.assertFalse(runner._check_async_stop(session))
         self.assertIsNone(session.stop_reason)
+
+    def test_B071_initial_plan_stop_skips_approval_gate(self):
+        """B-071-04: 신규 PLAN 생성 직후 stop 요청이면 승인 프롬프트 전 종료."""
+        runner = _make_runner()
+        fake = self._patch_listener(runner)
+        fake.is_stop_requested.return_value = True
+        runner.assistant.chat.return_value = "1. do the work"
+        runner._plan_approval_gate = MagicMock(return_value=None)
+
+        result = runner.run(goal="g")
+
+        self.assertEqual(result.stop_reason, AgentStopReason.USER_STOP)
+        runner._plan_approval_gate.assert_not_called()
 
 
 # ─── T-087-10: /agents stop 명령 메시지 갱신 ────────────────────

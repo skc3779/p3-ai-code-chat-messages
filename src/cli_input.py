@@ -362,11 +362,7 @@ class CLIInputHandler:
         """
         try:
             if self._use_prompt_toolkit:
-                self._result = None
-                self._filtered = []
-                self._show_suggestions = False
-                self._selected_idx = 0
-                self._scroll_offset = 0
+                self.reset_runtime_state()
 
                 app = self._build_app(prompt)
                 app.run()
@@ -389,6 +385,28 @@ class CLIInputHandler:
         except KeyboardInterrupt:
             print()
             return ""
+
+    def reset_runtime_state(self) -> None:
+        """다음 prompt_toolkit 입력을 위해 일회성 TUI 상태를 초기화한다.
+
+        /agents 처럼 외부 루프가 stdin 을 장시간 점유한 뒤 복귀할 때,
+        이전 세션의 suggestion/buffer 잔재가 다음 입력에 영향을 주지 않도록
+        명시적으로 리셋한다. B-071-03 수정.
+        """
+        if not getattr(self, "_use_prompt_toolkit", False):
+            return
+        self._result = None
+        self._filtered = []
+        self._show_suggestions = False
+        self._selected_idx = 0
+        self._scroll_offset = 0
+        buffer = getattr(self, "_buffer", None)
+        if buffer is not None:
+            try:
+                # 빈 Document 로 교체해 텍스트·커서 위치·히스토리 포인터를 초기화
+                buffer.reset(Document(""))
+            except Exception:
+                pass
 
     def get_multiline(self) -> str:
         """

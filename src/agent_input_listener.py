@@ -16,7 +16,7 @@ stdin 을 폴링한다.
 
 플랫폼별 구현:
     - Windows: `msvcrt.kbhit()` + `msvcrt.getch()` (char 단위)
-    - Unix:    `select.select([sys.stdin], ...)` + `readline()` (라인 단위)
+    - Unix:    `tty.setcbreak()` + nonblocking `os.read()` (char 단위)
 
 TTY 가 아닌 환경(파이프/CI)에서는 자동으로 비활성화된다 — Ctrl+C 가 유일한 수단.
 
@@ -31,6 +31,7 @@ TTY 가 아닌 환경(파이프/CI)에서는 자동으로 비활성화된다 —
       수행해야 한다 (리스너 스레드와 동기 input 동시 소비 금지).
 """
 
+import os
 import sys
 import threading
 import time
@@ -77,6 +78,10 @@ class AgentInputListener:
         self._poll_interval = (
             poll_interval if poll_interval is not None else self.POLL_INTERVAL
         )
+        self._terminal_lock = threading.Lock()
+        self._stdin_fd: Optional[int] = None
+        self._saved_term_attrs = None
+        self._saved_file_flags: Optional[int] = None
 
     # ─── 환경 감지 ───────────────────────────────────────────
     @staticmethod
@@ -164,13 +169,16 @@ class AgentInputListener:
     def stop(self) -> None:
         """리스너 스레드에 종료 요청. stop 요청 플래그는 유지된다.
 
-        데몬 스레드이므로 현재 블로킹 중인 stdin 읽기가 있어도
-        메인 프로세스 종료 시 자동 정리된다.
+        Unix 단일 키 리스닝이 터미널 모드를 바꾸므로 stop 경계에서 즉시
+        복구하고, 짧게 join 하여 다음 input/prompt_toolkit 진입 전 정리한다.
         """
         self._active.clear()
-        # 폴링 간격 내에 자연 종료 — join 은 하지 않는다
-        # (getch/readline 이 블로킹 중이면 join 이 지연되기 때문)
-        self._thread = None
+        self._restore_terminal_mode()
+        thread = self._thread
+        if thread is not None and thread is not threading.current_thread():
+            thread.join()
+        if thread is None or thread is not threading.current_thread():
+            self._thread = None
 
     def paused(self) -> "_PauseContext":
         """stdin 을 직접 읽어야 하는 구간에서 사용하는 컨텍스트 매니저.
@@ -192,6 +200,8 @@ class AgentInputListener:
         except Exception:
             # 리스너 오류는 조용히 무시 — Ctrl+C 가 폴백
             pass
+        finally:
+            self._restore_terminal_mode()
 
     def _classify_key(self, token: str, *, char_mode: bool) -> Optional[str]:
         """입력 토큰을 'stop' | 'pause' | 'steer' | None 으로 분류.
@@ -267,28 +277,89 @@ class AgentInputListener:
             time.sleep(self._poll_interval)
 
     def _poll_unix(self) -> None:
+        # B-071: canonical 모드(라인 단위)에서 cbreak+nonblocking(문자 단위)으로 전환.
+        # Enter 없이 단일 키를 즉시 감지하기 위한 변경.
         try:
             import select
+            import fcntl
+            import termios
+            import tty
         except ImportError:
+            return
+
+        try:
+            fd = sys.stdin.fileno()
+        except Exception:
+            return
+
+        try:
+            with self._terminal_lock:
+                # 원본 터미널 속성·플래그를 저장한 뒤 cbreak + O_NONBLOCK 적용.
+                # stop()/finally 에서 _restore_terminal_mode() 로 원복한다.
+                self._stdin_fd = fd
+                self._saved_term_attrs = termios.tcgetattr(fd)
+                self._saved_file_flags = fcntl.fcntl(fd, fcntl.F_GETFL)
+                tty.setcbreak(fd)
+                fcntl.fcntl(fd, fcntl.F_SETFL, self._saved_file_flags | os.O_NONBLOCK)
+        except Exception:
+            self._restore_terminal_mode()
             return
 
         while self._active.is_set():
             try:
                 ready, _, _ = select.select(
-                    [sys.stdin], [], [], self._poll_interval
+                    [fd], [], [], self._poll_interval
                 )
                 if not ready:
                     continue
-                line = sys.stdin.readline()
-                if not line:
-                    # stdin 이 닫힘 → 더 이상 폴링 의미 없음
+                try:
+                    raw = os.read(fd, 1024)
+                except BlockingIOError:
+                    continue
+                if not raw:
                     return
-                normalized = line.strip().lower()
-                kind = self._classify_key(normalized, char_mode=False)
-                if self._apply_key(kind):
-                    return
+                text = raw.decode("utf-8", errors="ignore").lower()
+                for ch in text:
+                    if not ch or ch.isspace():
+                        continue
+                    kind = self._classify_key(ch, char_mode=True)
+                    if self._apply_key(kind):
+                        return
             except Exception:
                 return
+
+    def _restore_terminal_mode(self) -> None:
+        """Unix 리스너가 변경한 터미널 속성과 파일 플래그를 원복한다.
+
+        락 안에서 저장된 값을 꺼낸 뒤 즉시 None 으로 초기화하여,
+        stop() 과 _listen_loop finally 가 동시에 호출되어도 이중 복구를
+        방지한다. 복구 실패는 조용히 무시 — TTY 세션 전체 종료가 fallback.
+        """
+        with self._terminal_lock:
+            # 저장값을 로컬로 꺼내고 멤버를 None 으로 초기화 (이중 복구 방지)
+            fd = self._stdin_fd
+            term_attrs = self._saved_term_attrs
+            file_flags = self._saved_file_flags
+            self._stdin_fd = None
+            self._saved_term_attrs = None
+            self._saved_file_flags = None
+
+        if fd is None:
+            return
+        try:
+            if file_flags is not None:
+                import fcntl
+                # O_NONBLOCK 을 제거해 blocking 모드로 복원
+                fcntl.fcntl(fd, fcntl.F_SETFL, file_flags)
+        except Exception:
+            pass
+        try:
+            if term_attrs is not None:
+                import termios
+                # TCSADRAIN: 출력 버퍼가 비워진 후 속성 적용
+                termios.tcsetattr(fd, termios.TCSADRAIN, term_attrs)
+        except Exception:
+            pass
 
 
 class _PauseContext:
