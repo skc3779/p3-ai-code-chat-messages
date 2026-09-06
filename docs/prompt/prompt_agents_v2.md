@@ -205,3 +205,10 @@ Claude Code 세션에 접속하여, 우선 기존 `/agents` 관련 흔적을 지
 
 
 `release_v1.1.070` branch 에 단계별로 커밋 해줘.
+
+---
+
+gemini-ai-chat-code.py, gen-ai-chat-code.py, claude-ai-chat-code.py 의 모든 명령 기능의 옵션과 패턴을 모두 포함해서 정리해줘.
+- 각 파일의 모든 명령어 기능의 옵션과 패턴을 정리한다.
+- 명령어별 실행 예시와 사용 사례를 작성한다.
+- docs/guides/10_commands_guides_v1.md 파일에 추가한다.
