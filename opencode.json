@@ -10,35 +10,42 @@
       },
       "models": {
         "genai/gpt-oss-120B-medium": {
-          "name": "GenAI GPT-OSS 120B Medium (SCI Portal)",
+          "name": "Samsung SCI Portal GPT-OSS 120B Medium",
           "limit": {
             "context": 200000,
             "output": 4096
           }
         },
+        "genai/glm5.2": {
+          "name": "Samsung SCI Portal GLM 5.2",
+          "limit": {
+            "context": 128000,
+            "output": 4096
+          }
+        },
         "claude/claude-haiku-4-5": {
-          "name": "Claude Haiku 4.5 (Anthropic)",
+          "name": "Anthropic Claude Haiku 4.5",
           "limit": {
             "context": 200000,
             "output": 65536
           }
         },
         "claude/claude-sonnet-4-6": {
-          "name": "Claude Sonnet 4.6 (Anthropic)",
+          "name": "Anthropic Claude Sonnet 4.6",
           "limit": {
             "context": 200000,
             "output": 65536
           }
         },
         "gemini/gemini-3-pro-preview": {
-          "name": "Gemini 3 Pro (Google)",
+          "name": "Google Gemini 3 Pro",
           "limit": {
             "context": 1048576,
             "output": 65536
           }
         },
         "gemini/gemini-3-flash-preview": {
-          "name": "Gemini 3 Flash (Google)",
+          "name": "Google Gemini 3 Flash",
           "limit": {
             "context": 1048576,
             "output": 65536

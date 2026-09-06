@@ -8,6 +8,11 @@ FSD v1.0.052 §4.5 / REQ-052-002
   예: "genai/gpt-oss-120B-medium" → GenAIProvider + "gpt-oss-120B-medium"
 """
 
+from model_registry import (  # noqa: F401  (REQ-111-047: 하위 호환 re-export)
+    MODEL_METADATA,
+    SUPPORTED_MODELS,
+    get_model_max_output,
+)
 from providers import GeminiProvider, ClaudeProvider, GenAIProvider
 from providers.base import BaseProvider
 
@@ -27,15 +32,18 @@ def _get_providers() -> dict[str, BaseProvider]:
     return _providers
 
 
-# 지원 모델 목록
-SUPPORTED_MODELS = {
-    "gemini/gemini-3-pro-preview": "Google Gemini 3 Pro",
-    "gemini/gemini-3-flash-preview": "Google Gemini 3 Flash",
-    "claude/claude-haiku-4-5": "Anthropic Claude Haiku 4.5",
-    "claude/claude-sonnet-4-6": "Anthropic Claude Sonnet 4.6",
-    "genai/gpt-oss-120B-medium": "Samsung SCI Portal GPT-OSS 120B Medium",
-    "genai/gpt-oss-120B-medium": "Samsung SCI Portal GPT-OSS 120B Medium",
-}
+def peek_providers() -> dict[str, BaseProvider]:
+    """이미 생성된 Provider 인스턴스 딕셔너리의 복사본을 반환 (새로 생성하지 않음) (REQ-111-024)."""
+    global _providers
+    return dict(_providers)
+
+
+def reset_providers() -> None:
+    """Provider 캐시를 초기화한다 (종료 시 또는 테스트 격리용) (REQ-111-024)."""
+    global _providers
+    _providers.clear()
+
+
 
 
 def route_model(model_id: str) -> tuple[BaseProvider, str]:

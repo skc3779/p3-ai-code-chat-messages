@@ -4,8 +4,9 @@ FSD v1.0.052 §4.3 + FSD v1.0.053 §4.3 Tool Call 지원
 BUG v1.0.057 — content 필드 타입 확장 (str | list 지원)
 """
 
-from pydantic import BaseModel, Field
-from typing import Optional, Union
+import time
+from pydantic import BaseModel, Field, PrivateAttr, field_validator, model_validator
+from typing import Any, Optional, Union
 
 
 # ── Tool 관련 스키마 (REQ-053-001~003) ──
@@ -36,12 +37,23 @@ class ToolCall(BaseModel):
     function: FunctionCall
 
 
+# ── 스트리밍 옵션 스키마 (REQ-111-001, REQ-111-007, REQ-111-016) ──
+
+class StreamOptions(BaseModel):
+    """스트리밍 옵션 (REQ-111-001, REQ-111-007: extra forbid 유지, REQ-111-016: include_obfuscation 선언)"""
+    include_usage: bool = False
+    include_obfuscation: Optional[bool] = None
+
+    model_config = {"extra": "forbid"}
+
+
 # ── 요청 스키마 ──
 
 class ChatMessage(BaseModel):
-    """채팅 메시지 (tool call 지원)"""
+    """채팅 메시지 (tool call 지원) (REQ-111-004)"""
     role: str                                                    # "system"|"user"|"assistant"|"tool"
     content: Optional[Union[str, list]] = None                   # ★ str 또는 content parts 배열 허용 (BUG-057)
+    name: Optional[str] = None                                   # 참여자 이름 (REQ-111-004)
     tool_calls: Optional[list[ToolCall]] = None                  # assistant의 도구 호출
     tool_call_id: Optional[str] = None                           # tool role 메시지의 호출 ID
 
@@ -80,14 +92,47 @@ class ChatMessage(BaseModel):
 
 
 class ChatCompletionRequest(BaseModel):
-    """OpenAI Chat Completions 요청 형식 (tool call 지원)"""
-    model: str                                      # "gemini/gemini-3-pro-preview"
+    """OpenAI Chat Completions 요청 형식 (tool call 지원) (REQ-111-001, REQ-111-006, REQ-111-008)"""
+    model_config = {"extra": "allow"}
+
+    # 내부 중복 경고 방지용 비공개 속성 (직렬화/스키마 미노출) (REQ-111-018)
+    _warned_unsupported: bool = PrivateAttr(default=False)
+    _warned_unsupported_keys: set[Any] = PrivateAttr(default_factory=set)
+
+    model: str                                                    # "gemini/gemini-3-pro-preview"
     messages: list[ChatMessage]
     stream: bool = False
-    temperature: Optional[float] = None
-    max_tokens: Optional[int] = None
-    tools: Optional[list[ToolDefinition]] = None    # ★ 추가 (REQ-053-001)
-    tool_choice: Optional[Union[str, dict]] = None  # ★ 추가 (REQ-053-002)
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    max_tokens: Optional[int] = Field(default=None, ge=1)
+    tools: Optional[list[ToolDefinition]] = None                  # ★ 추가 (REQ-053-001)
+    tool_choice: Optional[Union[str, dict]] = None                # ★ 추가 (REQ-053-002)
+
+    # ── 확장 요청 파라미터 (REQ-111-001, REQ-111-008) ──
+    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    stop: Optional[Union[str, list[str]]] = None
+    n: Optional[int] = Field(default=None, ge=1)
+    seed: Optional[int] = None
+    presence_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
+    frequency_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
+    response_format: Optional[dict[str, Any]] = None
+    stream_options: Optional[StreamOptions] = None
+    parallel_tool_calls: Optional[bool] = None
+    user: Optional[str] = None
+    logprobs: Optional[bool] = None
+    top_logprobs: Optional[int] = Field(default=None, ge=0, le=20)
+
+    @field_validator("stop")
+    @classmethod
+    def validate_stop(cls, v: Optional[Union[str, list[str]]]) -> Optional[Union[str, list[str]]]:
+        if isinstance(v, list) and len(v) > 4:
+            raise ValueError("stop array can contain at most 4 items")
+        return v
+
+    @model_validator(mode="after")
+    def validate_logprobs_consistency(self) -> "ChatCompletionRequest":
+        if self.top_logprobs is not None and not self.logprobs:
+            raise ValueError("top_logprobs requires logprobs to be True")
+        return self
 
 
 # ── 응답 스키마 ──
@@ -107,21 +152,22 @@ class Usage(BaseModel):
 
 
 class ChatCompletionResponse(BaseModel):
-    """OpenAI Chat Completions 응답 형식"""
+    """OpenAI Chat Completions 응답 형식 (REQ-111-002)"""
     id: str
     object: str = "chat.completion"
+    created: int = Field(default_factory=lambda: int(time.time()))
     model: str
     choices: list[ChatCompletionChoice]
     usage: Usage = Field(default_factory=Usage)
 
 
-# ── 에러 스키마 (REQ-052-004) ──
+# ── 에러 스키마 (REQ-052-004, REQ-111-003) ──
 
 class ErrorDetail(BaseModel):
-    """OpenAI 형식 에러 상세"""
+    """OpenAI 형식 에러 상세 (REQ-111-003: code int -> str 변경)"""
     message: str
     type: str = "invalid_request_error"
-    code: int = 400
+    code: str = "invalid_request_error"
 
 
 class ErrorResponse(BaseModel):
